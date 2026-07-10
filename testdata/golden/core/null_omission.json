@@ -1,0 +1,22 @@
+[
+  {
+    "name": "explicit_null",
+    "type": "Money",
+    "value": {
+      "amount": "1.00",
+      "currency": "USD"
+    },
+    "sha256": "2d6a9bd3567452cf050b5b6b4a56cff52d156fbeecac2561749d34ecb1535f08"
+  },
+  {
+    "name": "omitted_optional",
+    "type": "Quote",
+    "value": {
+      "market": "mkt:kalshi:BTC-75",
+      "bid": "0.65",
+      "ts": "2025-07-10T12:34:56.789Z",
+      "source": "snapshot"
+    },
+    "sha256": "e92182ba56e10c9aad79b760bd8eb6ba3f88e7cacca0c9922b3aeb4aad4c8e3b"
+  }
+]

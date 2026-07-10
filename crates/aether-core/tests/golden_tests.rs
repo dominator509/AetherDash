@@ -54,6 +54,11 @@ const FILES: &[&str] = &[
     "opportunity.json",
     "audit_event.json",
     "error_envelope.json",
+    // P1-7: Adversarial canonical vectors (cross-language)
+    "unicode.json",
+    "ordering.json",
+    "null_omission.json",
+    "empty_collections.json",
 ];
 
 #[test]

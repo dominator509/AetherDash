@@ -48,7 +48,7 @@ Golden regeneration is explicit (`--features golden-gen`) and diff-reviewed - a 
 
 ## Progress
 - [x] M1 Scalars  - [x] M2 Market data  - [x] M3 Orders  - [x] M4 Opportunity
-- [x] M5 Goldens  - [x] M6 Proto  - [x] M7 TS  - [x] M8 Python
+- [ ] M5 Goldens  - [x] M6 Proto  - [ ] M7 TS  - [ ] M8 Python
 
 ## Surprises & Discoveries
 - **serde_json preserve_order**: critical for canonical bytes. Without it, key ordering is non-deterministic. All three languages must agree on field order (Rust struct declaration order is canonical). Python's canonical serialization preserves dict insertion order (Python 3.7+) to match.
@@ -68,12 +68,14 @@ Golden regeneration is explicit (`--features golden-gen`) and diff-reviewed - a 
 - **DL-002-7**: Proto `side_exposure` changed from `double` to `string` (SPEC-001 no-float rule). Position in Rust uses `#[serde(with = "decimal_string")]`.
 
 ## Outcomes & Retrospective
-- **Rust**: 66 unit tests + 4 golden integration tests + 1 proptest = 71 passing
-- **TypeScript**: `@aether/types` package — 2 golden vector tests, tsc noEmit clean, vitest green
-- **Python**: `aether_py` package — 2 golden vector tests, mypy clean, ruff clean
-- **Cross-language**: SHA-256 matches across Rust, TypeScript, and Python for all 12 golden vectors
-- **Golden files**: money.json (4), edge.json (3), confidence.json (3), market_key.json (2) — all with SHA-256
-- **Proto**: 4 files with all SPEC-001 types, closed enums, no floats
-- **verify.sh**: `verify: ok` — all three stacks exercise with real tests
+- **Rust typed golden round trips**: ✅ COMPLETE — deserializes into real domain types, validates invariants, canonical re-serialize matches golden SHA-256. 66 unit tests + 4 golden integration tests + 1 proptest = 71 passing.
+- **TypeScript typed golden round trips**: 🔧 IN PROGRESS — validators being populated, hash of canonical output pending against golden vectors. `@aether/types` package with vitest suite exists, tsc noEmit clean.
+- **Python typed golden round trips**: 🔧 IN PROGRESS — model dispatch complete, hash of `model_dump(mode="json")` pending. `aether_py` package exists, mypy clean, ruff clean.
+- **Cross-language adversarial canonical vectors**: ❌ NOT YET IMPLEMENTED — no edge-case vectors (negative amounts, zero-explicit, max-precision decimals, empty strings, extreme timestamps) or cross-language adversarial comparison exists yet.
+- **Canonical dynamic key ordering**: 🔧 IN PROGRESS — serde_json `preserve_order` in Rust and Python 3.7+ insertion-order match for declared fields; dynamic containers like `OrderBook` levels and `CapsSnapshot` categories are not yet proven stable across insert/remove cycles.
+- **Proto**: 4 files with all SPEC-001 types, closed enums, no floats — ✅ done.
+- **verify.sh**: `verify: ok` — all three stacks exercise with real tests, but cross-language equality not yet gated.
 - **security-check.sh**: `security: ok`
-- **git log**: 3 EP-002 commits (initial + progress update + completion)
+- **git log**: multiple EP-002 commits across fix cycles.
+
+**Gate to mark M5/M7/M8 complete**: typed round trips and adversarial canonical vectors must pass in all 3 languages with verified cross-language SHA-256 match.

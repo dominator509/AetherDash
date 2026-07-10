@@ -1,0 +1,44 @@
+[
+  {
+    "name": "empty_array_flags",
+    "type": "Market",
+    "value": {
+      "key": "mkt:kalshi:EMPTY-FLAGS",
+      "venue": "kalshi",
+      "kind": "binary_contract",
+      "title": "Empty flags",
+      "description_ref": "EMPTY-1",
+      "status": "open",
+      "jurisdiction_flags": [],
+      "venue_ref": {},
+      "meta": {}
+    },
+    "sha256": "520b88ef3e6a81d2d1687556d363d9a9e90c59d20ea14049e9b8352900ea4fea"
+  },
+  {
+    "name": "empty_risk_reasons",
+    "type": "RiskVerdict",
+    "value": {
+      "intent_id": "01KX6RVEVZVH80GBNVFMTF5JXQ",
+      "verdict": "allow",
+      "ts": "2025-07-10T12:34:56.789Z"
+    },
+    "sha256": "e01a94242dc66ba02d3c6ec02002ae1386552748403b8b53c7a16b1ad4460330"
+  },
+  {
+    "name": "empty_caps_maps",
+    "type": "CapsSnapshot",
+    "value": {
+      "version": "01KX6RVEVZ5BA5DAGGVRZM1DT4",
+      "per_order_max": {
+        "amount": "500.00",
+        "currency": "USD"
+      },
+      "daily_max": {
+        "amount": "1000.00",
+        "currency": "USD"
+      }
+    },
+    "sha256": "8780ef3eb591b07c552ffc94b6863674e19634c1201e620260ad9d3e6012050a"
+  }
+]

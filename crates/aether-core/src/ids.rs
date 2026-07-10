@@ -107,7 +107,7 @@ impl MarketKey {
         }
         Ok(Self(s))
     }
-    #[cfg(any(test, feature = "golden-gen"))]
+    #[cfg(test)]
     pub fn from_string_unchecked(s: impl Into<String>) -> Self {
         Self(s.into())
     }

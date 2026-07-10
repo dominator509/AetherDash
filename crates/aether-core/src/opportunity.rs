@@ -246,6 +246,41 @@ impl<'de> Deserialize<'de> for EdgeDecomposition {
 
 // ── Display for EdgeDecomposition ──────────────────────────────────
 
+#[cfg(test)]
+impl EdgeDecomposition {
+    /// Test-only constructor for arbitrary component values (including invalid sum-law).
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_raw_components(
+        gross_spread: Decimal,
+        fees: Decimal,
+        slippage_est: Decimal,
+        funding_cost: Decimal,
+        gas_cost: Decimal,
+        bridge_cost: Decimal,
+        settlement_mismatch_discount: Decimal,
+        liquidity_haircut: Decimal,
+        staleness_penalty: Decimal,
+        confidence_penalty: Decimal,
+        net_edge: Decimal,
+    ) -> Self {
+        Self {
+            gross_spread,
+            fees,
+            slippage_est,
+            funding_cost,
+            gas_cost,
+            bridge_cost,
+            settlement_mismatch_discount,
+            liquidity_haircut,
+            staleness_penalty,
+            confidence_penalty,
+            net_edge,
+        }
+    }
+}
+
+
+
 impl fmt::Display for EdgeDecomposition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "EdgeDecomposition(gross={}, net={})", self.gross_spread, self.net_edge)
@@ -275,29 +310,59 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
-    fn arb_decimal() -> impl Strategy<Value = Decimal> {
-        (0i64..1000000i64).prop_map(|n| Decimal::new(n, 2))
+    /// Strategy for any Decimal value: negative, positive, zero, high-precision.
+    fn arb_decimal_any() -> impl Strategy<Value = Decimal> {
+        prop::num::i64::ANY.prop_map(|n| Decimal::new(n, 2))
     }
 
     proptest! {
         #[test]
-        fn edge_decomposition_sum_law_holds_for_computed(
-            gross in arb_decimal(),
-            fees in arb_decimal(),
-            slippage in arb_decimal(),
+        fn edge_decomposition_sum_law_property(
+            gross in arb_decimal_any(),
+            fees in arb_decimal_any(),
+            slippage in arb_decimal_any(),
+            funding in arb_decimal_any(),
+            gas in arb_decimal_any(),
+            bridge in arb_decimal_any(),
+            settlement in arb_decimal_any(),
+            haircut in arb_decimal_any(),
+            staleness in arb_decimal_any(),
+            confidence_pen in arb_decimal_any(),
+            valid in proptest::bool::ANY,
         ) {
-            let edge = EdgeDecomposition::compute(gross, EdgeCosts {
+            let costs = EdgeCosts {
                 fees,
                 slippage_est: slippage,
-                funding_cost: Decimal::ZERO,
-                gas_cost: Decimal::ZERO,
-                bridge_cost: Decimal::ZERO,
-                settlement_mismatch_discount: Decimal::ZERO,
-                liquidity_haircut: Decimal::ZERO,
-                staleness_penalty: Decimal::ZERO,
-                confidence_penalty: Decimal::ZERO,
-            });
-            prop_assert!(edge.validate().is_ok());
+                funding_cost: funding,
+                gas_cost: gas,
+                bridge_cost: bridge,
+                settlement_mismatch_discount: settlement,
+                liquidity_haircut: haircut,
+                staleness_penalty: staleness,
+                confidence_penalty: confidence_pen,
+            };
+
+            let costs_sum = costs.sum();
+
+            if valid {
+                // compute() always produces a correct net_edge
+                let edge = EdgeDecomposition::compute(gross, costs);
+                prop_assert!(edge.validate().is_ok(),
+                    "compute must always produce a valid edge: gross={gross}, costs_sum={costs_sum}");
+                prop_assert_eq!(edge.net_edge(), gross - costs_sum,
+                    "net_edge mismatch for compute");
+            } else {
+                // Build an edge with net_edge that violates the sum law (off by delta)
+                let delta = Decimal::new(1, 2); // 0.01
+                let net_edge = gross - costs_sum + delta;
+                let edge = EdgeDecomposition::from_raw_components(
+                    gross, fees, slippage, funding, gas,
+                    bridge, settlement, haircut, staleness, confidence_pen,
+                    net_edge,
+                );
+                prop_assert!(edge.validate().is_err(),
+                    "net_edge {net_edge} != gross {gross} - costs {costs_sum} (delta={delta}) must fail validation");
+            }
         }
     }
 

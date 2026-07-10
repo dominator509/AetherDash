@@ -41,9 +41,6 @@ fn v(s: &str) -> Result<ids::VenueId, ids::VenueIdError> {
 fn mk(venue: &str, native: &str) -> Result<ids::MarketKey, ids::MarketKeyError> {
     ids::MarketKey::new(&v(venue)?, native)
 }
-fn mk_u(s: &str) -> ids::MarketKey {
-    ids::MarketKey::from_string_unchecked(s)
-}
 fn jo(json: serde_json::Value) -> Result<json::JsonObject, json::JsonObjectError> {
     json::JsonObject::new(json)
 }
@@ -182,7 +179,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
 
     let snap = quote::Quote {
-        market: mk_u("mkt:kalshi:INTC-50"),
+        market: mk("kalshi", "INTC-50")?,
         bid: Some(dec(65, 2)),
         ask: Some(dec(67, 2)),
         mid: None,
@@ -197,7 +194,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let u = || ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
     let oi1 = order::OrderIntent {
         id: u(),
-        market: mk_u("mkt:kalshi:INTC-50"),
+        market: mk("kalshi", "INTC-50")?,
         side: order::Side::Buy,
         order_type: order::OrderType::Limit,
         limit_price: Some(dec(66, 2)),
@@ -212,7 +209,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let oi2 = order::OrderIntent {
         id: u(),
-        market: mk_u("mkt:polymarket:TEST"),
+        market: mk("polymarket", "TEST")?,
         side: order::Side::Sell,
         order_type: order::OrderType::Market,
         limit_price: None,
@@ -273,7 +270,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "Order",
                 &order::Order {
                     order_id: u(),
-                    market: mk_u("mkt:kalshi:INTC-50"),
+                    market: mk("kalshi", "INTC-50")?,
                     side: order::Side::Buy,
                     price: dec(66, 2),
                     size: dec(10, 0),
@@ -288,7 +285,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "Order",
                 &order::Order {
                     order_id: u(),
-                    market: mk_u("mkt:polymarket:TEST"),
+                    market: mk("polymarket", "TEST")?,
                     side: order::Side::Sell,
                     price: dec(5050, 2),
                     size: dec(5, 0),
@@ -310,7 +307,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "Fill",
                 &order::Fill {
                     order_id: u(),
-                    market: mk_u("mkt:kalshi:INTC-50"),
+                    market: mk("kalshi", "INTC-50")?,
                     side: order::Side::Buy,
                     price: dec(66, 2),
                     size: dec(6, 0),
@@ -325,7 +322,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "Fill",
                 &order::Fill {
                     order_id: u(),
-                    market: mk_u("mkt:polymarket:TEST"),
+                    market: mk("polymarket", "TEST")?,
                     side: order::Side::Sell,
                     price: dec(5050, 2),
                     size: dec(5, 0),
@@ -346,7 +343,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "position_long",
                 "Position",
                 &order::Position {
-                    market: mk_u("mkt:kalshi:INTC-50"),
+                    market: mk("kalshi", "INTC-50")?,
                     side_exposure: dec(100, 0),
                     avg_price: dec(65, 2),
                     size: dec(10, 0),
@@ -359,7 +356,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "position_flat",
                 "Position",
                 &order::Position {
-                    market: mk_u("mkt:polymarket:TEST"),
+                    market: mk("polymarket", "TEST")?,
                     side_exposure: Decimal::ZERO,
                     avg_price: Decimal::ZERO,
                     size: Decimal::ZERO,
@@ -381,8 +378,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 version: u(),
                 per_order_max: mm(50000, 2, "USD"),
                 daily_max: mm(100000, 2, "USD"),
-                per_venue: serde_json::Map::new(),
-                per_kind: serde_json::Map::new(),
+                per_venue: json::JsonObject::default(),
+                per_kind: json::JsonObject::default(),
             },
         )?],
     )?;
@@ -394,7 +391,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "market_kalshi_open",
             "Market",
             &market::Market {
-                key: mk_u("mkt:kalshi:BTC-75"),
+                key: mk("kalshi", "BTC-75")?,
                 venue: v("kalshi")?,
                 kind: market::InstrumentKind::BinaryContract,
                 title: "BTC above $75k?".into(),
@@ -444,13 +441,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 kind: opportunity::OpportunityKind::Arbitrage,
                 legs: vec![
                     opportunity::OpportunityLeg {
-                        market: mk_u("mkt:kalshi:BTC-75"),
+                        market: mk("kalshi", "BTC-75")?,
                         side: order::Side::Buy,
                         target_price: Some(dec(65, 2)),
                         size_hint: Some(dec(10, 0)),
                     },
                     opportunity::OpportunityLeg {
-                        market: mk_u("mkt:polymarket:WILL-BTC-TOUCH-100K"),
+                        market: mk("polymarket", "WILL-BTC-TOUCH-100K")?,
                         side: order::Side::SellNo,
                         target_price: Some(dec(68, 2)),
                         size_hint: Some(dec(10, 0)),

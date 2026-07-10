@@ -1,8 +1,196 @@
-"""Complete Python domain type mirrors (all 17 SPEC-001 types)."""
+"""Complete Python domain type mirrors (all SPEC-001 types)."""
 
+import re
 from decimal import Decimal
+from enum import Enum
+from typing import Any
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, RootModel, field_validator, model_validator
+
+# ── Validator helpers ──────────────────────────────────────────────────────────
+
+ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$")
+MARKET_KEY_RE = re.compile(r"^mkt:([a-z0-9]+):(.+)$")
+VENUE_ID_RE = re.compile(r"^[a-z0-9]+$")
+RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
+
+
+def _decimal_str(v: str) -> str:
+    Decimal(v)
+    return v
+
+
+def _ulid(v: str) -> str:
+    if not ULID_RE.match(v):
+        raise ValueError(f"Invalid ULID: {v!r}")
+    return v
+
+
+def _market_key(v: str) -> str:
+    m = MARKET_KEY_RE.match(v)
+    if not m or not m.group(1) or not m.group(2):
+        raise ValueError(f"Invalid MarketKey: {v!r}")
+    return v
+
+
+def _venue_id(v: str) -> str:
+    if not VENUE_ID_RE.match(v):
+        raise ValueError(f"Invalid VenueId: {v!r}")
+    return v
+
+
+def _rfc3339(v: str) -> str:
+    if not RFC3339_RE.match(v):
+        raise ValueError(f"Invalid RFC3339: {v!r}")
+    return v
+
+
+# ── Enums ─────────────────────────────────────────────────────────────────----
+
+
+class Side(str, Enum):
+    buy = "buy"
+    sell = "sell"
+    buy_no = "buy_no"
+    sell_no = "sell_no"
+
+
+class OrderType(str, Enum):
+    limit = "limit"
+    market = "market"
+
+
+class SizeUnit(str, Enum):
+    contracts = "contracts"
+    shares = "shares"
+    base = "base"
+    quote = "quote"
+
+
+class TimeInForce(str, Enum):
+    ioc = "ioc"
+    gtc = "gtc"
+    day = "day"
+
+
+class OriginKind(str, Enum):
+    user = "user"
+    alert_action = "alert_action"
+    agent = "agent"
+    automation = "automation"
+
+
+class RiskVerdictStatus(str, Enum):
+    allow = "allow"
+    deny = "deny"
+
+
+class RiskReasonCode(str, Enum):
+    liveness = "liveness"
+    price_drift = "price_drift"
+    balance = "balance"
+    venue_health = "venue_health"
+    cap_exceeded = "cap_exceeded"
+    jurisdiction = "jurisdiction"
+    live_disabled = "live_disabled"
+
+
+class QuoteSource(str, Enum):
+    stream = "stream"
+    poll = "poll"
+    snapshot = "snapshot"
+
+
+class InstrumentKind(str, Enum):
+    binary_contract = "binary_contract"
+    categorical_contract = "categorical_contract"
+    scalar_contract = "scalar_contract"
+    equity = "equity"
+    option = "option"
+    perp = "perp"
+    spot = "spot"
+
+
+class MarketStatus(str, Enum):
+    open = "open"
+    halted = "halted"
+    closed = "closed"
+    resolved = "resolved"
+
+
+class OpportunityKind(str, Enum):
+    arbitrage = "arbitrage"
+    value = "value"
+    catalyst = "catalyst"
+    hedge = "hedge"
+
+
+class ErrorCode(str, Enum):
+    invalid_argument = "invalid_argument"
+    unauthenticated = "unauthenticated"
+    permission_denied = "permission_denied"
+    not_found = "not_found"
+    failed_precondition = "failed_precondition"
+    unavailable = "unavailable"
+    deadline_exceeded = "deadline_exceeded"
+    quarantined = "quarantined"
+    internal = "internal"
+
+    def is_retryable(self) -> bool:
+        return self in (ErrorCode.unavailable, ErrorCode.deadline_exceeded)
+
+
+# ── Scalar / newtype validators (RootModel) ──────────────────────────────────
+
+
+class Ulid(RootModel[str]):
+    """26-char Crockford base32 ULID (no I/L/O/U)."""
+
+    root: str
+
+    @field_validator("root")
+    @classmethod
+    def check(cls, v: str) -> str:
+        return _ulid(v)
+
+
+class VenueId(RootModel[str]):
+    """Lowercase alphanumeric, non-empty."""
+
+    root: str
+
+    @field_validator("root")
+    @classmethod
+    def check(cls, v: str) -> str:
+        return _venue_id(v)
+
+
+class MarketKey(RootModel[str]):
+    """Format: mkt:{venue}:{native_id}."""
+
+    root: str
+
+    @field_validator("root")
+    @classmethod
+    def check(cls, v: str) -> str:
+        return _market_key(v)
+
+
+class Confidence(RootModel[str]):
+    """Decimal string in [0, 1]."""
+
+    root: str
+
+    @field_validator("root")
+    @classmethod
+    def in_range(cls, v: str) -> str:
+        d = Decimal(v)
+        if d < Decimal("0") or d > Decimal("1"):
+            raise ValueError(f"Confidence out of [0,1]: {v!r}")
+        return v
+
+
+# ── Domain types ──────────────────────────────────────────────────────────────
 
 
 class Money(BaseModel):
@@ -12,19 +200,13 @@ class Money(BaseModel):
     @field_validator("amount")
     @classmethod
     def dec_str(cls, v: str) -> str:
-        Decimal(v)
-        return v
+        return _decimal_str(v)
 
-
-class Confidence(BaseModel):
-    value: str
-
-    @field_validator("value")
+    @field_validator("currency")
     @classmethod
-    def in_range(cls, v: str) -> str:
-        d = Decimal(v)
-        if d < Decimal("0") or d > Decimal("1"):
-            raise ValueError(f"confidence [0,1], got {v}")
+    def non_empty(cls, v: str) -> str:
+        if not v:
+            raise ValueError("currency must be non-empty")
         return v
 
 
@@ -44,8 +226,7 @@ class EdgeDecomposition(BaseModel):
     @field_validator("*")
     @classmethod
     def dec_str(cls, v: str) -> str:
-        Decimal(v)
-        return v
+        return _decimal_str(v)
 
     @model_validator(mode="after")
     def sum_law(self):
@@ -70,8 +251,18 @@ class EdgeDecomposition(BaseModel):
         return self
 
 
+class BookLevel(BaseModel):
+    price: str
+    size: str
+
+    @field_validator("*")
+    @classmethod
+    def dec_str(cls, v: str) -> str:
+        return _decimal_str(v)
+
+
 class Quote(BaseModel):
-    market: str
+    market: MarketKey
     bid: str | None = None
     ask: str | None = None
     mid: str | None = None
@@ -79,22 +270,34 @@ class Quote(BaseModel):
     bid_size: str | None = None
     ask_size: str | None = None
     ts: str
-    source: str
+    source: QuoteSource
     seq: int | None = None
 
+    @field_validator("bid", "ask", "mid", "last", "bid_size", "ask_size")
+    @classmethod
+    def dec_str_opt(cls, v: str | None) -> str | None:
+        if v is not None:
+            Decimal(v)
+        return v
 
-class BookLevel(BaseModel):
-    price: str
-    size: str
+    @field_validator("ts")
+    @classmethod
+    def valid_ts(cls, v: str) -> str:
+        return _rfc3339(v)
 
 
 class OrderBook(BaseModel):
-    market: str
-    bids: list[BookLevel] = []
-    asks: list[BookLevel] = []
+    market: MarketKey
+    bids: list[BookLevel]
+    asks: list[BookLevel]
     depth: int
     ts: str
     seq: int | None = None
+
+    @field_validator("ts")
+    @classmethod
+    def valid_ts(cls, v: str) -> str:
+        return _rfc3339(v)
 
     @model_validator(mode="after")
     def ordering(self):
@@ -107,84 +310,161 @@ class OrderBook(BaseModel):
         return self
 
 
+class Origin(BaseModel):
+    kind: OriginKind
+    tier: int
+    actor_id: Ulid
+
+    @field_validator("tier")
+    @classmethod
+    def tier_range(cls, v: int) -> int:
+        if v < 1 or v > 5:
+            raise ValueError(f"origin tier must be 1..=5, got {v}")
+        return v
+
+
+class RiskReason(BaseModel):
+    code: RiskReasonCode
+    detail: str
+
+
 class OrderIntent(BaseModel):
-    id: str
-    market: str
-    side: str
-    order_type: str
+    id: Ulid
+    market: MarketKey
+    side: Side
+    order_type: OrderType
     limit_price: str | None = None
     size: str
-    size_unit: str
-    tif: str
+    size_unit: SizeUnit
+    tif: TimeInForce
     paper: bool
-    origin: dict
-    quote_snapshot: dict
-    caps_version: str
+    origin: Origin
+    quote_snapshot: Quote
+    caps_version: Ulid
     created_ts: str
+
+    @field_validator("limit_price")
+    @classmethod
+    def dec_str_opt(cls, v: str | None) -> str | None:
+        if v is not None:
+            Decimal(v)
+        return v
+
+    @field_validator("size")
+    @classmethod
+    def dec_str(cls, v: str) -> str:
+        return _decimal_str(v)
+
+    @field_validator("created_ts")
+    @classmethod
+    def valid_ts(cls, v: str) -> str:
+        return _rfc3339(v)
 
 
 class RiskVerdict(BaseModel):
-    intent_id: str
-    verdict: str
-    reasons: list[dict] = []
+    intent_id: Ulid
+    verdict: RiskVerdictStatus
+    reasons: list[RiskReason] = []
     ts: str
+
+    @field_validator("ts")
+    @classmethod
+    def valid_ts(cls, v: str) -> str:
+        return _rfc3339(v)
 
 
 class Order(BaseModel):
-    order_id: str
-    market: str
-    side: str
+    order_id: Ulid
+    market: MarketKey
+    side: Side
     price: str
     size: str
-    fee: dict
-    venue_ref: dict
+    fee: Money
+    venue_ref: dict[str, Any]
     ts: str
     paper: bool
+
+    @field_validator("price", "size")
+    @classmethod
+    def dec_str(cls, v: str) -> str:
+        return _decimal_str(v)
+
+    @field_validator("ts")
+    @classmethod
+    def valid_ts(cls, v: str) -> str:
+        return _rfc3339(v)
 
 
 class Fill(BaseModel):
-    order_id: str
-    market: str
-    side: str
+    order_id: Ulid
+    market: MarketKey
+    side: Side
     price: str
     size: str
-    fee: dict
-    venue_ref: dict
+    fee: Money
+    venue_ref: dict[str, Any]
     ts: str
     paper: bool
 
+    @field_validator("price", "size")
+    @classmethod
+    def dec_str(cls, v: str) -> str:
+        return _decimal_str(v)
+
+    @field_validator("ts")
+    @classmethod
+    def valid_ts(cls, v: str) -> str:
+        return _rfc3339(v)
+
 
 class Position(BaseModel):
-    market: str
+    market: MarketKey
     side_exposure: str
     avg_price: str
     size: str
-    realized_pnl: dict
-    unrealized_pnl: dict
+    realized_pnl: Money
+    unrealized_pnl: Money
     ts: str
+
+    @field_validator("side_exposure", "avg_price", "size")
+    @classmethod
+    def dec_str(cls, v: str) -> str:
+        return _decimal_str(v)
+
+    @field_validator("ts")
+    @classmethod
+    def valid_ts(cls, v: str) -> str:
+        return _rfc3339(v)
 
 
 class CapsSnapshot(BaseModel):
-    version: str
-    per_order_max: dict
-    daily_max: dict
-    per_venue: dict = {}
-    per_kind: dict = {}
+    version: Ulid
+    per_order_max: Money
+    daily_max: Money
+    per_venue: dict[str, Any] = {}
+    per_kind: dict[str, Any] = {}
 
 
 class Market(BaseModel):
-    key: str
-    venue: str
-    kind: str
+    key: MarketKey
+    venue: VenueId
+    kind: InstrumentKind
     title: str
     description_ref: str
-    status: str
+    status: MarketStatus
     close_ts: str | None = None
     resolve_ts: str | None = None
     outcome: str | None = None
-    jurisdiction_flags: list[str] = []
-    venue_ref: dict
-    meta: dict
+    jurisdiction_flags: list[str]
+    venue_ref: dict[str, Any]
+    meta: dict[str, Any]
+
+    @field_validator("close_ts", "resolve_ts")
+    @classmethod
+    def valid_ts_opt(cls, v: str | None) -> str | None:
+        if v is not None:
+            return _rfc3339(v)
+        return v
 
 
 class PriceSemantics(BaseModel):
@@ -194,18 +474,66 @@ class PriceSemantics(BaseModel):
     min: str | None = None
     max: str | None = None
 
+    @model_validator(mode="after")
+    def validate_kind(self) -> "PriceSemantics":
+        if self.kind == "probability":
+            if self.tick_size is None:
+                raise ValueError("tick_size required for kind=probability")
+            Decimal(self.tick_size)
+        elif self.kind == "scalar":
+            if None in (self.unit, self.min, self.max):
+                raise ValueError("unit/min/max required for kind=scalar")
+            Decimal(self.min)
+            Decimal(self.max)
+        elif self.kind == "currency":
+            pass
+        else:
+            raise ValueError(f"unknown PriceSemantics kind: {self.kind!r}")
+        return self
+
+
+class OpportunityLeg(BaseModel):
+    market: MarketKey
+    side: Side
+    target_price: str | None = None
+    size_hint: str | None = None
+
+    @field_validator("target_price", "size_hint")
+    @classmethod
+    def dec_str_opt(cls, v: str | None) -> str | None:
+        if v is not None:
+            Decimal(v)
+        return v
+
+
+class BrainRef(BaseModel):
+    object_id: Ulid
+    provenance_hash: str
+
 
 class Opportunity(BaseModel):
-    id: str
-    kind: str
-    legs: list[dict]
+    id: Ulid
+    kind: OpportunityKind
+    legs: list[OpportunityLeg]
     gross_edge: str
-    edge: dict
-    confidence: str
+    edge: EdgeDecomposition
+    confidence: Confidence
     detected_ts: str
     expires_ts: str | None = None
-    explain_ref: dict
-    trace_id: str
+    explain_ref: BrainRef
+    trace_id: Ulid
+
+    @field_validator("gross_edge")
+    @classmethod
+    def dec_str(cls, v: str) -> str:
+        return _decimal_str(v)
+
+    @field_validator("detected_ts", "expires_ts")
+    @classmethod
+    def valid_ts(cls, v: str | None) -> str | None:
+        if v is not None:
+            return _rfc3339(v)
+        return v
 
 
 class AuditEvent(BaseModel):
@@ -218,25 +546,51 @@ class AuditEvent(BaseModel):
     subject: str
     payload_hash: str
 
+    @field_validator("ts")
+    @classmethod
+    def valid_ts(cls, v: str) -> str:
+        return _rfc3339(v)
+
+    @field_validator("seq")
+    @classmethod
+    def non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"seq must be >= 0, got {v}")
+        return v
+
+    @field_validator("hash", "payload_hash")
+    @classmethod
+    def non_empty(cls, v: str) -> str:
+        if not v:
+            raise ValueError("hash field must be non-empty")
+        return v
+
 
 class ErrorEnvelope(BaseModel):
-    code: str
+    code: ErrorCode
     message: str
     retryable: bool
-    trace_id: str
+    trace_id: Ulid
     details: str | None = None
 
     @model_validator(mode="after")
     def retryable_consistent(self):
-        expected = self.code in {"unavailable", "deadline_exceeded"}
+        expected = self.code.is_retryable()
         if self.retryable != expected:
-            raise ValueError(f"retryable={self.retryable} contradicts code={self.code}")
+            raise ValueError(
+                f"retryable={self.retryable} contradicts code={self.code}"
+            )
         return self
 
+
+# ── Type registry for golden-test dispatch ────────────────────────────────────
 
 TYPE_REGISTRY: dict[str, type[BaseModel]] = {
     "Money": Money,
     "Confidence": Confidence,
+    "MarketKey": MarketKey,
+    "Ulid": Ulid,
+    "VenueId": VenueId,
     "EdgeDecomposition": EdgeDecomposition,
     "Quote": Quote,
     "OrderBook": OrderBook,

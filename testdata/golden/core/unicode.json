@@ -1,0 +1,46 @@
+[
+  {
+    "name": "unicode_em_dash",
+    "type": "Market",
+    "value": {
+      "key": "mkt:kalshi:UNICODE-1",
+      "venue": "kalshi",
+      "kind": "binary_contract",
+      "title": "BTC — above $75k?",
+      "description_ref": "BTC-75K-JUL10",
+      "status": "open",
+      "jurisdiction_flags": [
+        "US"
+      ],
+      "venue_ref": {
+        "ticker": "BTC-75K"
+      },
+      "meta": {
+        "tick_size": "0.01"
+      }
+    },
+    "sha256": "a7c14c7f9e690b7b3a9059b03b05404922e6c29ba2d16b8ebabd332e5e5cbed1"
+  },
+  {
+    "name": "unicode_japanese",
+    "type": "Market",
+    "value": {
+      "key": "mkt:kalshi:JP-1",
+      "venue": "kalshi",
+      "kind": "binary_contract",
+      "title": "日経平均が40,000円を超える",
+      "description_ref": "N225-40K",
+      "status": "open",
+      "jurisdiction_flags": [
+        "JP"
+      ],
+      "venue_ref": {
+        "ticker": "N225"
+      },
+      "meta": {
+        "unit": "yen"
+      }
+    },
+    "sha256": "e9ee54be8fd86d74d79be9efaed5367d65fec7f30132902f0b97c096feaf0935"
+  }
+]

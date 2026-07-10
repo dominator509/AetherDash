@@ -232,10 +232,10 @@ pub struct CapsSnapshot {
     pub version: Ulid,
     pub per_order_max: Money,
     pub daily_max: Money,
-    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
-    pub per_venue: serde_json::Map<String, serde_json::Value>,
-    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
-    pub per_kind: serde_json::Map<String, serde_json::Value>,
+    #[serde(default, skip_serializing_if = "JsonObject::is_empty")]
+    pub per_venue: JsonObject,
+    #[serde(default, skip_serializing_if = "JsonObject::is_empty")]
+    pub per_kind: JsonObject,
 }
 
 #[cfg(test)]
@@ -284,14 +284,14 @@ mod tests {
 
     #[test]
     fn origin_deserialize_rejects_invalid_tier() {
-        let json = r#"{"kind":"user","tier":0,"actor_id":"01JQZ9XKABCDEFGHIJKLMNOPQR"}"#;
+        let json = r#"{"kind":"user","tier":0,"actor_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"}"#;
         let result: Result<Origin, _> = serde_json::from_str(json);
         assert!(result.is_err(), "tier 0 should be rejected");
     }
 
     #[test]
     fn order_intent_rejects_numeric_decimal() {
-        let json = r#"{"id":"01JQZ9XKABCDEFGHIJKLMNOPQR","market":"mkt:kalshi:INTC-50","side":"buy","order_type":"limit","size":10,"size_unit":"contracts","tif":"gtc","paper":true,"origin":{"kind":"user","tier":3,"actor_id":"01JQZ9XKABCDEFGHIJKLMNOPQR"},"quote_snapshot":{},"caps_version":"01JQZ9XKABCDEFGHIJKLMNOPQR","created_ts":"2026-07-10T12:34:56.789Z"}"#;
+        let json = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","market":"mkt:kalshi:INTC-50","side":"buy","order_type":"limit","size":10,"size_unit":"contracts","tif":"gtc","paper":true,"origin":{"kind":"user","tier":3,"actor_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"},"quote_snapshot":{},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
         let result: Result<OrderIntent, _> = serde_json::from_str(json);
         assert!(result.is_err(), "numeric size should be rejected");
     }

@@ -86,4 +86,60 @@ mod tests {
         assert_eq!(hash.len(), 64);
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }
+
+    #[test]
+    fn reverse_insertion_order_produces_same_hash() {
+        use crate::json::JsonObject;
+
+        // Same keys inserted in opposite orders
+        let obj_a =
+            JsonObject::new(serde_json::json!({"a": 1, "b": 2, "c": 3})).unwrap();
+        let obj_b =
+            JsonObject::new(serde_json::json!({"c": 3, "b": 2, "a": 1})).unwrap();
+
+        let hash_a = canonical_sha256(&obj_a).unwrap();
+        let hash_b = canonical_sha256(&obj_b).unwrap();
+        assert_eq!(hash_a, hash_b, "different insertion orders must produce same hash");
+    }
+
+    #[test]
+    fn nested_maps_are_sorted() {
+        use crate::json::JsonObject;
+
+        // Nested objects; outer keys are reverse-alphabetical
+        let obj = JsonObject::new(serde_json::json!({
+            "z_level": {"nested_b": 1, "nested_a": 2},
+            "a_level": {"inner": {"sub_z": "last", "sub_a": "first"}}
+        }))
+        .unwrap();
+
+        let json_str = canonical_json_string(&obj).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        // Top-level keys must be sorted: "a_level" < "z_level"
+        if let serde_json::Value::Object(map) = &parsed {
+            let keys: Vec<&String> = map.keys().collect();
+            assert_eq!(keys, vec!["a_level", "z_level"], "top-level keys not sorted");
+        } else {
+            panic!("expected object");
+        }
+
+        // Nested keys within "z_level" must be sorted
+        let z = &parsed["z_level"];
+        if let serde_json::Value::Object(map) = z {
+            let keys: Vec<&String> = map.keys().collect();
+            assert_eq!(keys, vec!["nested_a", "nested_b"], "nested keys not sorted");
+        } else {
+            panic!("expected object");
+        }
+
+        // Deeply nested keys in "a_level" -> "inner" must be sorted
+        let inner = &parsed["a_level"]["inner"];
+        if let serde_json::Value::Object(map) = inner {
+            let keys: Vec<&String> = map.keys().collect();
+            assert_eq!(keys, vec!["sub_a", "sub_z"], "deeply nested keys not sorted");
+        } else {
+            panic!("expected object");
+        }
+    }
 }

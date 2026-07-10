@@ -1,12 +1,11 @@
-"""Typed golden round-trip tests — construct Pydantic models to validate, hash original JSON."""
+"""Typed golden round-trip tests — construct Pydantic models, hash canonical dump."""
 
 import hashlib
 import json
 import os
-from decimal import Decimal
 
 import pytest
-from aether_py.canonical import canonical_json_string
+from aether_py.canonical import canonical_model_json
 from aether_py.models import TYPE_REGISTRY
 
 GD = os.path.join(
@@ -30,6 +29,11 @@ ALL = [
     "opportunity",
     "audit_event",
     "error_envelope",
+    # P1-7: Adversarial canonical vectors (cross-language)
+    "unicode",
+    "ordering",
+    "null_omission",
+    "empty_collections",
 ]
 
 
@@ -38,7 +42,7 @@ def sha256(s: str) -> str:
 
 
 def load(fn: str) -> list[dict[str, object]]:
-    with open(os.path.join(GD, f"{fn}.json")) as f:
+    with open(os.path.join(GD, f"{fn}.json"), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -49,20 +53,16 @@ def test_typed_golden_round_trips(fn: str) -> None:
     for e in entries:
         typ = str(e["type"])
         val = e["value"]
-        # --- Validate by constructing the actual type ---
-        if typ == "MarketKey":
-            s = str(val)
-            assert s.startswith("mkt:") and s.count(":") >= 2, f"MarketKey invalid: {s}"
-        elif typ == "Confidence":
-            s = str(val)
-            d = Decimal(s)
-            assert d >= Decimal("0") and d <= Decimal("1"), (
-                f"Confidence out of range: {s}"
-            )
-        elif typ in TYPE_REGISTRY:
-            TYPE_REGISTRY[typ].model_validate(val)
-        else:
-            raise AssertionError(f"Unknown type: {typ}")
-        # --- Hash the original JSON (Rust's canonical output) ---
-        canonical = canonical_json_string(val)
-        assert sha256(canonical) == str(e["sha256"]), f"{e['name']}: SHA-256 mismatch"
+
+        model_cls = TYPE_REGISTRY.get(typ)
+        if model_cls is None:
+            raise AssertionError(f"Unknown type label: {typ}")
+
+        # Construct the model — validation happens here
+        model = model_cls.model_validate(val)
+
+        # Hash the canonical model dump (not the raw input dict)
+        canonical = canonical_model_json(model)
+        assert sha256(canonical) == str(e["sha256"]), (
+            f"{e['name']}: SHA-256 mismatch"
+        )

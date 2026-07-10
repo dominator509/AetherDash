@@ -1,0 +1,25 @@
+[
+  {
+    "name": "order_multi_key_venue_ref",
+    "type": "Order",
+    "value": {
+      "order_id": "01KX6RVEVX9TFJFJH2JM5B4S2T",
+      "market": "mkt:kalshi:ORDERING-1",
+      "side": "buy",
+      "price": "0.66",
+      "size": "10",
+      "fee": {
+        "amount": "0.50",
+        "currency": "USD"
+      },
+      "venue_ref": {
+        "account": "main",
+        "order_ref": "kalshi-123",
+        "venue": "kalshi"
+      },
+      "ts": "2025-07-10T12:34:56.789Z",
+      "paper": false
+    },
+    "sha256": "bd88d57a79a11e9448ffe22328a14639c17b0a57e4454720c2c5b088e79b4a05"
+  }
+]

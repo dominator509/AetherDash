@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn error_envelope_rejects_contradictory_retryable() {
-        let json = r#"{"code":"invalid_argument","message":"bad","retryable":true,"trace_id":"01JQZ9XKABCDEFGHIJKLMNOPQR"}"#;
+        let json = r#"{"code":"invalid_argument","message":"bad","retryable":true,"trace_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"}"#;
         let result: Result<ErrorEnvelope, _> = serde_json::from_str(json);
         assert!(result.is_err(), "contradictory retryable should be rejected");
     }
