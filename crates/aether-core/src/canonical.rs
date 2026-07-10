@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn canonical_bytes_are_deterministic() {
         let q = TestQuote {
-            market: MarketKey::from_string("mkt:kalshi:BTC-75"),
+            market: MarketKey::from_string_unchecked("mkt:kalshi:BTC-75"),
             bid: "0.65".into(),
             ask: "0.67".into(),
         };

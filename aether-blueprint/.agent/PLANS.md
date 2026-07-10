@@ -15,7 +15,7 @@ This file is the single authority on which plans exist, their status, and which 
 |----|-------|------|-------|--------|------------|
 | EP-000 | Repository discovery & pack installation check | 0xx Foundation | 0 | done | - |
 | EP-001 | Monorepo scaffold, toolchains, CI skeleton | 0xx Foundation | 0 | done | EP-000 |
-| EP-002 | Core domain types & canonical serialization | 0xx Foundation | 0 | done | EP-001 |
+| EP-002 | Core domain types & canonical serialization | 0xx Foundation | 0 | revise | EP-001 |
 | EP-003 | Data & persistence substrate (compose stack, migrations, DDL) | 0xx Foundation | 0 | draft | EP-002 |
 | EP-004 | Service contracts & event bus (proto, topics, WS gateway skeleton) | 0xx Foundation | 0 | draft | EP-003 |
 | EP-101 | Tauri shell: toggle, keyboard nav, command line, encrypted cache | 1xx Client | 1 | draft | EP-004 |

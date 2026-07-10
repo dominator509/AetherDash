@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn market_serde_includes_required_fields() {
         let m = Market {
-            key: MarketKey::from_string("mkt:kalshi:BTC-75"),
+            key: MarketKey::from_string_unchecked("mkt:kalshi:BTC-75"),
             venue: VenueId::new("kalshi"),
             kind: InstrumentKind::BinaryContract,
             title: "BTC above $75k?".into(),

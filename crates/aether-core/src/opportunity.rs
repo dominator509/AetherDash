@@ -134,6 +134,8 @@ pub enum EdgeError {
     SumLawViolation { gross_spread: Decimal, costs_sum: Decimal, net_edge: Decimal },
 }
 
+/// Edge cost components. Fields are pub for ergonomic construction in tests and generators.
+/// The sum-law invariant is enforced by EdgeDecomposition::validate(), not here.
 pub struct EdgeCosts {
     pub fees: Decimal,
     pub slippage_est: Decimal,
@@ -147,6 +149,20 @@ pub struct EdgeCosts {
 }
 
 impl EdgeCosts {
+    pub fn zero() -> Self {
+        Self {
+            fees: Decimal::ZERO,
+            slippage_est: Decimal::ZERO,
+            funding_cost: Decimal::ZERO,
+            gas_cost: Decimal::ZERO,
+            bridge_cost: Decimal::ZERO,
+            settlement_mismatch_discount: Decimal::ZERO,
+            liquidity_haircut: Decimal::ZERO,
+            staleness_penalty: Decimal::ZERO,
+            confidence_penalty: Decimal::ZERO,
+        }
+    }
+
     pub fn sum(&self) -> Decimal {
         self.fees
             + self.slippage_est

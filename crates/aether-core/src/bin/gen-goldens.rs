@@ -1,5 +1,8 @@
 //! Golden vector generator — produces test vectors with SHA-256 hashes for ALL SPEC-001 types.
 //! Run: cargo run -p aether-core --features golden_gen --bin gen-goldens
+//! This is a dev tool; panicking on invalid fixed test data is correct behavior.
+
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use aether_core::audit::AuditEvent;
 use aether_core::canonical::canonical_sha256;
@@ -33,7 +36,7 @@ fn mk_ulid(s: &str) -> Ulid {
     Ulid::from_string(s).unwrap()
 }
 fn mk_key(s: &str) -> MarketKey {
-    MarketKey::from_string(s)
+    MarketKey::from_string_unchecked(s)
 }
 fn ts() -> UtcTime {
     UtcTime::from_unix_millis(1752150896789).unwrap()

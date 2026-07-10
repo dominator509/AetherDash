@@ -3,7 +3,12 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { canonicalJson } from "../src/index.js";
 
-interface GoldenEntry { name: string; type: string; value: unknown; sha256: string; }
+interface GoldenEntry {
+  name: string;
+  type: string;
+  value: unknown;
+  sha256: string;
+}
 
 function loadGoldens(file: string): GoldenEntry[] {
   const path = `../../testdata/golden/core/${file}`;
@@ -15,11 +20,24 @@ function sha256(data: string): string {
 }
 
 const ALL_FILES = [
-  "money", "market_key", "confidence", "edge", "quote", "order_book",
-  "order_intent", "risk_verdict", "order", "fill", "position",
-  "caps_snapshot", "market", "price_semantics", "opportunity",
-  "audit_event", "error_envelope",
-].map(f => `${f}.json`);
+  "money",
+  "market_key",
+  "confidence",
+  "edge",
+  "quote",
+  "order_book",
+  "order_intent",
+  "risk_verdict",
+  "order",
+  "fill",
+  "position",
+  "caps_snapshot",
+  "market",
+  "price_semantics",
+  "opportunity",
+  "audit_event",
+  "error_envelope",
+].map((f) => `${f}.json`);
 
 describe("Golden vectors — cross-language canonical bytes", () => {
   for (const file of ALL_FILES) {

@@ -21,7 +21,6 @@ impl Ulid {
     pub fn new() -> Self {
         Self::default()
     }
-
     pub fn from_string(s: &str) -> Result<Self, ulid::DecodeError> {
         Ok(Self(ulid::Ulid::from_string(s)?))
     }
@@ -50,7 +49,6 @@ impl<'de> Deserialize<'de> for Ulid {
 
 // ── VenueId ────────────────────────────────────────────────────────
 
-/// Venue identifier slug. Validated: lowercase alphanumeric only.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VenueId(String);
 
@@ -65,7 +63,7 @@ impl VenueId {
         let s = s.into();
         debug_assert!(
             s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
-            "VenueId must be lowercase alphanumeric slug: {s}"
+            "VenueId slug: {s}"
         );
         Self(s)
     }
@@ -101,22 +99,34 @@ impl<'de> Deserialize<'de> for VenueId {
 
 // ── MarketKey ──────────────────────────────────────────────────────
 
-/// MarketKey = `mkt:{venue}:{native_id}` — the universal join key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MarketKey(String);
+
+#[derive(Debug, thiserror::Error)]
+#[error("MarketKey must match mkt:{{venue}}:{{native_id}}, got: {raw}")]
+pub struct MarketKeyError {
+    pub raw: String,
+}
 
 impl MarketKey {
     pub fn new(venue: &VenueId, native_id: &str) -> Self {
         Self(format!("mkt:{}:{}", venue.0, native_id))
     }
 
-    pub fn from_string(s: impl Into<String>) -> Self {
+    /// Validated constructor — returns Err if format is invalid.
+    pub fn from_string(s: impl Into<String>) -> Result<Self, MarketKeyError> {
         let s = s.into();
-        debug_assert!(
-            s.starts_with("mkt:") && s.split(':').count() >= 3,
-            "MarketKey must match mkt:{{venue}}:{{native_id}}: {s}"
-        );
-        Self(s)
+        let parts: Vec<&str> = s.splitn(3, ':').collect();
+        if parts.len() != 3 || parts[0] != "mkt" || parts[1].is_empty() || parts[2].is_empty() {
+            return Err(MarketKeyError { raw: s });
+        }
+        Ok(Self(s))
+    }
+
+    /// Unvalidated constructor — ONLY for gen-goldens and tests where format is known valid.
+    /// Prefer `from_string` for production code — it validates the format.
+    pub fn from_string_unchecked(s: impl Into<String>) -> Self {
+        Self(s.into())
     }
 
     pub fn as_str(&self) -> &str {
@@ -125,20 +135,12 @@ impl MarketKey {
 
     pub fn venue(&self) -> Option<VenueId> {
         let parts: Vec<&str> = self.0.splitn(3, ':').collect();
-        if parts.len() == 3 && parts[0] == "mkt" {
-            Some(VenueId::new(parts[1]))
-        } else {
-            None
-        }
+        (parts.len() == 3 && parts[0] == "mkt").then(|| VenueId(parts[1].to_string()))
     }
 
     pub fn native_id(&self) -> Option<&str> {
         let parts: Vec<&str> = self.0.splitn(3, ':').collect();
-        if parts.len() == 3 {
-            Some(parts[2])
-        } else {
-            None
-        }
+        (parts.len() == 3).then_some(parts[2])
     }
 }
 
@@ -157,19 +159,12 @@ impl Serialize for MarketKey {
 impl<'de> Deserialize<'de> for MarketKey {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
-        let parts: Vec<&str> = s.splitn(3, ':').collect();
-        if parts.len() != 3 || parts[0] != "mkt" || parts[1].is_empty() || parts[2].is_empty() {
-            return Err(serde::de::Error::custom(format!(
-                "MarketKey must match mkt:{{venue}}:{{native_id}}, got: {s}"
-            )));
-        }
-        Ok(Self(s))
+        MarketKey::from_string(s).map_err(serde::de::Error::custom)
     }
 }
 
 // ── Money ──────────────────────────────────────────────────────────
 
-/// Money value with currency. SPEC-001: decimals as strings on the wire.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Money {
     #[serde(with = "decimal_string")]
@@ -181,7 +176,6 @@ impl Money {
     pub fn new(amount: Decimal, currency: impl Into<String>) -> Self {
         Self { amount, currency: currency.into() }
     }
-
     pub fn zero(currency: impl Into<String>) -> Self {
         Self { amount: Decimal::ZERO, currency: currency.into() }
     }
@@ -200,82 +194,61 @@ mod tests {
         let u2: Ulid = serde_json::from_str(&json).unwrap();
         assert_eq!(u, u2);
     }
-
     #[test]
     fn ulid_rejects_invalid() {
-        let result: Result<Ulid, _> = serde_json::from_str(r#""not-a-ulid""#);
-        assert!(result.is_err());
+        assert!(serde_json::from_str::<Ulid>(r#""not-a-ulid""#).is_err());
     }
-
     #[test]
     fn venue_id_rejects_uppercase() {
-        let result: Result<VenueId, _> = serde_json::from_str(r#""Kalshi""#);
-        assert!(result.is_err());
+        assert!(serde_json::from_str::<VenueId>(r#""Kalshi""#).is_err());
     }
-
     #[test]
     fn venue_id_rejects_special_chars() {
-        let result: Result<VenueId, _> = serde_json::from_str(r#""kalshi!""#);
-        assert!(result.is_err());
+        assert!(serde_json::from_str::<VenueId>(r#""kalshi!""#).is_err());
     }
-
     #[test]
     fn venue_id_accepts_valid() {
-        let v: VenueId = serde_json::from_str(r#""kalshi""#).unwrap();
-        assert_eq!(v.as_str(), "kalshi");
+        assert_eq!(serde_json::from_str::<VenueId>(r#""kalshi""#).unwrap().as_str(), "kalshi");
     }
-
     #[test]
     fn market_key_format() {
-        let venue = VenueId::new("kalshi");
-        let mk = MarketKey::new(&venue, "BTC-75");
+        let mk = MarketKey::new(&VenueId::new("kalshi"), "BTC-75");
         assert_eq!(mk.as_str(), "mkt:kalshi:BTC-75");
         assert_eq!(mk.venue().unwrap().as_str(), "kalshi");
         assert_eq!(mk.native_id().unwrap(), "BTC-75");
     }
-
     #[test]
-    fn market_key_rejects_invalid_format() {
-        let result: Result<MarketKey, _> = serde_json::from_str(r#""not-a-market-key""#);
-        assert!(result.is_err());
+    fn market_key_from_string_validates() {
+        assert!(MarketKey::from_string("not-a-key").is_err());
+        assert!(MarketKey::from_string("mkt:onlytwo").is_err());
+        assert!(MarketKey::from_string("mkt::empty").is_err());
+        assert!(MarketKey::from_string("mkt:kalshi:BTC-75").is_ok());
     }
-
     #[test]
-    fn market_key_rejects_missing_parts() {
-        let result: Result<MarketKey, _> = serde_json::from_str(r#""mkt:onlytwo""#);
-        assert!(result.is_err());
+    fn market_key_rejects_invalid_on_deserialize() {
+        assert!(serde_json::from_str::<MarketKey>(r#""not-mkt-format""#).is_err());
     }
-
     #[test]
-    fn market_key_accepts_valid() {
+    fn market_key_accepts_valid_on_deserialize() {
         let mk: MarketKey = serde_json::from_str(r#""mkt:kalshi:BTC-75""#).unwrap();
         assert_eq!(mk.as_str(), "mkt:kalshi:BTC-75");
     }
-
     #[test]
     fn market_key_serde_round_trip() {
-        let mk = MarketKey::from_string("mkt:kalshi:BTC-75");
+        let mk = MarketKey::from_string("mkt:kalshi:BTC-75").unwrap();
         let json = serde_json::to_string(&mk).unwrap();
         assert_eq!(json, r#""mkt:kalshi:BTC-75""#);
-        let mk2: MarketKey = serde_json::from_str(&json).unwrap();
-        assert_eq!(mk, mk2);
+        assert_eq!(serde_json::from_str::<MarketKey>(&json).unwrap(), mk);
     }
-
     #[test]
     fn money_serde_decimal_is_string() {
         let m = Money::new(Decimal::new(12345, 2), "USD");
         let json = serde_json::to_string(&m).unwrap();
-        assert!(json.contains(r#""123.45""#));
-        // Verify it's a JSON string, not a number
         assert!(json.contains(r#""amount":"123.45""#));
-        let m2: Money = serde_json::from_str(&json).unwrap();
-        assert_eq!(m, m2);
+        assert_eq!(serde_json::from_str::<Money>(&json).unwrap(), m);
     }
-
     #[test]
     fn money_rejects_numeric_decimal() {
-        let result: Result<Money, _> =
-            serde_json::from_str(r#"{"amount": 123.45, "currency": "USD"}"#);
-        assert!(result.is_err(), "numeric decimal in Money should be rejected");
+        assert!(serde_json::from_str::<Money>(r#"{"amount":123.45,"currency":"USD"}"#).is_err());
     }
 }

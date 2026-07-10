@@ -9,11 +9,14 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "lint": "echo 'ok'",
-    "format:check": "echo 'ok'"
+    "lint": "eslint src/ tests/",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\""
   },
   "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
     "typescript": "^5.5.0",
+    "typescript-eslint": "^8.63.0",
     "vitest": "^2.0.0"
   }
 }
