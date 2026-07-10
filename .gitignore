@@ -15,3 +15,6 @@ data/
 
 # Obsidian dynamic workspace state
 .obsidian/workspace.json
+
+# TypeScript compiler cache
+*.tsbuildinfo

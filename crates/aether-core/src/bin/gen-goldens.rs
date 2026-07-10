@@ -478,8 +478,14 @@ fn main() {
                 resolve_ts: None,
                 outcome: None,
                 jurisdiction_flags: vec!["US".into()],
-                venue_ref: serde_json::json!({"ticker": "BTC-75K-JUL10"}),
-                meta: serde_json::json!({"tick_size": "0.01"}),
+                venue_ref: aether_core::market::JsonObject::new(
+                    serde_json::json!({"ticker": "BTC-75K-JUL10"}),
+                )
+                .unwrap(),
+                meta: aether_core::market::JsonObject::new(
+                    serde_json::json!({"tick_size": "0.01"}),
+                )
+                .unwrap(),
             },
         )],
     );

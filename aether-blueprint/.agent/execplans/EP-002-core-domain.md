@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-002: Core Domain Types & Canonical Serialization
 
-**Band:** 0xx Foundation | **Phase:** 0 | **Status:** active | **Blocked by:** EP-001
+**Band:** 0xx Foundation | **Phase:** 0 | **Status:** revise | **Blocked by:** EP-001
 
 ## Purpose / Big Picture
 Implement SPEC-001 exactly: `crates/aether-core` as the type authority, proto mirrors as the wire authority, TS and Python mirrors proven equivalent by shared golden vectors. When this plan is done, "a Quote" means one thing in every plane and hashing/provenance has stable bytes to stand on.

@@ -123,8 +123,9 @@ impl MarketKey {
         Ok(Self(s))
     }
 
-    /// Unvalidated constructor — ONLY for gen-goldens and tests where format is known valid.
+    /// Unvalidated constructor — ONLY for gen-goldens where format is known valid.
     /// Prefer `from_string` for production code — it validates the format.
+    #[doc(hidden)]
     pub fn from_string_unchecked(s: impl Into<String>) -> Self {
         Self(s.into())
     }
