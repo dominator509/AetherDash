@@ -1,0 +1,11 @@
+[package]
+name = "aether-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+description = "AETHER Terminal — canonical domain types, serialization, and edge decomposition math"
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+# EP-001: minimal scaffold. D1: aether-core depends on std + serde-class only.
+# Dependencies will be added by EP-002.

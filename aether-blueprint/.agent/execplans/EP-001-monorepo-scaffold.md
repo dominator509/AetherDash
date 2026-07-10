@@ -68,6 +68,7 @@ All file creations check-first; re-running `uv sync`/`pnpm install` is safe. If 
 - **DL-001-3**: ESLint config uses flat config format (`eslint.config.js`) instead of the legacy `.eslintrc.cjs` since eslint 9.x is installed.
 - **DL-001-4**: `Cargo.lock` is committed but empty-workspace — properly versioned once EP-002 adds the first crate. Verifying at EP-002.
 - **DL-001-5**: Scripts copied from `aether-blueprint/scripts/` to `scripts/` at repo root per ARCHITECTURE.md section 1. Original blueprint scripts preserved in `aether-blueprint/` for reference.
+- **DL-001-6 (audit fix)**: Sol audit [P1] — scripts used `|| true` to swallow cargo errors on empty workspace, a gate-integrity defect. Fixed by creating `crates/aether-core/` as a minimal crate (EP-002 will populate it), updating `Cargo.toml` members to `["crates/aether-core"]`, and restoring all four scripts to their original unfiltered behavior. All cargo commands now exercise real targets with zero error-swallowing.
 
 ## Outcomes & Retrospective
 - **verify.sh**: `verify: ok` — all 3 stacks exercise, no marker-absent SKIPs (all markers present), empty-workspace SKIPs expected
@@ -76,5 +77,15 @@ All file creations check-first; re-running `uv sync`/`pnpm install` is safe. If 
 - **Lockfiles**: `pnpm-lock.yaml` ✅, `uv.lock` ✅ committed. `Cargo.lock` present but empty-workspace — re-verify at EP-002.
 - **CI workflows**: `verify.yml` + `nightly.yml` valid YAML, thin (checkout + tools + script calls only)
 - **51 files created** including workspace roots, configs, directories, CI, scripts
-- **SPEC-006 lint rules** enforced: `unused_must_use = "deny"` (Rust), `no-empty: error` (TS), `E722`/bare-except (ruff selects E)
-- **Commit**: `ba77914` — "chore(ep-001): monorepo scaffold — cargo+pnpm+uv workspaces, CI skeleton, verify ok"
+## Outcomes & Retrospective (post-audit-fix)
+- **verify.sh**: `verify: ok` — all 3 stacks exercise, zero `|| true` hacks, real cargo targets
+- **cargo fmt --all --check**: passes (no warnings after removing unstable rustfmt features)
+- **cargo clippy --workspace --all-targets -- -D warnings**: passes — `Checking aether-core... Finished`
+- **cargo test --workspace**: passes — `running 0 tests... result: ok`
+- **cargo build --workspace**: passes — `Finished dev profile`
+- **install.sh**: `install: ok`
+- **security-check.sh**: `security: ok`
+- **Lockfiles**: `pnpm-lock.yaml` ✅, `uv.lock` ✅, `Cargo.lock` ✅ (has real crate entry)
+- **CI workflows**: valid YAML, thin (checkout + tools + script calls only)
+- **Gate integrity**: any future Rust compilation/clippy/test failure WILL fail the gate
+- **Commit**: post-audit commit with all fixes
