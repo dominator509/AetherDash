@@ -25,7 +25,10 @@ ARCHITECTURE.md section 1 fixes the layout; ENVIRONMENT.md fixes env names for t
 `Cargo.toml`, `rustfmt.toml`, `clippy.toml`, `pnpm-workspace.yaml`, `package.json`, `tsconfig.base.json`, `.eslintrc.cjs`, `.prettierrc`, `pyproject.toml`, `.editorconfig`, `CHANGELOG.md`, `infra/dev/.env.example`, `.github/workflows/verify.yml`, `.github/workflows/nightly.yml`, directory `.gitkeep`s (client/ server/ connectors/venues/ connectors/execution/ connectors/comms/ crates/ packages/ pylib/ proto/ infra/migrations/ infra/clickhouse/ infra/deploy/ vault/), this file.
 
 ## Interfaces and Contracts
-Workspace member globs (the contract EP-002+ relies on): cargo members `["crates/*", "connectors/execution/*", "connectors/venues/*", "client/src-tauri"]` (empty-glob tolerant via `exclude` until members exist - use explicit empty `members = []` now and each plan appends; record this in the Decision Log). pnpm packages: `["packages/*", "client"]`. uv workspace members: `["pylib", "server/*"]` (same append pattern).
+Workspace members (the contract EP-002+ appends to):
+- **Cargo:** `members = ["crates/aether-core"]` — EP-001 delivers one scaffold crate. EP-002+ appends: `"crates/*"`, `"connectors/execution/*"`, `"connectors/venues/*"`, `"connectors/comms/*"`, `"client/src-tauri"`.
+- **pnpm:** `packages: ["packages/*", "client"]` — no packages exist yet; `pnpm -r --if-present` handles empty gracefully.
+- **uv:** `members = []` — no Python packages exist yet. Future: `"pylib"`, `"server/*"`.
 
 ## Milestones
 1. **Rust root.** Done when: `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` pass. Workspace lints: `unused_must_use = "deny"` under `[workspace.lints.rust]`.
@@ -39,7 +42,7 @@ Workspace member globs (the contract EP-002+ relies on): cargo members `["crates
 Per milestone: create the files above with minimal-but-real content; run the milestone's validation immediately. Version pins: rust edition 2021, `rust-version = "1.78"`; TS 5.x, `"type": "module"`; python `requires-python = ">=3.11"`. Dev-tool deps only: eslint+prettier+typescript at TS root; ruff+mypy+pytest in uv dev group. Commit per milestone (`chore(scaffold): ...`).
 
 ## Validation and Acceptance
-Milestone validations above, then: `git diff --name-only` vs Expected Changed Files; `verify.sh` -> `verify: ok`; `security-check.sh` -> `security: ok`; lockfiles committed (ADR-0005): `git ls-files | grep -E 'Cargo.lock|pnpm-lock.yaml|uv.lock'` shows all three (note: `Cargo.lock` appears once a member with deps exists - if absent at this stage, record in Decision Log and re-verify at EP-002).
+Milestone validations above, then: `git diff --name-only` vs Expected Changed Files; `verify.sh` -> `verify: ok`; `security-check.sh` -> `security: ok`; lockfiles committed (ADR-0005): `git ls-files | grep -E 'Cargo.lock|pnpm-lock.yaml|uv.lock'` shows all three.
 
 ## Idempotence and Recovery
 All file creations check-first; re-running `uv sync`/`pnpm install` is safe. If a config fights a tool version, prefer pinning the tool in the config over loosening the rule; third same-root failure on any linter -> R10 step 3 (simpler config, never rule deletion for SPEC-006-mandated rules - that would be weakening, R12).
@@ -53,39 +56,38 @@ All file creations check-first; re-running `uv sync`/`pnpm install` is safe. If 
 - [x] M6 Full verification
 
 ## Surprises & Discoveries
-- **Windows Python: `python` not `python3`** — fixed in `preflight.sh` (EP-000 DL-000-1). All scripts now use `python3` first, then fall back to `python`.
-- **cargo on empty workspace:** `cargo fmt --all`, `cargo clippy --workspace`, `cargo test --workspace`, and `cargo build --workspace` all fail with "Failed to find targets" / "manifest is virtual" when `members = []`. All scripts updated to detect this and print `SKIP (empty workspace)` instead of failing. This will auto-resolve when EP-002 adds the first crate.
-- **uv workspace with empty members:** `uv sync` fails when `members = ["pylib", "server/*"]` and those directories don't have `pyproject.toml`. Changed to `members = []` with append pattern (matching cargo approach).
-- **mypy on empty directories:** Fails when directory exists but has no `.py` files. `typecheck.sh` now checks for `.py` files before running mypy.
-- **eslint config format:** Eslint 9.x uses flat config (`.js`), not `.eslintrc.cjs`. Delivered as `eslint.config.js` instead.
-- **ruff version:** ruff 0.15.x changed `[tool.ruff.format]` schema — `line-length` is now per-tool, use `docstring-code-line-length` instead.
+- **Windows Python: `python` not `python3`** — fixed in `preflight.sh` (EP-000 DL-000-1). Scripts use `python3` with `python` fallback.
+- **uv workspace with empty members:** fails when member dirs lack `pyproject.toml`. Cargo workspace with empty members: fails with "no targets". Solution: cargo gets `crates/aether-core` scaffold now; uv and pnpm use empty members/`--if-present` which handle the empty case gracefully.
+- **mypy on empty directories:** fails when dir exists but has no `.py` files. `typecheck.sh` checks for `.py` files first.
+- **eslint config format:** Eslint 9.x uses flat config (`eslint.config.js`), not `.eslintrc.cjs`.
+- **ruff version:** ruff 0.15.x schema differs — `[tool.ruff.format]` uses `docstring-code-line-length` not `line-length`.
+- **rustfmt unstable features:** `imports_granularity`, `group_imports`, `format_code_in_doc_comments`, `format_macro_matchers`, `format_strings` are nightly-only. Commented out until nightly channel adopted.
 - **Tool versions all exceed minimums:** rustc 1.96.1, node 24.14.1, pnpm 9.15.0, Python 3.14.4, uv 0.11.25, Docker Compose v5.1.4.
-- **Optional tools missing (not blocking):** cargo-nextest, cargo-audit, buf, gitleaks.
+- **Optional tools not installed (not blocking):** cargo-nextest, cargo-audit, buf, gitleaks. CI installs cargo-audit via `taiki-e/install-action`.
 
 ## Decision Log
-- **DL-001-1**: Workspace members use explicit empty `members = []` with append-on-add pattern across all three package managers. Each EP appends its members. Cargo `members`, pnpm `packages`, uv `members` all start empty.
-- **DL-001-2**: Scripts handle empty workspaces with SKIP (not FAIL) semantics. Rust scripts detect "no targets/no members/manifest is virtual" errors. Python scripts check for actual `.py` files before running mypy/compileall/pytest. This isolates the empty-workspace period to EP-001 only.
-- **DL-001-3**: ESLint config uses flat config format (`eslint.config.js`) instead of the legacy `.eslintrc.cjs` since eslint 9.x is installed.
-- **DL-001-4**: `Cargo.lock` is committed but empty-workspace — properly versioned once EP-002 adds the first crate. Verifying at EP-002.
-- **DL-001-5**: Scripts copied from `aether-blueprint/scripts/` to `scripts/` at repo root per ARCHITECTURE.md section 1. Original blueprint scripts preserved in `aether-blueprint/` for reference.
-- **DL-001-6 (audit fix)**: Sol audit [P1] — scripts used `|| true` to swallow cargo errors on empty workspace, a gate-integrity defect. Fixed by creating `crates/aether-core/` as a minimal crate (EP-002 will populate it), updating `Cargo.toml` members to `["crates/aether-core"]`, and restoring all four scripts to their original unfiltered behavior. All cargo commands now exercise real targets with zero error-swallowing.
+- **DL-001-1**: Cargo workspace starts with `members = ["crates/aether-core"]` — one scaffold crate so all cargo commands exercise real targets from day one. EP-002+ appends members. pnpm and uv start with empty members (`--if-present` handles the empty case).
+- **DL-001-2**: Scripts restored to original strict behavior — no `|| true` error-swallowing. The `aether-core` crate provides real targets, so all cargo commands pass genuinely. Empty-workspace handling in scripts is unnecessary now and was removed (audit fix).
+- **DL-001-3**: ESLint config uses flat config format (`eslint.config.js`) — eslint 9.x default.
+- **DL-001-4**: `Cargo.lock` committed with real crate entry (aether-core). `pnpm-lock.yaml` and `uv.lock` also committed. ADR-0005 satisfied.
+- **DL-001-5**: Scripts copied from `aether-blueprint/scripts/` to `scripts/` at repo root per ARCHITECTURE.md section 1.
+- **DL-001-6** (audit round 1): Sol [P1] — scripts used `|| true` to swallow cargo errors, a gate-integrity defect. Fixed by creating `crates/aether-core/` as a minimal crate and restoring script integrity.
+- **DL-001-7** (audit round 2): Workspace lint policy — `aether-core/Cargo.toml` now has `[lints] workspace = true` to inherit `unused_must_use = "deny"` and other workspace lints.
+- **DL-001-8** (audit round 2): Nightly CI now installs `cargo-audit` via `taiki-e/install-action` before calling `dependency-audit.sh`.
+- **DL-001-9** (audit round 2): Live-execution flag `AETHER_EXECUTION__LIVE_ENABLED` removed from `.env.example` per ADR-0007 — operator-configured out-of-band only.
+- **DL-001-10** (audit round 2): `production-readiness-check.sh` fixed to look for `aether-blueprint/PRODUCTION_READINESS.md` (actual location).
+- **DL-001-11** (audit round 2): Obsidian `workspace.json` reset to minimal state and added to `.gitignore` to prevent build-artifact leakage.
 
 ## Outcomes & Retrospective
-- **verify.sh**: `verify: ok` — all 3 stacks exercise, no marker-absent SKIPs (all markers present), empty-workspace SKIPs expected
-- **install.sh**: `install: ok`
-- **security-check.sh**: `security: ok`
-- **Lockfiles**: `pnpm-lock.yaml` ✅, `uv.lock` ✅ committed. `Cargo.lock` present but empty-workspace — re-verify at EP-002.
-- **CI workflows**: `verify.yml` + `nightly.yml` valid YAML, thin (checkout + tools + script calls only)
-- **51 files created** including workspace roots, configs, directories, CI, scripts
-## Outcomes & Retrospective (post-audit-fix)
-- **verify.sh**: `verify: ok` — all 3 stacks exercise, zero `|| true` hacks, real cargo targets
-- **cargo fmt --all --check**: passes (no warnings after removing unstable rustfmt features)
+- **verify.sh**: `verify: ok` — cargo fmt/clippy/test/build all pass against real `aether-core` crate
+- **pnpm lint/format**: passes trivially (no packages under `packages/*` or `client/`; `--if-present` handles this) — will become meaningful when EP-101 adds the first TS package
+- **cargo fmt --all --check**: passes (no rustfmt warnings)
 - **cargo clippy --workspace --all-targets -- -D warnings**: passes — `Checking aether-core... Finished`
 - **cargo test --workspace**: passes — `running 0 tests... result: ok`
 - **cargo build --workspace**: passes — `Finished dev profile`
 - **install.sh**: `install: ok`
 - **security-check.sh**: `security: ok`
-- **Lockfiles**: `pnpm-lock.yaml` ✅, `uv.lock` ✅, `Cargo.lock` ✅ (has real crate entry)
-- **CI workflows**: valid YAML, thin (checkout + tools + script calls only)
-- **Gate integrity**: any future Rust compilation/clippy/test failure WILL fail the gate
-- **Commit**: post-audit commit with all fixes
+- **Lockfiles**: `Cargo.lock` (real crate), `pnpm-lock.yaml`, `uv.lock` — all committed
+- **CI workflows**: `verify.yml` + `nightly.yml` valid YAML; nightly installs cargo-audit; both thin (checkout + tools + scripts only)
+- **Gate integrity**: zero `|| true` error-swallowing; any Rust compilation/clippy/test failure WILL fail the gate
+- **Committed**: ~55 files (workspace roots, SDK configs, 18 dir skeletons, CI, scripts, `.env.example` with no live flag)

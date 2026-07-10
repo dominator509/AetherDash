@@ -11,11 +11,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 "$ROOT/scripts/smoke-test.sh"
 
 cd "$ROOT"
-[ -f PRODUCTION_READINESS.md ] || { echo "FAIL: PRODUCTION_READINESS.md missing"; exit 1; }
+PRD="aether-blueprint/PRODUCTION_READINESS.md"
+[ -f "$PRD" ] || { echo "FAIL: $PRD missing"; exit 1; }
 # Convention: required checklist items are lines of the form "- [ ] REQUIRED: ..." / "- [x] REQUIRED: ...".
-if grep -Fq -- "- [ ] REQUIRED" PRODUCTION_READINESS.md; then
-  echo "FAIL: unchecked REQUIRED items in PRODUCTION_READINESS.md:"
-  grep -Fn -- "- [ ] REQUIRED" PRODUCTION_READINESS.md
+if grep -Fq -- "- [ ] REQUIRED" "$PRD"; then
+  echo "FAIL: unchecked REQUIRED items in $PRD:"
+  grep -Fn -- "- [ ] REQUIRED" "$PRD"
   exit 1
 fi
 

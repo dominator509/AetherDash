@@ -12,3 +12,6 @@ vault/*
 data/
 *.log
 .DS_Store
+
+# Obsidian dynamic workspace state
+.obsidian/workspace.json
