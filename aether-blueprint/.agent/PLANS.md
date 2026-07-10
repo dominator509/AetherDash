@@ -13,7 +13,7 @@ This file is the single authority on which plans exist, their status, and which 
 ## Ledger
 | ID | Title | Band | Phase | Status | Blocked by |
 |----|-------|------|-------|--------|------------|
-| EP-000 | Repository discovery & pack installation check | 0xx Foundation | 0 | draft | - |
+| EP-000 | Repository discovery & pack installation check | 0xx Foundation | 0 | done | - |
 | EP-001 | Monorepo scaffold, toolchains, CI skeleton | 0xx Foundation | 0 | draft | EP-000 |
 | EP-002 | Core domain types & canonical serialization | 0xx Foundation | 0 | draft | EP-001 |
 | EP-003 | Data & persistence substrate (compose stack, migrations, DDL) | 0xx Foundation | 0 | draft | EP-002 |
