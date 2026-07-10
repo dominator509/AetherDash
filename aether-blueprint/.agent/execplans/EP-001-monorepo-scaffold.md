@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-001: Monorepo Scaffold, Toolchains, CI Skeleton
 
-**Band:** 0xx Foundation | **Phase:** 0 | **Status:** draft | **Blocked by:** EP-000
+**Band:** 0xx Foundation | **Phase:** 0 | **Status:** done | **Blocked by:** EP-000
 
 ## Purpose / Big Picture
 Turn the empty repo into the ADR-0001 monorepo: three workspace roots (cargo/pnpm/uv) with formatter/linter/typechecker configs that make the lint rules in SPEC-006 real, the directory skeleton from ARCHITECTURE.md section 1, and thin CI that only calls scripts (ADR-0009). After this plan, all three stacks are ACTIVE in COMMANDS.md terms and `verify.sh` exercises them.
@@ -45,18 +45,36 @@ Milestone validations above, then: `git diff --name-only` vs Expected Changed Fi
 All file creations check-first; re-running `uv sync`/`pnpm install` is safe. If a config fights a tool version, prefer pinning the tool in the config over loosening the rule; third same-root failure on any linter -> R10 step 3 (simpler config, never rule deletion for SPEC-006-mandated rules - that would be weakening, R12).
 
 ## Progress
-- [ ] M1 Rust root
-- [ ] M2 TS root
-- [ ] M3 Python root
-- [ ] M4 Skeleton + hygiene
-- [ ] M5 CI skeleton
-- [ ] M6 Full verification
+- [x] M1 Rust root
+- [x] M2 TS root
+- [x] M3 Python root
+- [x] M4 Skeleton + hygiene
+- [x] M5 CI skeleton
+- [x] M6 Full verification
 
 ## Surprises & Discoveries
-(tool version realities vs A-03/04/05 go here)
+- **Windows Python: `python` not `python3`** — fixed in `preflight.sh` (EP-000 DL-000-1). All scripts now use `python3` first, then fall back to `python`.
+- **cargo on empty workspace:** `cargo fmt --all`, `cargo clippy --workspace`, `cargo test --workspace`, and `cargo build --workspace` all fail with "Failed to find targets" / "manifest is virtual" when `members = []`. All scripts updated to detect this and print `SKIP (empty workspace)` instead of failing. This will auto-resolve when EP-002 adds the first crate.
+- **uv workspace with empty members:** `uv sync` fails when `members = ["pylib", "server/*"]` and those directories don't have `pyproject.toml`. Changed to `members = []` with append pattern (matching cargo approach).
+- **mypy on empty directories:** Fails when directory exists but has no `.py` files. `typecheck.sh` now checks for `.py` files before running mypy.
+- **eslint config format:** Eslint 9.x uses flat config (`.js`), not `.eslintrc.cjs`. Delivered as `eslint.config.js` instead.
+- **ruff version:** ruff 0.15.x changed `[tool.ruff.format]` schema — `line-length` is now per-tool, use `docstring-code-line-length` instead.
+- **Tool versions all exceed minimums:** rustc 1.96.1, node 24.14.1, pnpm 9.15.0, Python 3.14.4, uv 0.11.25, Docker Compose v5.1.4.
+- **Optional tools missing (not blocking):** cargo-nextest, cargo-audit, buf, gitleaks.
 
 ## Decision Log
-(expected: workspace-member append pattern note; Cargo.lock timing note)
+- **DL-001-1**: Workspace members use explicit empty `members = []` with append-on-add pattern across all three package managers. Each EP appends its members. Cargo `members`, pnpm `packages`, uv `members` all start empty.
+- **DL-001-2**: Scripts handle empty workspaces with SKIP (not FAIL) semantics. Rust scripts detect "no targets/no members/manifest is virtual" errors. Python scripts check for actual `.py` files before running mypy/compileall/pytest. This isolates the empty-workspace period to EP-001 only.
+- **DL-001-3**: ESLint config uses flat config format (`eslint.config.js`) instead of the legacy `.eslintrc.cjs` since eslint 9.x is installed.
+- **DL-001-4**: `Cargo.lock` is committed but empty-workspace — properly versioned once EP-002 adds the first crate. Verifying at EP-002.
+- **DL-001-5**: Scripts copied from `aether-blueprint/scripts/` to `scripts/` at repo root per ARCHITECTURE.md section 1. Original blueprint scripts preserved in `aether-blueprint/` for reference.
 
 ## Outcomes & Retrospective
-(record: verify output, lockfile hashes, any config deviations)
+- **verify.sh**: `verify: ok` — all 3 stacks exercise, no marker-absent SKIPs (all markers present), empty-workspace SKIPs expected
+- **install.sh**: `install: ok`
+- **security-check.sh**: `security: ok`
+- **Lockfiles**: `pnpm-lock.yaml` ✅, `uv.lock` ✅ committed. `Cargo.lock` present but empty-workspace — re-verify at EP-002.
+- **CI workflows**: `verify.yml` + `nightly.yml` valid YAML, thin (checkout + tools + script calls only)
+- **51 files created** including workspace roots, configs, directories, CI, scripts
+- **SPEC-006 lint rules** enforced: `unused_must_use = "deny"` (Rust), `no-empty: error` (TS), `E722`/bare-except (ruff selects E)
+- **Commit**: `ba77914` — "chore(ep-001): monorepo scaffold — cargo+pnpm+uv workspaces, CI skeleton, verify ok"
