@@ -1,0 +1,54 @@
+{
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(rtk *)",
+      "Bash(scripts/*.sh)",
+      "Bash(cargo *)",
+      "Bash(pnpm *)",
+      "Bash(uv *)",
+      "Bash(docker compose *)",
+      "Bash(git *)",
+      "Bash(which *)",
+      "Bash(ls *)",
+      "Bash(cd *)",
+      "Bash(pwd)",
+      "Bash(mkdir *)",
+      "Bash(jq *)",
+      "Bash(curl *)",
+      "Bash(rpk *)",
+      "Bash(buf *)",
+      "Bash(cargo-sqlx *)",
+      "Bash(gitleaks *)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Remove-Item *)",
+      "PowerShell(Set-Location *)",
+      "Glob(**/*)",
+      "Grep(*)",
+      "Read(*)",
+      "Edit(*)",
+      "Write(*)",
+      "WebSearch(*)",
+      "WebFetch(*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/id_*)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials/**)",
+      "Bash(cat .env)",
+      "Bash(cat **/*.pem)",
+      "Bash(cat **/*.key)"
+    ]
+  },
+  "model": "deepseek-v4-pro",
+  "enableAllProjectMcpServers": true,
+  "env": {
+    "AETHER_ENV": "dev"
+  }
+}

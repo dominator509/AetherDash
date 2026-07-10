@@ -1,0 +1,30 @@
+{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": true,
+  "showAttachments": true,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {"query": "path:aether-blueprint", "color": {"a": 1, "rgb": 4470016}},
+    {"query": "path:.agent/execplans", "color": {"a": 1, "rgb": 14027007}},
+    {"query": "path:.agent/specs", "color": {"a": 1, "rgb": 16744448}},
+    {"query": "path:.serena", "color": {"a": 1, "rgb": 6724044}},
+    {"query": "tag:execplan", "color": {"a": 1, "rgb": 14027007}},
+    {"query": "tag:spec", "color": {"a": 1, "rgb": 16744448}},
+    {"query": "tag:adr", "color": {"a": 1, "rgb": 10192895}}
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "textFadeMultiplier": -0.5,
+  "nodeSizeMultiplier": 1.2,
+  "lineSizeMultiplier": 1.5,
+  "collapse-forces": false,
+  "centerStrength": 0.3,
+  "repelStrength": 10,
+  "linkStrength": 0.8,
+  "linkDistance": 250,
+  "scale": 0.7,
+  "close": true
+}

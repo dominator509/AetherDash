@@ -1,0 +1,12 @@
+{
+  "cssTheme": "",
+  "theme": "moonstone",
+  "accentColor": "",
+  "showViewHeader": true,
+  "nativeMenus": false,
+  "translucency": false,
+  "baseFontSize": 15,
+  "interfaceFontFamily": "Inter, -apple-system, sans-serif",
+  "textFontFamily": "JetBrains Mono, Cascadia Code, monospace",
+  "monospaceFontFamily": "JetBrains Mono, Cascadia Code, monospace"
+}

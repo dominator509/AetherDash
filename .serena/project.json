@@ -1,0 +1,20 @@
+{
+  "project_name": "AetherDash",
+  "description": "AETHER Terminal — self-hosted AI-native trading terminal",
+  "obsidian_vault": true,
+  "obsidian_config": ".obsidian",
+  "memory_storage": ".serena/memories",
+  "linked_vault_dir": "vault",
+  "blueprint_docs": "aether-blueprint",
+  "ignore_patterns": [
+    ".git/",
+    "target/",
+    "node_modules/",
+    ".venv/",
+    "__pycache__/",
+    "dist/",
+    "build/",
+    "*.lock",
+    "vault/"
+  ]
+}
