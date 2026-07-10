@@ -48,13 +48,32 @@ Golden regeneration is explicit (`--features golden-gen`) and diff-reviewed - a 
 
 ## Progress
 - [x] M1 Scalars  - [x] M2 Market data  - [x] M3 Orders  - [x] M4 Opportunity
-- [x] M5 Goldens (vectors written, binary generator deferred)  - [x] M6 Proto  - [ ] M7 TS  - [ ] M8 Python
+- [x] M5 Goldens  - [x] M6 Proto  - [x] M7 TS  - [x] M8 Python
 
 ## Surprises & Discoveries
-(serde preserve_order + decimal formatting realities go here)
+- **serde_json preserve_order**: critical for canonical bytes. Without it, key ordering is non-deterministic. All three languages must agree on field order (Rust struct declaration order is canonical). Python's canonical serialization preserves dict insertion order (Python 3.7+) to match.
+- **time crate 0.3.53**: uses i128 for nanos. All conversions from i64 millis need `as i128` cast. `unix_timestamp_nanos()` returns i128, so `unix_millis()` casts back to i64.
+- **ruff 0.15.x**: changed `[tool.ruff.format]` schema. `line-length` is no longer valid; use `docstring-code-line-length` instead.
+- **mypy + pydantic**: pydantic stubs must be installed via `uv sync` for mypy to find them. Without `pydantic>=2` in dev deps, mypy reports "Cannot find implementation" for BaseModel.
+- **uv workspace install**: `uv sync` removes editable installs not in the workspace. Pylib must be in `members = ["pylib"]` for persistence, but `uv pip install -e ./pylib` works for dev iteration.
+- **Cross-language SHA-256**: Python's `json.dumps` with `sort_keys=True` produces different canonical bytes than Rust's struct-field-declaration order. Removing `sort_keys` and using Python 3.7+ insertion-order preservation fixes it — golden SHA-256 values now match across all three languages.
 
 ## Decision Log
-(time-crate choice, golden-copy mechanism, dependency notes)
+- **DL-002-1**: Crate dependency `time` (not `chrono`) for UtcTime per EP-002 Concrete Steps.
+- **DL-002-2**: `sha2` + `hex` added to aether-core for canonical_sha256(). These are pure-computation crates (no IO, HTTP, DB) — consistent with D1.
+- **DL-002-3**: TS golden test reads golden JSON files from `testdata/golden/core/` via relative path. Copy-at-test-time considered but adds complexity; direct read chosen for v1.
+- **DL-002-4**: Python uses `json.dumps(ensure_ascii=True, separators=(",", ":"))` without `sort_keys` to match Rust struct-field declaration order. This is the cross-language canonical contract.
+- **DL-002-5**: `gen-goldens` binary is feature-gated (`golden_gen`) so D1 stays clean — no filesystem IO in core lib without opt-in.
+- **DL-002-6**: `pydantic>=2` added to root dev deps so mypy can type-check models.py. Not a runtime dependency of aether-core.
+- **DL-002-7**: Proto `side_exposure` changed from `double` to `string` (SPEC-001 no-float rule). Position in Rust uses `#[serde(with = "decimal_string")]`.
 
 ## Outcomes & Retrospective
-(vector counts, sha256 of the golden set, deviations)
+- **Rust**: 66 unit tests + 4 golden integration tests + 1 proptest = 71 passing
+- **TypeScript**: `@aether/types` package — 2 golden vector tests, tsc noEmit clean, vitest green
+- **Python**: `aether_py` package — 2 golden vector tests, mypy clean, ruff clean
+- **Cross-language**: SHA-256 matches across Rust, TypeScript, and Python for all 12 golden vectors
+- **Golden files**: money.json (4), edge.json (3), confidence.json (3), market_key.json (2) — all with SHA-256
+- **Proto**: 4 files with all SPEC-001 types, closed enums, no floats
+- **verify.sh**: `verify: ok` — all three stacks exercise with real tests
+- **security-check.sh**: `security: ok`
+- **git log**: 3 EP-002 commits (initial + progress update + completion)

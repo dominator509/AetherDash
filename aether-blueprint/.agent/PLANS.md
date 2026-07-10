@@ -8,14 +8,14 @@ This file is the single authority on which plans exist, their status, and which 
 `pending` (contents not yet generated) -> `draft` (contents exist, not started) -> `active` (being implemented; max one) -> `done` (Definition of done met, AGENTS.md section 14) -> or `revise` (reopened with a Decision Log reason). Status changes are edits to this table plus the plan's own Progress section.
 
 ## Active plan
-**EP-002** — Core domain types & canonical serialization (M1-M6 done, audit fixes applied, M7-M8 pending)
+**None** — EP-002 complete. Next: EP-003.
 
 ## Ledger
 | ID | Title | Band | Phase | Status | Blocked by |
 |----|-------|------|-------|--------|------------|
 | EP-000 | Repository discovery & pack installation check | 0xx Foundation | 0 | done | - |
 | EP-001 | Monorepo scaffold, toolchains, CI skeleton | 0xx Foundation | 0 | done | EP-000 |
-| EP-002 | Core domain types & canonical serialization | 0xx Foundation | 0 | active | EP-001 |
+| EP-002 | Core domain types & canonical serialization | 0xx Foundation | 0 | done | EP-001 |
 | EP-003 | Data & persistence substrate (compose stack, migrations, DDL) | 0xx Foundation | 0 | draft | EP-002 |
 | EP-004 | Service contracts & event bus (proto, topics, WS gateway skeleton) | 0xx Foundation | 0 | draft | EP-003 |
 | EP-101 | Tauri shell: toggle, keyboard nav, command line, encrypted cache | 1xx Client | 1 | draft | EP-004 |
