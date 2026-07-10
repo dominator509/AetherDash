@@ -1,7 +1,7 @@
 -- SPEC-002: Placed orders (after cap approval)
 CREATE TABLE orders (
     order_id TEXT PRIMARY KEY CHECK (length(order_id) = 26),
-    intent_id TEXT NOT NULL REFERENCES order_intents(id),
+    intent_id TEXT NOT NULL CHECK (length(intent_id) = 26) REFERENCES order_intents(id),
     market TEXT NOT NULL REFERENCES markets(key),
     side TEXT NOT NULL CHECK (side IN ('buy','sell','buy_no','sell_no')),
     price NUMERIC NOT NULL,

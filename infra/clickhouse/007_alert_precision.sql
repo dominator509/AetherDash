@@ -1,4 +1,7 @@
--- SPEC-002: Alert precision daily rollup MV (placeholder -- populated by EP-203 alert engine)
+-- SPEC-002: Alert precision daily rollup
+-- Populated by EP-203 alert engine. Generic SummingMergeTree ready for alert data;
+-- once EP-203 lands, replace with a proper materialized view reading from audit_events
+-- WHERE subject = 'alert'.
 CREATE TABLE IF NOT EXISTS alert_precision_daily (
     date Date,
     alert_kind LowCardinality(String),

@@ -4,11 +4,14 @@
 set -euo pipefail
 
 QDRANT_URL="${AETHER_QDRANT__URL:-http://localhost:6333}"
+PYTHON="${AETHER_PYTHON:-python3}"
+command -v "$PYTHON" >/dev/null 2>&1 || PYTHON=python
+command -v "$PYTHON" >/dev/null 2>&1 || { echo "ERROR: python not found"; exit 2; }
 
 echo "=== Qdrant Reconstruction Drill ==="
 
 # Collect existing collections
-COLLECTIONS=$(curl -fsS "${QDRANT_URL}/collections" | python3 -c "
+COLLECTIONS=$(curl -fsS "${QDRANT_URL}/collections" | ${PYTHON} -c "
 import sys, json
 data = json.load(sys.stdin)
 cols = data.get('result', {}).get('collections', {})
@@ -37,21 +40,19 @@ else
     exit 1
 fi
 
-# Verify
-echo "Verifying collections ..."
-RESULT=$(curl -fsS "${QDRANT_URL}/collections")
-echo "$RESULT" | python3 -c "
+# Verify collections and their configuration (fetch each individually for config)
+echo "Verifying collections and configuration ..."
+for name in brain_chunks market_texts; do
+    curl -fsS "${QDRANT_URL}/collections/${name}" | ${PYTHON} -c "
 import sys, json
-data = json.load(sys.stdin)
-raw = data.get('result', {})
-cols = raw.get('collections', []) if isinstance(raw.get('collections'), list) else raw.get('collections', {})
-if isinstance(cols, list):
-    names = {c['name'] for c in cols}
-else:
-    names = set(cols.keys())
-assert 'brain_chunks' in names, 'brain_chunks missing from collections'
-assert 'market_texts' in names, 'market_texts missing from collections'
-print('  brain_chunks: OK')
-print('  market_texts: OK')
-print('Qdrant reconstruction drill: PASS')
-"
+c = json.load(sys.stdin)['result']
+cfg = c['config']['params']['vectors']
+dims = cfg.get('size')
+dist = cfg.get('distance')
+assert dims is not None, f'FAIL: ${name} has no vector size'
+assert dist == 'Cosine', f'FAIL: ${name} distance={dist}, expected Cosine'
+assert c['status'] == 'green', f'FAIL: ${name} status={c[\"status\"]}'
+print(f'  ${name}: dims={dims}, distance={dist}, status={c[\"status\"]} OK')
+" || { echo "Qdrant reconstruction drill: FAILED for ${name}"; exit 1; }
+done
+echo "Qdrant reconstruction drill: PASS"

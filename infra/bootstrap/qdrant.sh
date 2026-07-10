@@ -1,35 +1,51 @@
 #!/usr/bin/env bash
 # SPEC-002: Qdrant collection bootstrap — idempotent
-# Collections: brain_chunks, market_texts
-# Dimensions: AETHER_EMBED__DIMS (default 1024), cosine distance
 set -euo pipefail
 
 QDRANT_URL="${AETHER_QDRANT__URL:-http://localhost:6333}"
 DIMS="${AETHER_EMBED__DIMS:-1024}"
+PYTHON="${AETHER_PYTHON:-python3}"
+# Fallback python3 -> python
+command -v "$PYTHON" >/dev/null 2>&1 || PYTHON=python
+command -v "$PYTHON" >/dev/null 2>&1 || { echo "ERROR: python not found"; exit 2; }
 
 echo "Bootstrapping Qdrant collections at ${QDRANT_URL} (dims=${DIMS}) ..."
 
 create_collection() {
     local name="$1"
-    local exists
-    exists=$(curl -fsS "${QDRANT_URL}/collections/${name}" 2>/dev/null || true)
-    if echo "$exists" | grep -q '"status":"ok"'; then
+    local http_code
+    http_code=$(curl -sS -o /dev/null -w "%{http_code}" "${QDRANT_URL}/collections/${name}" 2>&1)
+
+    if [ "$http_code" = "200" ]; then
         echo "  ${name}: already exists (skipping)"
-    else
+        # Verify existing config
+        local config
+        config=$(curl -fsS "${QDRANT_URL}/collections/${name}")
+        echo "$config" | ${PYTHON} -c "
+import sys, json
+c = json.load(sys.stdin)['result']['config']['params']['vectors']
+assert c['size'] == ${DIMS}, f'vector size mismatch: {c[\"size\"]} != ${DIMS}'
+assert c['distance'] == 'Cosine', f'distance mismatch: {c[\"distance\"]}'
+" || { echo "  ${name}: config verification FAILED"; exit 1; }
+        echo "  ${name}: config verified (dims=${DIMS}, distance=Cosine)"
+    elif [ "$http_code" = "404" ]; then
         echo "  ${name}: creating ..."
-        curl -fsS -X PUT "${QDRANT_URL}/collections/${name}" \
+        local create_resp
+        create_resp=$(curl -fsS -X PUT "${QDRANT_URL}/collections/${name}" \
             -H 'Content-Type: application/json' \
-            -d "{
-                \"vectors\": {
-                    \"size\": ${DIMS},
-                    \"distance\": \"Cosine\"
-                }
-            }" >/dev/null
-        echo "  ${name}: created"
+            -d "{\"vectors\": {\"size\": ${DIMS}, \"distance\": \"Cosine\"}}")
+        if echo "$create_resp" | grep -q '"status":"ok"'; then
+            echo "  ${name}: created and verified"
+        else
+            echo "  ${name}: creation FAILED — response: ${create_resp}"
+            exit 1
+        fi
+    else
+        echo "  ${name}: unexpected HTTP ${http_code} from Qdrant — is Qdrant running?"
+        exit 1
     fi
 }
 
 create_collection "brain_chunks"
 create_collection "market_texts"
-
 echo "Qdrant bootstrap complete."

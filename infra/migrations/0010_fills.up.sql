@@ -1,7 +1,7 @@
 -- SPEC-002: Execution fills (trade history)
 CREATE TABLE fills (
     id TEXT PRIMARY KEY CHECK (length(id) = 26),
-    order_id TEXT NOT NULL REFERENCES orders(order_id),
+    order_id TEXT NOT NULL CHECK (length(order_id) = 26) REFERENCES orders(order_id),
     market TEXT NOT NULL REFERENCES markets(key),
     side TEXT NOT NULL CHECK (side IN ('buy','sell','buy_no','sell_no')),
     price NUMERIC NOT NULL,

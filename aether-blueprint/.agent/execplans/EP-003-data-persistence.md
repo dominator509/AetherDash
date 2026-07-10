@@ -50,15 +50,17 @@ Everything here is rebuild-from-nothing by design: `docker compose down -v` then
 - [x] M5 ClickHouse  - [x] M6 Bootstraps  - [x] M7 Tests
 
 ## Surprises & Discoveries
-- Qdrant image (distroless) has no curl/wget — healthcheck uses kill -0 1 (shell-builtin)
+- Qdrant image (distroless) has no curl/wget — healthcheck uses `/proc/net/tcp` grep on port 6333 (hex 0x18BD) instead of the planned `/readyz` endpoint
 - All 6 services healthy and smoke-test.sh passes
 - Windows path mangling with `docker exec` — use CMD form for healthchecks
+- alert_precision_daily is a plain SummingMergeTree table, not a materialized view — alert data comes from EP-203
 
 ## Decision Log
 - Image pins: pgvector/pgvector:pg17, clickhouse/clickhouse-server:24.12-alpine, redis:7.4-alpine, qdrant/qdrant:v1.18.2, redpandadata/redpanda:v24.3.2, minio/minio:RELEASE.2024-12-13T22-19-12Z
 - .sqlx offline data deferred: needs `cargo sqlx prepare` after first querying crate exists (EP-004+)
 - Redis-empty degradation test deferred to first consumer
 - Quarantine path test deferred to EP-004 acceptance (needs bus)
+- alert_precision_daily is a placeholder SummingMergeTree table (not an MV) — proper MV reading from audit_events deferred to EP-203 alert engine
 
 ## Outcomes & Retrospective
 - 18 Postgres tables (36 paired migrations) with FK graph, FTS on brain_objects

@@ -71,9 +71,10 @@ services:
       - "6334:6334"      # Internal gRPC
     volumes:
       - aether_qd_data:/qdrant/storage
-# The qdrant image is distroless — no curl/wget. Use shell-builtin kill -0 check.
+# The qdrant image has sh but no curl/wget. Check port 6333 via /proc/net/tcp
+# (decimal 6333 = hex 0x18BD). Confirms the process is accepting connections.
     healthcheck:
-      test: ["CMD", "/bin/sh", "-c", "kill -0 1"]
+      test: ["CMD-SHELL", "grep -q '18BD' /proc/net/tcp 2>/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3

@@ -1,7 +1,7 @@
 -- SPEC-002: Authentication sessions
 CREATE TABLE sessions (
     id TEXT PRIMARY KEY CHECK (length(id) = 26),
-    user_id TEXT NOT NULL REFERENCES users(id),
+    user_id TEXT NOT NULL CHECK (length(user_id) = 26) REFERENCES users(id),
     token_hash TEXT NOT NULL,
     expires_ts TIMESTAMPTZ NOT NULL,
     created_ts TIMESTAMPTZ NOT NULL DEFAULT now(),

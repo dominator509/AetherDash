@@ -1,7 +1,7 @@
 -- SPEC-002: State machine events for opportunity lifecycle
 CREATE TABLE opportunity_events (
     id TEXT PRIMARY KEY CHECK (length(id) = 26),
-    opportunity_id TEXT NOT NULL REFERENCES opportunities(id),
+    opportunity_id TEXT NOT NULL CHECK (length(opportunity_id) = 26) REFERENCES opportunities(id),
     from_state TEXT NOT NULL,
     to_state TEXT NOT NULL,
     actor TEXT NOT NULL,

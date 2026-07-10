@@ -1,7 +1,7 @@
 -- SPEC-002: Opportunity outcome attribution (predicted vs realized)
 CREATE TABLE attribution (
     id TEXT PRIMARY KEY CHECK (length(id) = 26),
-    opportunity_id TEXT NOT NULL REFERENCES opportunities(id),
+    opportunity_id TEXT NOT NULL CHECK (length(opportunity_id) = 26) REFERENCES opportunities(id),
     predicted_net_edge NUMERIC NOT NULL,
     realized_pnl NUMERIC,
     outcome TEXT,
