@@ -1,0 +1,27 @@
+[workspace]
+members = []
+# EP-001: explicit empty — each EP appends its members.
+# Expected future members:
+#   "crates/*", "connectors/execution/*", "connectors/venues/*",
+#   "connectors/comms/*", "client/src-tauri"
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/operator/aetherdash"
+
+[workspace.lints.rust]
+unused_must_use = "deny"
+unsafe_code = "deny"
+unused_imports = "warn"
+unused_variables = "warn"
+dead_code = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+unwrap_used = "warn"
+expect_used = "warn"
+todo = "warn"

@@ -1,0 +1,41 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "7 3 * * *" # 3:07 AM UTC daily
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: bash scripts/install.sh
+
+      - name: Integration tests
+        run: bash scripts/test-integration.sh
+
+      - name: Dependency audit
+        run: bash scripts/dependency-audit.sh

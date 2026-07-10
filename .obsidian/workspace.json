@@ -178,8 +178,18 @@
   },
   "active": "12c57f9fba5402f9",
   "lastOpenFiles": [
-    "aether-blueprint/scripts/preflight.sh.tmp.10556.9a8042833319",
-    "CLAUDE.md",
-    "CLAUDE.md.tmp.10556.7db076776134"
+    "_tmp_20032_59bb558ef203afc74d0360276c9c2638",
+    "Cargo.lock",
+    "scripts/typecheck.sh.tmp.10556.1f755f97d24d",
+    "scripts/build.sh.tmp.10556.36bf77ff0782",
+    "scripts/test-unit.sh.tmp.10556.6807386f7e1d",
+    "scripts/lint.sh.tmp.10556.63c99120e4a8",
+    "scripts/format-check.sh.tmp.10556.6e2445fdbd32",
+    "scripts/build.sh.tmp.10556.74b634d293ff",
+    "scripts/test-unit.sh.tmp.10556.6321b2124270",
+    "scripts/lint.sh.tmp.10556.d309a848eeea",
+    "scripts/format-check.sh.tmp.10556.77e00107aeec",
+    "CHANGELOG.md",
+    "CLAUDE.md"
   ]
 }
