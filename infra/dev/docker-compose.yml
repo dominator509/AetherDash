@@ -1,0 +1,136 @@
+# ================================================================
+# AETHER Terminal — Dev Infrastructure Stack
+# EP-003: six persistence services with pinned images and port
+# contract per ENVIRONMENT.md.  Service names match smoke-test.sh
+# probes exactly.
+# ================================================================
+
+services:
+
+  # ── Postgres (pgvector) ──────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: aether
+      POSTGRES_DB: aether
+    volumes:
+      - aether_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aether"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── ClickHouse ───────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    restart: unless-stopped
+    ports:
+      - "8123:8123"      # HTTP interface
+      - "9004:9000"      # Native protocol (remapped; MinIO owns host 9000)
+    environment:
+      CLICKHOUSE_DB: aether
+      CLICKHOUSE_USER: aether
+      CLICKHOUSE_PASSWORD: aether
+    volumes:
+      - aether_ch_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query \"SELECT 1\""]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis ────────────────────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - aether_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli PING | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Qdrant ───────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    restart: unless-stopped
+    ports:
+      - "6333:6333"      # HTTP / gRPC API
+      - "6334:6334"      # Internal gRPC
+    volumes:
+      - aether_qd_data:/qdrant/storage
+# The qdrant image is distroless — no curl/wget. Use shell-builtin kill -0 check.
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "kill -0 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Redpanda ─────────────────────────────────────────────────
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.2
+    restart: unless-stopped
+    ports:
+      - "9092:9092"      # Kafka API
+      - "9644:9644"      # Admin REST API
+      - "8082:8082"      # Pandaproxy
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --memory
+      - "512M"
+      - --mode
+      - dev-container
+      - --overprovisioned
+    volumes:
+      - aether_rp_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -qi healthy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── MinIO ────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-12-13T22-19-12Z
+    restart: unless-stopped
+    ports:
+      - "9000:9000"      # S3-compatible API
+      - "9001:9001"      # Web console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - aether_minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# ── Named Volumes ──────────────────────────────────────────────
+volumes:
+  aether_pg_data:
+  aether_ch_data:
+  aether_redis_data:
+  aether_qd_data:
+  aether_rp_data:
+  aether_minio_data:

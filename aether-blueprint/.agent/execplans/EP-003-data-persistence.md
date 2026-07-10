@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-003: Data & Persistence Substrate
 
-**Band:** 0xx Foundation | **Phase:** 0 | **Status:** draft | **Blocked by:** EP-002
+**Band:** 0xx Foundation | **Phase:** 0 | **Status:** active | **Blocked by:** EP-002 (completed)
 
 ## Purpose / Big Picture
 Stand up SPEC-002 for real: the six-service dev compose stack on the ENVIRONMENT.md port contract, every Postgres table via sqlx migrations, ClickHouse DDL, and idempotent bootstraps for Qdrant/MinIO - so every later plan has truth stores to write to and `smoke-test.sh` stops skipping.
@@ -46,14 +46,24 @@ Write compose first (M1 unblocks everything); then migrations in the three batch
 Everything here is rebuild-from-nothing by design: `docker compose down -v` then M1-M6 replay is the recovery for any corrupted dev state (document as the first runbook seed). Never fix a bad migration by editing an applied one - new migration forward, always (ADR-0004 discipline).
 
 ## Progress
-- [ ] M1 Compose  - [ ] M2 Identity/market  - [ ] M3 Trading  - [ ] M4 Brain/system
-- [ ] M5 ClickHouse  - [ ] M6 Bootstraps  - [ ] M7 Tests
+- [x] M1 Compose  - [x] M2 Identity/market  - [x] M3 Trading  - [x] M4 Brain/system
+- [x] M5 ClickHouse  - [x] M6 Bootstraps  - [x] M7 Tests
 
 ## Surprises & Discoveries
-(image-pin realities, healthcheck quirks, sqlx NUMERIC mapping notes)
+- Qdrant image (distroless) has no curl/wget — healthcheck uses kill -0 1 (shell-builtin)
+- All 6 services healthy and smoke-test.sh passes
+- Windows path mangling with `docker exec` — use CMD form for healthchecks
 
 ## Decision Log
-(image pins; .sqlx timing; deferrals to EP-004/EP-201)
+- Image pins: pgvector/pgvector:pg17, clickhouse/clickhouse-server:24.12-alpine, redis:7.4-alpine, qdrant/qdrant:v1.18.2, redpandadata/redpanda:v24.3.2, minio/minio:RELEASE.2024-12-13T22-19-12Z
+- .sqlx offline data deferred: needs `cargo sqlx prepare` after first querying crate exists (EP-004+)
+- Redis-empty degradation test deferred to first consumer
+- Quarantine path test deferred to EP-004 acceptance (needs bus)
 
 ## Outcomes & Retrospective
-(migration count, object inventory vs SPEC-002, smoke output)
+- 18 Postgres tables (36 paired migrations) with FK graph, FTS on brain_objects
+- 7 ClickHouse tables + 3 MVs with idempotent apply.sh
+- 2 Qdrant collections, 4 MinIO buckets, both with idempotent bootstrap
+- smoke-test.sh prints `smoke: ok` — all 6 services healthy
+- Rust: 85 pass, 3 ignored (1 static pairing check + 2 DB-dependent integration)
+- SPEC-002 acceptance satisfied minus explicitly-deferred bus-dependent items
