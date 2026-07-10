@@ -1,10 +1,8 @@
 //! Error envelope type with closed code set. SPEC-003/SPEC-006 error handling.
-//! Used across all surfaces: gRPC details, WS error frames, HTTP responses.
 
 use crate::ids::Ulid;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// Closed error code set. Unknown tag = validation error at boundary (SECURITY.md T2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
@@ -20,26 +18,19 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
-    /// Whether this error code allows retries.
-    /// Per SPEC-006: only `unavailable` and `deadline_exceeded` with `retryable=true` may be retried.
     pub fn is_retryable(&self) -> bool {
         matches!(self, ErrorCode::Unavailable | ErrorCode::DeadlineExceeded)
     }
 }
 
-/// Standard error envelope for all surfaces.
-/// Messages are operator-safe: no secrets, no raw payload echoes (SECURITY.md).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Standard error envelope. retryable is derived from code during deserialization —
+/// an incoming retryable field that contradicts the code is rejected.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorEnvelope {
     pub code: ErrorCode,
-    /// Human-readable message — what failed + what the user can do.
     pub message: String,
-    /// Whether this error is retryable.
     pub retryable: bool,
-    /// Trace ID for correlation across services.
     pub trace_id: Ulid,
-    /// Optional additional detail (operator-safe, no raw payloads).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
 }
 
@@ -60,39 +51,87 @@ impl ErrorEnvelope {
     }
 }
 
+// Custom serde — validate code/retryable consistency on deserialize
+impl Serialize for ErrorEnvelope {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut st = s.serialize_struct("ErrorEnvelope", 5)?;
+        st.serialize_field("code", &self.code)?;
+        st.serialize_field("message", &self.message)?;
+        st.serialize_field("retryable", &self.retryable)?;
+        st.serialize_field("trace_id", &self.trace_id)?;
+        if let Some(ref d) = self.details {
+            st.serialize_field("details", d)?;
+        }
+        st.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for ErrorEnvelope {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Wire {
+            code: ErrorCode,
+            message: String,
+            retryable: bool,
+            trace_id: Ulid,
+            details: Option<String>,
+        }
+        let w = Wire::deserialize(d)?;
+        let expected = w.code.is_retryable();
+        if w.retryable != expected {
+            return Err(serde::de::Error::custom(format!(
+                "retryable field ({}) contradicts code {:?} (is_retryable={})",
+                w.retryable, w.code, expected
+            )));
+        }
+        Ok(Self {
+            code: w.code,
+            message: w.message,
+            retryable: w.retryable,
+            trace_id: w.trace_id,
+            details: w.details,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn error_code_retryable_rule() {
-        assert!(ErrorCode::Unavailable.is_retryable());
-        assert!(ErrorCode::DeadlineExceeded.is_retryable());
-        assert!(!ErrorCode::InvalidArgument.is_retryable());
-        assert!(!ErrorCode::PermissionDenied.is_retryable());
-        assert!(!ErrorCode::Internal.is_retryable());
+    fn error_code_retryable_table() {
+        // SPEC-006: only Unavailable and DeadlineExceeded are retryable
+        let table = [
+            (ErrorCode::InvalidArgument, false),
+            (ErrorCode::Unauthenticated, false),
+            (ErrorCode::PermissionDenied, false),
+            (ErrorCode::NotFound, false),
+            (ErrorCode::FailedPrecondition, false),
+            (ErrorCode::Unavailable, true),
+            (ErrorCode::DeadlineExceeded, true),
+            (ErrorCode::Quarantined, false),
+            (ErrorCode::Internal, false),
+        ];
+        for (code, expected) in &table {
+            assert_eq!(code.is_retryable(), *expected, "wrong retryable for {code:?}");
+        }
     }
 
     #[test]
-    fn error_envelope_serde_round_trip() {
-        let e = ErrorEnvelope::new(
-            ErrorCode::FailedPrecondition,
-            "live trading is disabled — enable AETHER_EXECUTION__LIVE_ENABLED",
-            Ulid::new(),
-        )
-        .with_details("check = execution.live_enabled");
+    fn error_envelope_round_trip() {
+        let e =
+            ErrorEnvelope::new(ErrorCode::FailedPrecondition, "live trading disabled", Ulid::new());
         let json = serde_json::to_string(&e).unwrap();
         let back: ErrorEnvelope = serde_json::from_str(&json).unwrap();
         assert_eq!(e.code, back.code);
-        assert!(!back.retryable);
+        assert_eq!(e.retryable, back.retryable);
     }
 
     #[test]
-    fn error_envelope_message_never_contains_raw_secrets() {
-        // Structural guarantee: messages are plain strings, no secret fields.
-        let e = ErrorEnvelope::new(ErrorCode::Internal, "internal error", Ulid::new());
-        assert!(!e.message.contains("key"));
-        assert!(!e.message.contains("secret"));
-        assert!(!e.message.contains("password"));
+    fn error_envelope_rejects_contradictory_retryable() {
+        let json = r#"{"code":"invalid_argument","message":"bad","retryable":true,"trace_id":"01JQZ9XKABCDEFGHIJKLMNOPQR"}"#;
+        let result: Result<ErrorEnvelope, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "contradictory retryable should be rejected");
     }
 }

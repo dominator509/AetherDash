@@ -8,7 +8,6 @@ package aether.core.v1;
 import "google/protobuf/timestamp.proto";
 import "aether/core/v1/types.proto";
 
-// Instrument kind — closed set.
 // mirrors: aether_core::market::InstrumentKind
 enum InstrumentKind {
   INSTRUMENT_KIND_UNSPECIFIED = 0;
@@ -21,7 +20,6 @@ enum InstrumentKind {
   INSTRUMENT_KIND_SPOT = 7;
 }
 
-// Market status — closed set.
 // mirrors: aether_core::market::MarketStatus
 enum MarketStatus {
   MARKET_STATUS_UNSPECIFIED = 0;
@@ -31,14 +29,22 @@ enum MarketStatus {
   MARKET_STATUS_RESOLVED = 4;
 }
 
-// A trading market.
+// mirrors: aether_core::market::PriceSemantics
+message PriceSemantics {
+  string kind = 1;  // "probability" | "scalar" | "currency"
+  optional string tick_size = 2;  // for probability
+  optional string unit = 3;       // for scalar
+  optional string min = 4;        // for scalar
+  optional string max = 5;        // for scalar
+}
+
 // mirrors: aether_core::market::Market
 message Market {
   MarketKey key = 1;
   VenueId venue = 2;
   InstrumentKind kind = 3;
   string title = 4;
-  optional string description_ref = 5;
+  string description_ref = 5;
   MarketStatus status = 6;
   optional google.protobuf.Timestamp close_ts = 7;
   optional google.protobuf.Timestamp resolve_ts = 8;
@@ -48,7 +54,6 @@ message Market {
   string meta = 12;        // JSON blob
 }
 
-// Quote source.
 // mirrors: aether_core::quote::QuoteSource
 enum QuoteSource {
   QUOTE_SOURCE_UNSPECIFIED = 0;
@@ -57,7 +62,6 @@ enum QuoteSource {
   QUOTE_SOURCE_SNAPSHOT = 3;
 }
 
-// A market quote.
 // mirrors: aether_core::quote::Quote
 message Quote {
   MarketKey market = 1;
@@ -72,14 +76,12 @@ message Quote {
   optional uint64 seq = 10;
 }
 
-// A single order book level.
 // mirrors: aether_core::quote::BookLevel
 message BookLevel {
   string price = 1;     // decimal string
   string size = 2;      // decimal string
 }
 
-// Order book snapshot. Bids descending, asks ascending.
 // mirrors: aether_core::quote::OrderBook
 message OrderBook {
   MarketKey market = 1;

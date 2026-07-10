@@ -5,12 +5,12 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// Serialize a Decimal as a string (JSON wire format per SPEC-001).
+/// Serialize/deserialize a Decimal as a JSON string. Rejects numeric JSON values.
 pub mod decimal_string {
     use super::*;
 
     pub fn serialize<S: Serializer>(d: &Decimal, s: S) -> Result<S::Ok, S::Error> {
-        d.to_string().serialize(s)
+        s.serialize_str(&d.to_string())
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Decimal, D::Error> {
@@ -19,29 +19,32 @@ pub mod decimal_string {
     }
 }
 
-/// Serialize an Option<Decimal> as a string, omitting None (canonical rule: omit-none).
+/// Serialize/deserialize Option<Decimal> as optional JSON string. Rejects numeric values.
 pub mod decimal_option_string {
     use super::*;
 
     pub fn serialize<S: Serializer>(d: &Option<Decimal>, s: S) -> Result<S::Ok, S::Error> {
         match d {
-            Some(val) => val.to_string().serialize(s),
+            Some(val) => s.serialize_some(&val.to_string()),
             None => s.serialize_none(),
         }
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Decimal>, D::Error> {
-        Option::<String>::deserialize(d)?
-            .map(|s| Decimal::from_str_exact(&s).map_err(serde::de::Error::custom))
-            .transpose()
+        match Option::<String>::deserialize(d)? {
+            Some(s) => Ok(Some(Decimal::from_str_exact(&s).map_err(serde::de::Error::custom)?)),
+            None => Ok(None),
+        }
     }
 }
 
+// ── Confidence ─────────────────────────────────────────────────────
+
 /// Confidence value: Decimal constrained to [0, 1].
-/// Constructor enforces the invariant. SPEC-001: confidence 0..=1.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Confidence(#[serde(with = "decimal_string")] Decimal);
+/// Constructor enforces the invariant. Custom Deserialize prevents bypass.
+/// SPEC-001: confidence 0..=1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Confidence(Decimal);
 
 impl Confidence {
     pub fn new(value: Decimal) -> Result<Self, ConfidenceError> {
@@ -53,6 +56,20 @@ impl Confidence {
 
     pub fn value(&self) -> Decimal {
         self.0
+    }
+}
+
+impl Serialize for Confidence {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Confidence {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        let d = Decimal::from_str_exact(&s).map_err(serde::de::Error::custom)?;
+        Confidence::new(d).map_err(serde::de::Error::custom)
     }
 }
 
@@ -68,28 +85,81 @@ mod tests {
 
     #[test]
     fn decimal_string_round_trip() {
-        let d = Decimal::new(12345, 2); // 123.45
+        let d = Decimal::new(12345, 2);
         #[derive(Serialize, Deserialize)]
-        struct Wrapper {
+        struct W {
             #[serde(with = "decimal_string")]
-            value: Decimal,
+            v: Decimal,
         }
-        let w = Wrapper { value: d };
+        let w = W { v: d };
         let json = serde_json::to_string(&w).unwrap();
         assert!(json.contains(r#""123.45""#));
-        let w2: Wrapper = serde_json::from_str(&json).unwrap();
-        assert_eq!(w.value, w2.value);
+        let w2: W = serde_json::from_str(&json).unwrap();
+        assert_eq!(w.v, w2.v);
+    }
+
+    #[test]
+    fn decimal_string_rejects_numeric_json() {
+        #[derive(Serialize, Deserialize)]
+        struct W {
+            #[serde(with = "decimal_string")]
+            v: Decimal,
+        }
+        let result: Result<W, _> = serde_json::from_str(r#"{"v": 123.45}"#);
+        assert!(result.is_err(), "numeric JSON decimal should be rejected");
+    }
+
+    #[test]
+    fn decimal_string_rejects_invalid_string() {
+        #[derive(Serialize, Deserialize)]
+        struct W {
+            #[serde(with = "decimal_string")]
+            v: Decimal,
+        }
+        let result: Result<W, _> = serde_json::from_str(r#"{"v": "not-a-number"}"#);
+        assert!(result.is_err());
     }
 
     #[test]
     fn confidence_valid() {
-        let c = Confidence::new(Decimal::new(5, 1)).unwrap(); // 0.5
+        let c = Confidence::new(Decimal::new(5, 1)).unwrap();
         assert_eq!(c.value(), Decimal::new(5, 1));
     }
 
     #[test]
-    fn confidence_invalid() {
-        assert!(Confidence::new(Decimal::new(15, 1)).is_err()); // 1.5
+    fn confidence_invalid_above_one() {
+        assert!(Confidence::new(Decimal::new(15, 1)).is_err());
+    }
+
+    #[test]
+    fn confidence_invalid_negative() {
         assert!(Confidence::new(Decimal::NEGATIVE_ONE).is_err());
+    }
+
+    #[test]
+    fn confidence_deserialize_rejects_above_one() {
+        let result: Result<Confidence, _> = serde_json::from_str(r#""1.5""#);
+        assert!(result.is_err(), "confidence > 1 should be rejected on deserialize");
+    }
+
+    #[test]
+    fn confidence_deserialize_rejects_negative() {
+        let result: Result<Confidence, _> = serde_json::from_str(r#""-0.1""#);
+        assert!(result.is_err(), "negative confidence should be rejected on deserialize");
+    }
+
+    #[test]
+    fn confidence_deserialize_rejects_numeric() {
+        let result: Result<Confidence, _> = serde_json::from_str("0.5");
+        assert!(result.is_err(), "numeric confidence should be rejected");
+    }
+
+    #[test]
+    fn confidence_serde_valid() {
+        let c = Confidence::new(Decimal::new(5, 1)).unwrap();
+        let json = serde_json::to_string(&c).unwrap();
+        assert_eq!(json, r#""0.5""#);
+        let c2: Confidence = serde_json::from_str(&json).unwrap();
+        assert_eq!(c, c2);
     }
 }

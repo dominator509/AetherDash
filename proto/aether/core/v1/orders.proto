@@ -9,7 +9,6 @@ import "google/protobuf/timestamp.proto";
 import "aether/core/v1/types.proto";
 import "aether/core/v1/market_data.proto";
 
-// Order side.
 // mirrors: aether_core::order::Side
 enum Side {
   SIDE_UNSPECIFIED = 0;
@@ -34,6 +33,31 @@ enum TimeInForce {
   TIF_DAY = 3;
 }
 
+// mirrors: aether_core::order::SizeUnit
+enum SizeUnit {
+  SIZE_UNIT_UNSPECIFIED = 0;
+  SIZE_UNIT_CONTRACTS = 1;
+  SIZE_UNIT_SHARES = 2;
+  SIZE_UNIT_BASE = 3;
+  SIZE_UNIT_QUOTE = 4;
+}
+
+// mirrors: aether_core::order::OriginKind
+enum OriginKind {
+  ORIGIN_KIND_UNSPECIFIED = 0;
+  ORIGIN_KIND_USER = 1;
+  ORIGIN_KIND_ALERT_ACTION = 2;
+  ORIGIN_KIND_AGENT = 3;
+  ORIGIN_KIND_AUTOMATION = 4;
+}
+
+// mirrors: aether_core::order::RiskVerdictStatus
+enum RiskVerdictStatus {
+  RISK_VERDICT_UNSPECIFIED = 0;
+  RISK_VERDICT_ALLOW = 1;
+  RISK_VERDICT_DENY = 2;
+}
+
 // mirrors: aether_core::order::RiskReasonCode
 enum RiskReasonCode {
   RISK_REASON_UNSPECIFIED = 0;
@@ -48,8 +72,8 @@ enum RiskReasonCode {
 
 // mirrors: aether_core::order::Origin
 message Origin {
-  string kind = 1;           // user|alert_action|agent|automation
-  uint32 tier = 2;           // 1..5
+  OriginKind kind = 1;
+  uint32 tier = 2;  // 1..=5, validated
   Ulid actor_id = 3;
 }
 
@@ -61,7 +85,7 @@ message OrderIntent {
   OrderType order_type = 4;
   optional string limit_price = 5;   // decimal string
   string size = 6;                   // decimal string
-  string size_unit = 7;              // contracts|shares|base|quote
+  SizeUnit size_unit = 7;
   TimeInForce tif = 8;
   bool paper = 9;
   Origin origin = 10;
@@ -73,7 +97,7 @@ message OrderIntent {
 // mirrors: aether_core::order::RiskVerdict
 message RiskVerdict {
   Ulid intent_id = 1;
-  string verdict = 2;                   // allow|deny
+  RiskVerdictStatus verdict = 2;
   repeated RiskReason reasons = 3;
   google.protobuf.Timestamp ts = 4;
 }
@@ -112,7 +136,7 @@ message Fill {
 // mirrors: aether_core::order::Position
 message Position {
   MarketKey market = 1;
-  double side_exposure = 2;      // TODO: refine to decimal string in v2
+  string side_exposure = 2;      // decimal string (NOT float — SPEC-001)
   string avg_price = 3;          // decimal string
   string size = 4;               // decimal string
   Money realized_pnl = 5;
@@ -125,6 +149,6 @@ message CapsSnapshot {
   Ulid version = 1;
   Money per_order_max = 2;
   Money daily_max = 3;
-  map<string, string> per_venue = 4;   // venue -> cap json
-  map<string, string> per_kind = 5;    // kind -> cap json
+  map<string, string> per_venue = 4;
+  map<string, string> per_kind = 5;
 }

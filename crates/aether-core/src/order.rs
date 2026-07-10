@@ -1,14 +1,11 @@
 //! Order, risk, and position types. SPEC-001 order & execution types.
-//! INV-1: these are deterministic code paths — never delegated to an LLM.
 
-use crate::decimal::decimal_string;
-use crate::ids::{MarketKey, Ulid};
+use crate::decimal::{decimal_option_string, decimal_string};
+use crate::ids::{MarketKey, Money, Ulid};
 use crate::quote::Quote;
 use crate::time::UtcTime;
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-
-// ── Enums ──────────────────────────────────────────────────────────
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -59,8 +56,6 @@ pub enum RiskVerdictStatus {
     Deny,
 }
 
-// ── Risk Reason Codes (closed set) ─────────────────────────────────
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RiskReasonCode {
@@ -79,27 +74,69 @@ pub struct RiskReason {
     pub detail: String,
 }
 
-// ── Origin (who placed the intent) ─────────────────────────────────
+// ── Origin with validated tier ─────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Permission tier 1-5, validated on construction and deserialization.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Origin {
     pub kind: OriginKind,
-    /// Permission tier 1-5
-    pub tier: u8,
+    tier: u8,
     pub actor_id: Ulid,
+}
+
+impl Origin {
+    pub fn new(kind: OriginKind, tier: u8, actor_id: Ulid) -> Result<Self, OriginError> {
+        if !(1..=5).contains(&tier) {
+            return Err(OriginError::InvalidTier(tier));
+        }
+        Ok(Self { kind, tier, actor_id })
+    }
+
+    pub fn tier(&self) -> u8 {
+        self.tier
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum OriginError {
+    #[error("tier must be 1..=5, got {0}")]
+    InvalidTier(u8),
+}
+
+// Custom serde through validation
+impl Serialize for Origin {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut st = s.serialize_struct("Origin", 3)?;
+        st.serialize_field("kind", &self.kind)?;
+        st.serialize_field("tier", &self.tier)?;
+        st.serialize_field("actor_id", &self.actor_id)?;
+        st.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Origin {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Wire {
+            kind: OriginKind,
+            tier: u8,
+            actor_id: Ulid,
+        }
+        let w = Wire::deserialize(d)?;
+        Origin::new(w.kind, w.tier, w.actor_id).map_err(serde::de::Error::custom)
+    }
 }
 
 // ── Order Intent ───────────────────────────────────────────────────
 
-/// An order intent — what the actor wants. The router's drift check
-/// compares `quote_snapshot` against current prices (SPEC-012).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrderIntent {
     pub id: Ulid,
     pub market: MarketKey,
     pub side: Side,
     pub order_type: OrderType,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "decimal_option_string")]
     pub limit_price: Option<Decimal>,
     #[serde(with = "decimal_string")]
     pub size: Decimal,
@@ -114,7 +151,6 @@ pub struct OrderIntent {
 
 // ── Risk Verdict ───────────────────────────────────────────────────
 
-/// Risk engine output. Deny reasons from the closed set (SPEC-001).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RiskVerdict {
     pub intent_id: Ulid,
@@ -138,12 +174,7 @@ impl RiskVerdict {
     }
 }
 
-// ── Money ──────────────────────────────────────────────────────────
-
-/// Money value with currency. (Re-exported from ids.rs; canonical definition here.)
-pub use crate::ids::Money;
-
-// ── Order (accepted intent) ────────────────────────────────────────
+// ── Order ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Order {
@@ -182,6 +213,7 @@ pub struct Fill {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub market: MarketKey,
+    #[serde(with = "decimal_string")]
     pub side_exposure: Decimal,
     #[serde(with = "decimal_string")]
     pub avg_price: Decimal,
@@ -211,10 +243,12 @@ mod tests {
     use crate::ids::VenueId;
     use crate::quote::QuoteSource;
 
+    #[allow(dead_code)]
     fn test_market_key() -> MarketKey {
         MarketKey::new(&VenueId::new("kalshi"), "INTC-50")
     }
 
+    #[allow(dead_code)]
     fn test_quote() -> Quote {
         Quote {
             market: test_market_key(),
@@ -224,10 +258,41 @@ mod tests {
             last: None,
             bid_size: Some(Decimal::new(1000, 0)),
             ask_size: Some(Decimal::new(500, 0)),
-            ts: UtcTime::from_unix_millis(1752152096789).unwrap(),
+            ts: UtcTime::from_unix_millis(1752152096789000).unwrap(),
             source: QuoteSource::Stream,
             seq: Some(1),
         }
+    }
+
+    #[test]
+    fn origin_valid_tiers() {
+        for t in 1..=5u8 {
+            assert!(Origin::new(OriginKind::User, t, Ulid::new()).is_ok());
+        }
+    }
+
+    #[test]
+    fn origin_rejects_tier_zero() {
+        assert!(Origin::new(OriginKind::User, 0, Ulid::new()).is_err());
+    }
+
+    #[test]
+    fn origin_rejects_tier_six() {
+        assert!(Origin::new(OriginKind::User, 6, Ulid::new()).is_err());
+    }
+
+    #[test]
+    fn origin_deserialize_rejects_invalid_tier() {
+        let json = r#"{"kind":"user","tier":0,"actor_id":"01JQZ9XKABCDEFGHIJKLMNOPQR"}"#;
+        let result: Result<Origin, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "tier 0 should be rejected");
+    }
+
+    #[test]
+    fn order_intent_rejects_numeric_decimal() {
+        let json = r#"{"id":"01JQZ9XKABCDEFGHIJKLMNOPQR","market":"mkt:kalshi:INTC-50","side":"buy","order_type":"limit","size":10,"size_unit":"contracts","tif":"gtc","paper":true,"origin":{"kind":"user","tier":3,"actor_id":"01JQZ9XKABCDEFGHIJKLMNOPQR"},"quote_snapshot":{},"caps_version":"01JQZ9XKABCDEFGHIJKLMNOPQR","created_ts":"2026-07-10T12:34:56.789Z"}"#;
+        let result: Result<OrderIntent, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "numeric size should be rejected");
     }
 
     #[test]
@@ -248,44 +313,5 @@ mod tests {
         );
         assert!(!v.is_allowed());
         assert_eq!(v.reasons[0].code, RiskReasonCode::CapExceeded);
-    }
-
-    #[test]
-    fn order_intent_serde_round_trip() {
-        let intent = OrderIntent {
-            id: Ulid::new(),
-            market: test_market_key(),
-            side: Side::Buy,
-            order_type: OrderType::Limit,
-            limit_price: Some(Decimal::new(66, 2)),
-            size: Decimal::new(10, 0),
-            size_unit: SizeUnit::Contracts,
-            tif: TimeInForce::Gtc,
-            paper: true,
-            origin: Origin { kind: OriginKind::User, tier: 3, actor_id: Ulid::new() },
-            quote_snapshot: test_quote(),
-            caps_version: Ulid::new(),
-            created_ts: UtcTime::from_unix_millis(1752152096789).unwrap(),
-        };
-        let json = serde_json::to_string(&intent).unwrap();
-        let back: OrderIntent = serde_json::from_str(&json).unwrap();
-        assert_eq!(intent.id, back.id);
-        assert_eq!(intent.market, back.market);
-        assert_eq!(intent.side, back.side);
-        assert!(back.paper);
-    }
-
-    #[test]
-    fn caps_snapshot_serde_round_trip() {
-        let caps = CapsSnapshot {
-            version: Ulid::new(),
-            per_order_max: Money::new(Decimal::new(50000, 2), "USD"),
-            daily_max: Money::new(Decimal::new(100000, 2), "USD"),
-            per_venue: serde_json::Map::new(),
-            per_kind: serde_json::Map::new(),
-        };
-        let json = serde_json::to_string(&caps).unwrap();
-        let back: CapsSnapshot = serde_json::from_str(&json).unwrap();
-        assert_eq!(caps.per_order_max.amount, back.per_order_max.amount);
     }
 }

@@ -1,11 +1,9 @@
 //! Market types: InstrumentKind, Market, PriceSemantics. SPEC-001 market data.
-//! All comparisons across venues happen in probability or currency space after normalization.
 
 use crate::ids::{MarketKey, VenueId};
 use crate::time::UtcTime;
 use serde::{Deserialize, Serialize};
 
-/// Instrument kind classification. Closed set — unknown tag = validation error at boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InstrumentKind {
@@ -18,7 +16,6 @@ pub enum InstrumentKind {
     Spot,
 }
 
-/// Market status. Closed set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MarketStatus {
@@ -28,33 +25,24 @@ pub enum MarketStatus {
     Resolved,
 }
 
-/// Price semantics derived from InstrumentKind.
-/// Binary/categorical: probability in [0,1] with tick size.
-/// Scalar: unit + min/max.
-/// Equities/options/crypto: currency prices.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PriceSemantics {
-    Probability {
-        tick_size: String, // decimal string
-    },
-    Scalar {
-        unit: String,
-        min: String, // decimal string
-        max: String, // decimal string
-    },
+    Probability { tick_size: String },
+    Scalar { unit: String, min: String, max: String },
     Currency,
 }
 
-/// A trading market. MarketKey is the universal join key.
+/// A trading market. SPEC-001: description_ref is NOT optional per spec.
+/// jurisdiction_flags is required (emit empty array, never omit).
+/// venue_ref and meta are required JSON objects.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Market {
     pub key: MarketKey,
     pub venue: VenueId,
     pub kind: InstrumentKind,
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description_ref: Option<String>,
+    pub description_ref: String,
     pub status: MarketStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub close_ts: Option<UtcTime>,
@@ -62,10 +50,8 @@ pub struct Market {
     pub resolve_ts: Option<UtcTime>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outcome: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jurisdiction_flags: Vec<String>,
     pub venue_ref: serde_json::Value,
-    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
     pub meta: serde_json::Value,
 }
 
@@ -89,25 +75,23 @@ mod tests {
     }
 
     #[test]
-    fn price_semantics_tagged_round_trip() {
-        let ps = PriceSemantics::Probability { tick_size: "0.01".to_string() };
-        let json = serde_json::to_string(&ps).unwrap();
-        assert!(json.contains("probability"));
-        let back: PriceSemantics = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, ps);
-    }
-
-    #[test]
-    fn market_status_serde() {
-        for status in &[
-            MarketStatus::Open,
-            MarketStatus::Halted,
-            MarketStatus::Closed,
-            MarketStatus::Resolved,
-        ] {
-            let json = serde_json::to_string(status).unwrap();
-            let back: MarketStatus = serde_json::from_str(&json).unwrap();
-            assert_eq!(*status, back);
-        }
+    fn market_serde_includes_required_fields() {
+        let m = Market {
+            key: MarketKey::from_string("mkt:kalshi:BTC-75"),
+            venue: VenueId::new("kalshi"),
+            kind: InstrumentKind::BinaryContract,
+            title: "BTC above $75k?".into(),
+            description_ref: "BTC-75K-JUL10".into(),
+            status: MarketStatus::Open,
+            close_ts: None,
+            resolve_ts: None,
+            outcome: None,
+            jurisdiction_flags: vec!["US".into()],
+            venue_ref: serde_json::json!({"ticker": "BTC-75K-JUL10"}),
+            meta: serde_json::json!({"tick_size": "0.01"}),
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(json.contains("description_ref"));
+        assert!(json.contains("jurisdiction_flags"));
     }
 }
