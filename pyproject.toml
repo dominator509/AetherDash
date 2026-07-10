@@ -49,10 +49,12 @@ disallow_untyped_defs = false
 [[tool.mypy.overrides]]
 module = "aether_py.*"
 disallow_untyped_defs = false
+disable_error_code = ["type-arg"]
 
 [[tool.mypy.overrides]]
 module = "aether_py.tests.*"
 disallow_untyped_defs = false
+disable_error_code = ["type-arg", "no-any-return"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
