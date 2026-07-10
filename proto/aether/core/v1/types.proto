@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package aether.core.v1;
+
+// mirrors: aether_core::ids, aether_core::time, aether_core::decimal
+// Canonical scalar types used across all AETHER service contracts.
+
+import "google/protobuf/timestamp.proto";
+
+// Money value with ISO-4217 or crypto asset tag.
+// mirrors: aether_core::ids::Money
+message Money {
+  string amount = 1;       // decimal string
+  string currency = 2;     // ISO-4217 or USDC|USDT|ETH|...
+}
+
+// A ULID identifier.
+// mirrors: aether_core::ids::Ulid
+message Ulid {
+  string value = 1;        // 26-character ULID string
+}
+
+// Market key — universal join key.
+// mirrors: aether_core::ids::MarketKey
+message MarketKey {
+  string value = 1;        // "mkt:{venue}:{native_id}"
+}
+
+// Venue identifier slug.
+// mirrors: aether_core::ids::VenueId
+message VenueId {
+  string value = 1;
+}
+
+// UTC timestamp wrapper.
+// mirrors: aether_core::time::UtcTime
+message UtcTime {
+  google.protobuf.Timestamp ts = 1;
+}
+
+// Confidence value in [0, 1].
+// mirrors: aether_core::decimal::Confidence
+message Confidence {
+  string value = 1;        // decimal string, 0..=1
+}

@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package aether.core.v1;
+
+// mirrors: aether_core::market, aether_core::quote
+// Market, quote, and order book types.
+
+import "google/protobuf/timestamp.proto";
+import "aether/core/v1/types.proto";
+
+// Instrument kind — closed set.
+// mirrors: aether_core::market::InstrumentKind
+enum InstrumentKind {
+  INSTRUMENT_KIND_UNSPECIFIED = 0;
+  INSTRUMENT_KIND_BINARY_CONTRACT = 1;
+  INSTRUMENT_KIND_CATEGORICAL_CONTRACT = 2;
+  INSTRUMENT_KIND_SCALAR_CONTRACT = 3;
+  INSTRUMENT_KIND_EQUITY = 4;
+  INSTRUMENT_KIND_OPTION = 5;
+  INSTRUMENT_KIND_PERP = 6;
+  INSTRUMENT_KIND_SPOT = 7;
+}
+
+// Market status — closed set.
+// mirrors: aether_core::market::MarketStatus
+enum MarketStatus {
+  MARKET_STATUS_UNSPECIFIED = 0;
+  MARKET_STATUS_OPEN = 1;
+  MARKET_STATUS_HALTED = 2;
+  MARKET_STATUS_CLOSED = 3;
+  MARKET_STATUS_RESOLVED = 4;
+}
+
+// A trading market.
+// mirrors: aether_core::market::Market
+message Market {
+  MarketKey key = 1;
+  VenueId venue = 2;
+  InstrumentKind kind = 3;
+  string title = 4;
+  optional string description_ref = 5;
+  MarketStatus status = 6;
+  optional google.protobuf.Timestamp close_ts = 7;
+  optional google.protobuf.Timestamp resolve_ts = 8;
+  optional string outcome = 9;
+  repeated string jurisdiction_flags = 10;
+  string venue_ref = 11;   // JSON blob
+  string meta = 12;        // JSON blob
+}
+
+// Quote source.
+// mirrors: aether_core::quote::QuoteSource
+enum QuoteSource {
+  QUOTE_SOURCE_UNSPECIFIED = 0;
+  QUOTE_SOURCE_STREAM = 1;
+  QUOTE_SOURCE_POLL = 2;
+  QUOTE_SOURCE_SNAPSHOT = 3;
+}
+
+// A market quote.
+// mirrors: aether_core::quote::Quote
+message Quote {
+  MarketKey market = 1;
+  optional string bid = 2;        // decimal string
+  optional string ask = 3;        // decimal string
+  optional string mid = 4;        // decimal string
+  optional string last = 5;       // decimal string
+  optional string bid_size = 6;   // decimal string
+  optional string ask_size = 7;   // decimal string
+  google.protobuf.Timestamp ts = 8;
+  QuoteSource source = 9;
+  optional uint64 seq = 10;
+}
+
+// A single order book level.
+// mirrors: aether_core::quote::BookLevel
+message BookLevel {
+  string price = 1;     // decimal string
+  string size = 2;      // decimal string
+}
+
+// Order book snapshot. Bids descending, asks ascending.
+// mirrors: aether_core::quote::OrderBook
+message OrderBook {
+  MarketKey market = 1;
+  repeated BookLevel bids = 2;
+  repeated BookLevel asks = 3;
+  uint32 depth = 4;
+  google.protobuf.Timestamp ts = 5;
+  optional uint64 seq = 6;
+}

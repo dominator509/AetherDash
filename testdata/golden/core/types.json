@@ -1,0 +1,42 @@
+[
+  {
+    "name": "money_usd",
+    "type": "Money",
+    "value": { "amount": "123.45", "currency": "USD" }
+  },
+  {
+    "name": "money_zero",
+    "type": "Money",
+    "value": { "amount": "0", "currency": "USDC" }
+  },
+  {
+    "name": "money_negative",
+    "type": "Money",
+    "value": { "amount": "-50.00", "currency": "USD" }
+  },
+  {
+    "name": "ulid_example",
+    "type": "Ulid",
+    "value": "01JQZ9XKABCDEFGHIJKLMNOPQR"
+  },
+  {
+    "name": "market_key_kalshi",
+    "type": "MarketKey",
+    "value": "mkt:kalshi:BTC-75"
+  },
+  {
+    "name": "confidence_half",
+    "type": "Confidence",
+    "value": "0.5"
+  },
+  {
+    "name": "confidence_zero",
+    "type": "Confidence",
+    "value": "0"
+  },
+  {
+    "name": "confidence_one",
+    "type": "Confidence",
+    "value": "1"
+  }
+]

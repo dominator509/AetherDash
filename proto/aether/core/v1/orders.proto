@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package aether.core.v1;
+
+// mirrors: aether_core::order
+// Order intent, risk verdict, order, fill, position, and caps types.
+
+import "google/protobuf/timestamp.proto";
+import "aether/core/v1/types.proto";
+import "aether/core/v1/market_data.proto";
+
+// Order side.
+// mirrors: aether_core::order::Side
+enum Side {
+  SIDE_UNSPECIFIED = 0;
+  SIDE_BUY = 1;
+  SIDE_SELL = 2;
+  SIDE_BUY_NO = 3;
+  SIDE_SELL_NO = 4;
+}
+
+// mirrors: aether_core::order::OrderType
+enum OrderType {
+  ORDER_TYPE_UNSPECIFIED = 0;
+  ORDER_TYPE_LIMIT = 1;
+  ORDER_TYPE_MARKET = 2;
+}
+
+// mirrors: aether_core::order::TimeInForce
+enum TimeInForce {
+  TIF_UNSPECIFIED = 0;
+  TIF_IOC = 1;
+  TIF_GTC = 2;
+  TIF_DAY = 3;
+}
+
+// mirrors: aether_core::order::RiskReasonCode
+enum RiskReasonCode {
+  RISK_REASON_UNSPECIFIED = 0;
+  RISK_REASON_LIVENESS = 1;
+  RISK_REASON_PRICE_DRIFT = 2;
+  RISK_REASON_BALANCE = 3;
+  RISK_REASON_VENUE_HEALTH = 4;
+  RISK_REASON_CAP_EXCEEDED = 5;
+  RISK_REASON_JURISDICTION = 6;
+  RISK_REASON_LIVE_DISABLED = 7;
+}
+
+// mirrors: aether_core::order::Origin
+message Origin {
+  string kind = 1;           // user|alert_action|agent|automation
+  uint32 tier = 2;           // 1..5
+  Ulid actor_id = 3;
+}
+
+// mirrors: aether_core::order::OrderIntent
+message OrderIntent {
+  Ulid id = 1;
+  MarketKey market = 2;
+  Side side = 3;
+  OrderType order_type = 4;
+  optional string limit_price = 5;   // decimal string
+  string size = 6;                   // decimal string
+  string size_unit = 7;              // contracts|shares|base|quote
+  TimeInForce tif = 8;
+  bool paper = 9;
+  Origin origin = 10;
+  Quote quote_snapshot = 11;
+  Ulid caps_version = 12;
+  google.protobuf.Timestamp created_ts = 13;
+}
+
+// mirrors: aether_core::order::RiskVerdict
+message RiskVerdict {
+  Ulid intent_id = 1;
+  string verdict = 2;                   // allow|deny
+  repeated RiskReason reasons = 3;
+  google.protobuf.Timestamp ts = 4;
+}
+
+message RiskReason {
+  RiskReasonCode code = 1;
+  string detail = 2;
+}
+
+// mirrors: aether_core::order::Order
+message Order {
+  Ulid order_id = 1;
+  MarketKey market = 2;
+  Side side = 3;
+  string price = 4;              // decimal string
+  string size = 5;               // decimal string
+  Money fee = 6;
+  string venue_ref = 7;          // JSON blob
+  google.protobuf.Timestamp ts = 8;
+  bool paper = 9;
+}
+
+// mirrors: aether_core::order::Fill
+message Fill {
+  Ulid order_id = 1;
+  MarketKey market = 2;
+  Side side = 3;
+  string price = 4;              // decimal string
+  string size = 5;               // decimal string
+  Money fee = 6;
+  string venue_ref = 7;          // JSON blob
+  google.protobuf.Timestamp ts = 8;
+  bool paper = 9;
+}
+
+// mirrors: aether_core::order::Position
+message Position {
+  MarketKey market = 1;
+  double side_exposure = 2;      // TODO: refine to decimal string in v2
+  string avg_price = 3;          // decimal string
+  string size = 4;               // decimal string
+  Money realized_pnl = 5;
+  Money unrealized_pnl = 6;
+  google.protobuf.Timestamp ts = 7;
+}
+
+// mirrors: aether_core::order::CapsSnapshot
+message CapsSnapshot {
+  Ulid version = 1;
+  Money per_order_max = 2;
+  Money daily_max = 3;
+  map<string, string> per_venue = 4;   // venue -> cap json
+  map<string, string> per_kind = 5;    // kind -> cap json
+}

@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package aether.core.v1;
+
+// mirrors: aether_core::opportunity
+// Opportunity, edge decomposition, and brain reference types.
+
+import "google/protobuf/timestamp.proto";
+import "aether/core/v1/types.proto";
+import "aether/core/v1/orders.proto";
+
+// Opportunity kind.
+// mirrors: aether_core::opportunity::OpportunityKind
+enum OpportunityKind {
+  OPPORTUNITY_KIND_UNSPECIFIED = 0;
+  OPPORTUNITY_KIND_ARBITRAGE = 1;
+  OPPORTUNITY_KIND_VALUE = 2;
+  OPPORTUNITY_KIND_CATALYST = 3;
+  OPPORTUNITY_KIND_HEDGE = 4;
+}
+
+// One leg of a multi-leg opportunity.
+// mirrors: aether_core::opportunity::OpportunityLeg
+message OpportunityLeg {
+  MarketKey market = 1;
+  Side side = 2;
+  optional string target_price = 3;    // decimal string
+  optional string size_hint = 4;       // decimal string
+}
+
+// Brain object reference.
+// mirrors: aether_core::opportunity::BrainRef
+message BrainRef {
+  Ulid object_id = 1;
+  string provenance_hash = 2;
+}
+
+// Full net-edge decomposition. All components present; zero must be explicit.
+// mirrors: aether_core::opportunity::EdgeDecomposition
+message EdgeDecomposition {
+  string gross_spread = 1;                 // decimal string
+  string fees = 2;                         // decimal string
+  string slippage_est = 3;                 // decimal string
+  string funding_cost = 4;                 // decimal string
+  string gas_cost = 5;                     // decimal string
+  string bridge_cost = 6;                  // decimal string
+  string settlement_mismatch_discount = 7; // decimal string
+  string liquidity_haircut = 8;            // decimal string
+  string staleness_penalty = 9;            // decimal string
+  string confidence_penalty = 10;          // decimal string
+  string net_edge = 11;                    // decimal string
+}
+
+// An opportunity — detected cross-venue edge.
+// mirrors: aether_core::opportunity::Opportunity
+message Opportunity {
+  Ulid id = 1;
+  OpportunityKind kind = 2;
+  repeated OpportunityLeg legs = 3;
+  string gross_edge = 4;                   // decimal string
+  EdgeDecomposition edge = 5;
+  Confidence confidence = 6;
+  google.protobuf.Timestamp detected_ts = 7;
+  optional google.protobuf.Timestamp expires_ts = 8;
+  BrainRef explain_ref = 9;
+  Ulid trace_id = 10;
+}

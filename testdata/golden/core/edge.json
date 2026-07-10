@@ -1,0 +1,53 @@
+[
+  {
+    "name": "edge_positive_net",
+    "type": "EdgeDecomposition",
+    "value": {
+      "gross_spread": "1.00",
+      "fees": "0.10",
+      "slippage_est": "0.05",
+      "funding_cost": "0",
+      "gas_cost": "0.02",
+      "bridge_cost": "0",
+      "settlement_mismatch_discount": "0",
+      "liquidity_haircut": "0.03",
+      "staleness_penalty": "0",
+      "confidence_penalty": "0",
+      "net_edge": "0.80"
+    }
+  },
+  {
+    "name": "edge_zero_net",
+    "type": "EdgeDecomposition",
+    "value": {
+      "gross_spread": "0.20",
+      "fees": "0.10",
+      "slippage_est": "0.05",
+      "funding_cost": "0",
+      "gas_cost": "0.02",
+      "bridge_cost": "0",
+      "settlement_mismatch_discount": "0",
+      "liquidity_haircut": "0.03",
+      "staleness_penalty": "0",
+      "confidence_penalty": "0",
+      "net_edge": "0"
+    }
+  },
+  {
+    "name": "edge_explicit_zeros",
+    "type": "EdgeDecomposition",
+    "value": {
+      "gross_spread": "0.10",
+      "fees": "0",
+      "slippage_est": "0",
+      "funding_cost": "0",
+      "gas_cost": "0",
+      "bridge_cost": "0",
+      "settlement_mismatch_discount": "0",
+      "liquidity_haircut": "0.10",
+      "staleness_penalty": "0",
+      "confidence_penalty": "0",
+      "net_edge": "0"
+    }
+  }
+]
