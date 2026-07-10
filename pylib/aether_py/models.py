@@ -2,7 +2,7 @@
 
 import re
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, RootModel, field_validator, model_validator
@@ -48,44 +48,44 @@ def _rfc3339(v: str) -> str:
 # ── Enums ─────────────────────────────────────────────────────────────────----
 
 
-class Side(str, Enum):
+class Side(StrEnum):
     buy = "buy"
     sell = "sell"
     buy_no = "buy_no"
     sell_no = "sell_no"
 
 
-class OrderType(str, Enum):
+class OrderType(StrEnum):
     limit = "limit"
     market = "market"
 
 
-class SizeUnit(str, Enum):
+class SizeUnit(StrEnum):
     contracts = "contracts"
     shares = "shares"
     base = "base"
     quote = "quote"
 
 
-class TimeInForce(str, Enum):
+class TimeInForce(StrEnum):
     ioc = "ioc"
     gtc = "gtc"
     day = "day"
 
 
-class OriginKind(str, Enum):
+class OriginKind(StrEnum):
     user = "user"
     alert_action = "alert_action"
     agent = "agent"
     automation = "automation"
 
 
-class RiskVerdictStatus(str, Enum):
+class RiskVerdictStatus(StrEnum):
     allow = "allow"
     deny = "deny"
 
 
-class RiskReasonCode(str, Enum):
+class RiskReasonCode(StrEnum):
     liveness = "liveness"
     price_drift = "price_drift"
     balance = "balance"
@@ -95,13 +95,13 @@ class RiskReasonCode(str, Enum):
     live_disabled = "live_disabled"
 
 
-class QuoteSource(str, Enum):
+class QuoteSource(StrEnum):
     stream = "stream"
     poll = "poll"
     snapshot = "snapshot"
 
 
-class InstrumentKind(str, Enum):
+class InstrumentKind(StrEnum):
     binary_contract = "binary_contract"
     categorical_contract = "categorical_contract"
     scalar_contract = "scalar_contract"
@@ -111,21 +111,21 @@ class InstrumentKind(str, Enum):
     spot = "spot"
 
 
-class MarketStatus(str, Enum):
+class MarketStatus(StrEnum):
     open = "open"
     halted = "halted"
     closed = "closed"
     resolved = "resolved"
 
 
-class OpportunityKind(str, Enum):
+class OpportunityKind(StrEnum):
     arbitrage = "arbitrage"
     value = "value"
     catalyst = "catalyst"
     hedge = "hedge"
 
 
-class ErrorCode(str, Enum):
+class ErrorCode(StrEnum):
     invalid_argument = "invalid_argument"
     unauthenticated = "unauthenticated"
     permission_denied = "permission_denied"
@@ -483,6 +483,7 @@ class PriceSemantics(BaseModel):
         elif self.kind == "scalar":
             if None in (self.unit, self.min, self.max):
                 raise ValueError("unit/min/max required for kind=scalar")
+            assert self.min is not None and self.max is not None  # mypy narrowing
             Decimal(self.min)
             Decimal(self.max)
         elif self.kind == "currency":
