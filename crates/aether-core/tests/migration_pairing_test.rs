@@ -7,18 +7,28 @@
 mod migration_pairing_tests {
     use std::process::Command;
 
-    fn sqlx_migrate_dir() -> &'static str {
-        "infra/migrations"
+    fn sqlx_migrate_dir() -> String {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into());
+        let path = std::path::Path::new(&manifest_dir)
+            .parent()
+            .unwrap() // crates/
+            .parent()
+            .unwrap(); // repo root/
+        path.join("infra/migrations")
+            .to_string_lossy()
+            .to_string()
     }
 
     fn run_migrations() {
+        let dir = sqlx_migrate_dir();
         let output = Command::new("cargo")
             .args([
                 "sqlx",
                 "migrate",
                 "run",
                 "--source",
-                sqlx_migrate_dir(),
+                dir.as_str(),
             ])
             .output()
             .expect("failed to run cargo sqlx migrate run");
@@ -30,13 +40,14 @@ mod migration_pairing_tests {
     }
 
     fn revert_all_migrations() {
+        let dir = sqlx_migrate_dir();
         let output = Command::new("cargo")
             .args([
                 "sqlx",
                 "migrate",
                 "revert",
                 "--source",
-                sqlx_migrate_dir(),
+                dir.as_str(),
                 "--target",
                 "0",
             ])
@@ -73,8 +84,9 @@ mod migration_pairing_tests {
         eprintln!("All migrations applied");
 
         // Revert one step
+        let dir = sqlx_migrate_dir();
         let output = Command::new("cargo")
-            .args(["sqlx", "migrate", "revert", "--source", sqlx_migrate_dir()])
+            .args(["sqlx", "migrate", "revert", "--source", dir.as_str()])
             .output()
             .expect("failed to revert one step");
         assert!(
@@ -93,13 +105,13 @@ mod migration_pairing_tests {
     fn migration_files_are_paired() {
         // Verify every up.sql has a matching down.sql (no DB needed)
         use std::fs;
-        let dir = std::path::Path::new(sqlx_migrate_dir());
+        let dir = std::path::PathBuf::from(sqlx_migrate_dir());
         if !dir.exists() {
-            eprintln!(
-                "SKIP: migrations directory not found at {}",
+            panic!(
+                "Migration directory not found at {}. \
+                 Run from the repository root or set CARGO_MANIFEST_DIR correctly.",
                 dir.display()
             );
-            return;
         }
         let mut up_files: Vec<String> = Vec::new();
         let mut down_files: Vec<String> = Vec::new();

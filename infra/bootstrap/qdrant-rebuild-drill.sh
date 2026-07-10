@@ -19,7 +19,7 @@ if isinstance(cols, list):
     print(' '.join(c['name'] for c in cols))
 elif isinstance(cols, dict):
     print(' '.join(cols.keys()))
-" 2>/dev/null || echo "")
+")
 
 if [ -z "$COLLECTIONS" ]; then
     echo "No collections found to drop."
@@ -41,6 +41,7 @@ else
 fi
 
 # Verify collections and their configuration (fetch each individually for config)
+DIMS="${AETHER_EMBED__DIMS:-1024}"
 echo "Verifying collections and configuration ..."
 for name in brain_chunks market_texts; do
     curl -fsS "${QDRANT_URL}/collections/${name}" | ${PYTHON} -c "
@@ -49,10 +50,11 @@ c = json.load(sys.stdin)['result']
 cfg = c['config']['params']['vectors']
 dims = cfg.get('size')
 dist = cfg.get('distance')
-assert dims is not None, f'FAIL: ${name} has no vector size'
+assert dims == ${DIMS}, f'FAIL: ${name} dims={dims}, expected ${DIMS}'
 assert dist == 'Cosine', f'FAIL: ${name} distance={dist}, expected Cosine'
 assert c['status'] == 'green', f'FAIL: ${name} status={c[\"status\"]}'
-print(f'  ${name}: dims={dims}, distance={dist}, status={c[\"status\"]} OK')
+assert c['points_count'] == 0, f'FAIL: ${name} points_count={c[\"points_count\"]}, expected 0'
+print(f'  ${name}: dims={dims}, distance={dist}, status={c[\"status\"]}, points={c[\"points_count\"]} OK')
 " || { echo "Qdrant reconstruction drill: FAILED for ${name}"; exit 1; }
 done
 echo "Qdrant reconstruction drill: PASS"

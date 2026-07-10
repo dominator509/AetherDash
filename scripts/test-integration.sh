@@ -8,8 +8,20 @@ COMPOSE="infra/dev/docker-compose.yml"
 command -v docker >/dev/null 2>&1 || { echo "MISSING TOOL: docker (A-06)"; exit 2; }
 if [ ! -f "$COMPOSE" ]; then echo "SKIP (marker absent): $COMPOSE -> integration tests"; echo "integration: ok"; exit 0; fi
 
+# Check sqlx-cli is installed (needed for migration pairing tests)
+if ! cargo sqlx --version >/dev/null 2>&1; then
+    echo "MISSING TOOL: cargo-sqlx (install with: cargo install sqlx-cli)"
+    exit 2
+fi
+
 echo "=== Starting dev stack ==="
 docker compose -f "$COMPOSE" up -d --wait
+
+# Wait for Postgres to accept connections
+echo "Waiting for Postgres..."
+until docker compose -f "$COMPOSE" exec -T postgres pg_isready -U aether >/dev/null 2>&1; do
+    sleep 1
+done
 
 # Convention (AGENTS.md section 10, TESTING.md): Rust integration tests are #[ignore]-tagged.
 echo "=== Running Rust integration tests ==="

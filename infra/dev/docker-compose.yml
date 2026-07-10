@@ -71,10 +71,10 @@ services:
       - "6334:6334"      # Internal gRPC
     volumes:
       - aether_qd_data:/qdrant/storage
-# The qdrant image has sh but no curl/wget. Check port 6333 via /proc/net/tcp
-# (decimal 6333 = hex 0x18BD). Confirms the process is accepting connections.
+    # Qdrant image has bash but no curl/wget. Use bash /dev/tcp to make
+    # a real HTTP readiness request to /readyz and verify 200 OK.
     healthcheck:
-      test: ["CMD-SHELL", "grep -q '18BD' /proc/net/tcp 2>/dev/null || exit 1"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333; echo -e 'GET /readyz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3; grep -q '200 OK' <&3"]
       interval: 10s
       timeout: 5s
       retries: 3
