@@ -8,7 +8,7 @@ This file is the single authority on which plans exist, their status, and which 
 `pending` (contents not yet generated) -> `draft` (contents exist, not started) -> `active` (being implemented; max one) -> `done` (Definition of done met, AGENTS.md section 14) -> or `revise` (reopened with a Decision Log reason). Status changes are edits to this table plus the plan's own Progress section.
 
 ## Active plan
-**None** — EP-002 complete. Next: EP-003.
+**EP-002** — Core domain types & canonical serialization (revise: constructor, canonical, and mirror fixes in progress)
 
 ## Ledger
 | ID | Title | Band | Phase | Status | Blocked by |

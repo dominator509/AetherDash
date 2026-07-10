@@ -9,4 +9,4 @@ def canonical_json_string(obj: object) -> str:
     - No trailing whitespace
     - Decimals as strings (caller's responsibility)
     """
-    return json.dumps(obj, ensure_ascii=True, separators=(",", ":"))
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
