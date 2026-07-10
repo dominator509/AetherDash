@@ -1,0 +1,45 @@
+[
+  {
+    "name": "order_book_simple",
+    "type": "OrderBook",
+    "value": {
+      "market": "mkt:kalshi:BTC-75",
+      "bids": [
+        {
+          "price": "9.95",
+          "size": "10"
+        },
+        {
+          "price": "9.90",
+          "size": "5"
+        }
+      ],
+      "asks": [
+        {
+          "price": "10.00",
+          "size": "10"
+        },
+        {
+          "price": "10.05",
+          "size": "5"
+        }
+      ],
+      "depth": 2,
+      "ts": "2025-07-10T12:34:56.789Z",
+      "seq": 42
+    },
+    "sha256": "617e5810bce5c065b0938d6a66d4e7eca1e66f37619a3b05b120506d91168859"
+  },
+  {
+    "name": "order_book_empty_sides",
+    "type": "OrderBook",
+    "value": {
+      "market": "mkt:polymarket:EMPTY",
+      "bids": [],
+      "asks": [],
+      "depth": 0,
+      "ts": "2025-07-10T12:34:56.789Z"
+    },
+    "sha256": "f49174b88e80d9c203a1ef185ae608879f732934f7ebe4e8d2087cc3bc2d84b8"
+  }
+]

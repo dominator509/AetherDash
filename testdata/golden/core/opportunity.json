@@ -1,0 +1,46 @@
+[
+  {
+    "name": "opp_arbitrage",
+    "type": "Opportunity",
+    "value": {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "kind": "arbitrage",
+      "legs": [
+        {
+          "market": "mkt:kalshi:BTC-75",
+          "side": "buy",
+          "target_price": "0.65",
+          "size_hint": "10"
+        },
+        {
+          "market": "mkt:polymarket:WILL-BTC-TOUCH-100K",
+          "side": "sell_no",
+          "target_price": "0.68",
+          "size_hint": "10"
+        }
+      ],
+      "gross_edge": "3.00",
+      "edge": {
+        "gross_spread": "3.00",
+        "fees": "0.20",
+        "slippage_est": "0.05",
+        "funding_cost": "0",
+        "gas_cost": "0.03",
+        "bridge_cost": "0",
+        "settlement_mismatch_discount": "0",
+        "liquidity_haircut": "0.02",
+        "staleness_penalty": "0",
+        "confidence_penalty": "0.10",
+        "net_edge": "2.60"
+      },
+      "confidence": "0.8",
+      "detected_ts": "2025-07-10T12:34:56.789Z",
+      "explain_ref": {
+        "object_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "provenance_hash": "abc123def456"
+      },
+      "trace_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    },
+    "sha256": "754aa1cd403311c746aadb9471d9ba9ffe18d5d8f7ebe96aa218c51247efde6e"
+  }
+]

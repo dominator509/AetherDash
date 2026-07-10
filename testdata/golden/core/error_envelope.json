@@ -1,0 +1,24 @@
+[
+  {
+    "name": "error_invalid",
+    "type": "ErrorEnvelope",
+    "value": {
+      "code": "invalid_argument",
+      "message": "market key not found",
+      "retryable": false,
+      "trace_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    },
+    "sha256": "1f1ec16bac4fc548f4cc2252cdb194963574d8d8dc91bd9ecda1cab4e8c17772"
+  },
+  {
+    "name": "error_unavailable",
+    "type": "ErrorEnvelope",
+    "value": {
+      "code": "unavailable",
+      "message": "venue not reachable",
+      "retryable": true,
+      "trace_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    },
+    "sha256": "9b688f1c7a7d9b5703cd470e84f79e83c011a9fb7c9e8af3d9302e35245592c8"
+  }
+]

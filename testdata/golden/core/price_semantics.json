@@ -1,0 +1,30 @@
+[
+  {
+    "name": "ps_probability",
+    "type": "PriceSemantics",
+    "value": {
+      "kind": "probability",
+      "tick_size": "0.01"
+    },
+    "sha256": "c8cc3396ab2d94e5e7e529311362bc1816eb164324ce511aef48440967e0dcf7"
+  },
+  {
+    "name": "ps_scalar",
+    "type": "PriceSemantics",
+    "value": {
+      "kind": "scalar",
+      "unit": "points",
+      "min": "0",
+      "max": "100"
+    },
+    "sha256": "80f15092bba347c99107dbc1d9bf04b00fee6978edb3a25b545c3ed4f3e14150"
+  },
+  {
+    "name": "ps_currency",
+    "type": "PriceSemantics",
+    "value": {
+      "kind": "currency"
+    },
+    "sha256": "f2752d79ee80885932e37bb4e52f16aae7682d92a75f517e84ae4c2a1ea863ed"
+  }
+]

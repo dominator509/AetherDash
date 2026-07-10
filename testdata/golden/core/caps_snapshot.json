@@ -1,0 +1,18 @@
+[
+  {
+    "name": "caps_default",
+    "type": "CapsSnapshot",
+    "value": {
+      "version": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "per_order_max": {
+        "amount": "500.00",
+        "currency": "USD"
+      },
+      "daily_max": {
+        "amount": "1000.00",
+        "currency": "USD"
+      }
+    },
+    "sha256": "9fea2c8f112bb4bb0a5b0f45cdac03358e808a84b484c48bb83d98ddfbb50877"
+  }
+]

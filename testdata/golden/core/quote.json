@@ -1,0 +1,29 @@
+[
+  {
+    "name": "quote_full",
+    "type": "Quote",
+    "value": {
+      "market": "mkt:kalshi:BTC-75",
+      "bid": "0.65",
+      "ask": "0.67",
+      "mid": "0.66",
+      "bid_size": "1000",
+      "ask_size": "500",
+      "ts": "2025-07-10T12:34:56.789Z",
+      "source": "stream",
+      "seq": 1
+    },
+    "sha256": "cb146f36da7fba679d2759e2f9a2a3633380016d6eeb568b5e6b3f712aeefcd6"
+  },
+  {
+    "name": "quote_minimal",
+    "type": "Quote",
+    "value": {
+      "market": "mkt:polymarket:TEST",
+      "last": "0.50",
+      "ts": "2025-07-10T12:34:56.789Z",
+      "source": "poll"
+    },
+    "sha256": "00bfc519eed5c599cd2e9bb83061e0605990dd5ab6cf7fc7a5eecbebd8b76e02"
+  }
+]

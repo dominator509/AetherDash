@@ -1,0 +1,17 @@
+[
+  {
+    "name": "audit_genesis",
+    "type": "AuditEvent",
+    "value": {
+      "seq": 1,
+      "prev_hash": "",
+      "hash": "sha256:abc123def456",
+      "ts": "2025-07-10T12:34:56.789Z",
+      "actor": "system",
+      "action": "genesis",
+      "subject": "audit_chain",
+      "payload_hash": "sha256:000"
+    },
+    "sha256": "58d0ad74efdec86251d2c895b30b00d1c2b3fa2971c26ebc47feb209a2d8790d"
+  }
+]

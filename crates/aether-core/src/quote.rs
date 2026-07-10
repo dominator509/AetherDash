@@ -106,6 +106,7 @@ struct OrderBookWire {
     asks: Vec<BookLevel>,
     depth: usize,
     ts: UtcTime,
+    #[serde(skip_serializing_if = "Option::is_none")]
     seq: Option<u64>,
 }
 

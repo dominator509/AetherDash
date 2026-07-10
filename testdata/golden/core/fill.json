@@ -1,0 +1,44 @@
+[
+  {
+    "name": "fill_partial",
+    "type": "Fill",
+    "value": {
+      "order_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "market": "mkt:kalshi:INTC-50",
+      "side": "buy",
+      "price": "0.66",
+      "size": "6",
+      "fee": {
+        "amount": "0.30",
+        "currency": "USD"
+      },
+      "venue_ref": {
+        "fill_ref": "kalshi-f-789"
+      },
+      "ts": "2025-07-10T12:34:56.789Z",
+      "paper": false
+    },
+    "sha256": "667731d694735cbdf56d9ddb95dd49e903ab9a8b432867a58779afdc497b5c68"
+  },
+  {
+    "name": "fill_full",
+    "type": "Fill",
+    "value": {
+      "order_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "market": "mkt:polymarket:TEST",
+      "side": "sell",
+      "price": "50.50",
+      "size": "5",
+      "fee": {
+        "amount": "0.125",
+        "currency": "USDC"
+      },
+      "venue_ref": {
+        "fill_ref": "pm-f-012"
+      },
+      "ts": "2025-07-10T12:34:56.789Z",
+      "paper": true
+    },
+    "sha256": "9b26414dec093693786a74bb290fbf324d9c1e2ce30a450da3dae56733651a01"
+  }
+]

@@ -1,0 +1,28 @@
+[
+  {
+    "name": "verdict_allow",
+    "type": "RiskVerdict",
+    "value": {
+      "intent_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "verdict": "allow",
+      "ts": "2025-07-10T12:34:56.789Z"
+    },
+    "sha256": "6229d37827932dc905fc345e432d1a9b38e07943bd9b191af51ce6a9aa6fd74d"
+  },
+  {
+    "name": "verdict_deny",
+    "type": "RiskVerdict",
+    "value": {
+      "intent_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "verdict": "deny",
+      "reasons": [
+        {
+          "code": "cap_exceeded",
+          "detail": "cap $500 < $1000"
+        }
+      ],
+      "ts": "2025-07-10T12:34:56.789Z"
+    },
+    "sha256": "d72fccd54c2bd2fd87bcd7c1567bbe8a1575fac0cbb30b21a90407c62b94d427"
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "name": "position_long",
+    "type": "Position",
+    "value": {
+      "market": "mkt:kalshi:INTC-50",
+      "side_exposure": "100",
+      "avg_price": "0.65",
+      "size": "10",
+      "realized_pnl": {
+        "amount": "0",
+        "currency": "USD"
+      },
+      "unrealized_pnl": {
+        "amount": "10.00",
+        "currency": "USD"
+      },
+      "ts": "2025-07-10T12:34:56.789Z"
+    },
+    "sha256": "436f30dd3ca173cd0534cb0ee651d1905d9a77a8ff58dcc9a03c9ca95ce4e7f1"
+  },
+  {
+    "name": "position_flat",
+    "type": "Position",
+    "value": {
+      "market": "mkt:polymarket:TEST",
+      "side_exposure": "0",
+      "avg_price": "0",
+      "size": "0",
+      "realized_pnl": {
+        "amount": "-50.00",
+        "currency": "USD"
+      },
+      "unrealized_pnl": {
+        "amount": "0",
+        "currency": "USD"
+      },
+      "ts": "2025-07-10T12:34:56.789Z"
+    },
+    "sha256": "0c3698c735caf94f8aa4f5b1715dddc84fdf7711bc1d46b4f15e08ad50921329"
+  }
+]

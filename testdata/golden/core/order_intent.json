@@ -1,0 +1,61 @@
+[
+  {
+    "name": "intent_limit_buy",
+    "type": "OrderIntent",
+    "value": {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "market": "mkt:kalshi:INTC-50",
+      "side": "buy",
+      "order_type": "limit",
+      "limit_price": "0.66",
+      "size": "10",
+      "size_unit": "contracts",
+      "tif": "gtc",
+      "paper": true,
+      "origin": {
+        "kind": "user",
+        "tier": 3,
+        "actor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+      },
+      "quote_snapshot": {
+        "market": "mkt:kalshi:INTC-50",
+        "bid": "0.65",
+        "ask": "0.67",
+        "ts": "2025-07-10T12:34:56.789Z",
+        "source": "stream"
+      },
+      "caps_version": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "created_ts": "2025-07-10T12:34:56.789Z"
+    },
+    "sha256": "37807e96d24cc2a44741a983459a733f6269a002cd0d244f4b30b06e3c834848"
+  },
+  {
+    "name": "intent_market_sell",
+    "type": "OrderIntent",
+    "value": {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "market": "mkt:polymarket:TEST",
+      "side": "sell",
+      "order_type": "market",
+      "size": "5",
+      "size_unit": "shares",
+      "tif": "ioc",
+      "paper": false,
+      "origin": {
+        "kind": "automation",
+        "tier": 1,
+        "actor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+      },
+      "quote_snapshot": {
+        "market": "mkt:kalshi:INTC-50",
+        "bid": "0.65",
+        "ask": "0.67",
+        "ts": "2025-07-10T12:34:56.789Z",
+        "source": "stream"
+      },
+      "caps_version": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "created_ts": "2025-07-10T12:34:56.789Z"
+    },
+    "sha256": "b4974ebd56310b90668bee4f27f2874abae239235575b2a0f07d2f8e819de691"
+  }
+]
