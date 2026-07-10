@@ -1,27 +1,12 @@
-//! Golden vector generator — produces test vectors with SHA-256 hashes for ALL SPEC-001 types.
-//! Run: cargo run -p aether-core --features golden_gen --bin gen-goldens
-//! This is a dev tool; panicking on invalid fixed test data is correct behavior.
+//! Golden vector generator with typed round-trips for ALL SPEC-001 types.
+//! Run: cargo run -p aether-core --features golden-gen --bin gen-goldens
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
-
-use aether_core::audit::AuditEvent;
-use aether_core::canonical::canonical_sha256;
-use aether_core::decimal::Confidence;
-use aether_core::error::{ErrorCode, ErrorEnvelope};
-use aether_core::ids::{MarketKey, Money, Ulid, VenueId};
-use aether_core::market::{InstrumentKind, Market, MarketStatus, PriceSemantics};
-use aether_core::opportunity::{
-    BrainRef, EdgeCosts, EdgeDecomposition, Opportunity, OpportunityKind, OpportunityLeg,
+use aether_core::{
+    audit, canonical, decimal, error, ids, json, market, opportunity, order, quote, time,
 };
-use aether_core::order::{
-    CapsSnapshot, Fill, Order, OrderIntent, OrderType, Origin, OriginKind, Position, RiskReason,
-    RiskReasonCode, RiskVerdict, RiskVerdictStatus, Side, SizeUnit, TimeInForce,
-};
-use aether_core::quote::{BookLevel, OrderBook, Quote, QuoteSource};
-use aether_core::time::UtcTime;
 use rust_decimal::Decimal;
 use serde::Serialize;
-use std::fs;
+use std::{error::Error, fs};
 
 #[derive(Serialize)]
 struct GoldenEntry {
@@ -32,586 +17,506 @@ struct GoldenEntry {
     sha256: String,
 }
 
-fn mk_ulid(s: &str) -> Ulid {
-    Ulid::from_string(s).unwrap()
-}
-fn mk_key(s: &str) -> MarketKey {
-    MarketKey::from_string_unchecked(s)
-}
-fn ts() -> UtcTime {
-    UtcTime::from_unix_millis(1752150896789).unwrap()
-}
-fn mk_money(amt: i64, scale: u32, ccy: &str) -> Money {
-    Money::new(Decimal::new(amt, scale), ccy)
-}
-
-fn make_golden<T: Serialize>(name: &str, typ: &str, value: &T) -> GoldenEntry {
-    GoldenEntry {
+fn g<T: Serialize>(name: &str, typ: &str, value: &T) -> Result<GoldenEntry, Box<dyn Error>> {
+    Ok(GoldenEntry {
         name: name.into(),
         typ: typ.into(),
-        value: serde_json::to_value(value).expect("serialize"),
-        sha256: canonical_sha256(value).expect("sha256"),
-    }
+        value: serde_json::to_value(value)?,
+        sha256: canonical::canonical_sha256(value)?,
+    })
+}
+fn write(dir: &str, file: &str, e: &[GoldenEntry]) -> Result<(), Box<dyn Error>> {
+    fs::write(format!("{dir}/{file}"), serde_json::to_string_pretty(e)?)?;
+    Ok(())
+}
+fn ts() -> Result<time::UtcTime, Box<dyn Error>> {
+    Ok(time::UtcTime::from_unix_millis(1752150896789)?)
+}
+fn ulid(s: &str) -> Result<ids::Ulid, ulid::DecodeError> {
+    ids::Ulid::from_string(s)
+}
+fn v(s: &str) -> Result<ids::VenueId, ids::VenueIdError> {
+    ids::VenueId::new(s)
+}
+fn mk(venue: &str, native: &str) -> Result<ids::MarketKey, ids::MarketKeyError> {
+    ids::MarketKey::new(&v(venue)?, native)
+}
+fn mk_u(s: &str) -> ids::MarketKey {
+    ids::MarketKey::from_string_unchecked(s)
+}
+fn jo(json: serde_json::Value) -> Result<json::JsonObject, json::JsonObjectError> {
+    json::JsonObject::new(json)
+}
+fn mm(a: i64, s: u32, c: &str) -> ids::Money {
+    ids::Money::new(Decimal::new(a, s), c)
+}
+fn dec(a: i64, s: u32) -> Decimal {
+    Decimal::new(a, s)
 }
 
-fn write_goldens(dir: &str, file: &str, entries: &[GoldenEntry]) {
-    let json = serde_json::to_string_pretty(entries).expect("serialize");
-    fs::write(format!("{dir}/{file}"), json).expect("write");
-}
-
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let out = "testdata/golden/core";
-    fs::create_dir_all(out).expect("create dir");
+    fs::create_dir_all(out)?;
+    let t = ts()?;
 
-    // ── Money (4 vectors) ──
-    write_goldens(
+    write(
         out,
         "money.json",
         &[
-            make_golden("money_usd", "Money", &mk_money(12345, 2, "USD")),
-            make_golden("money_zero", "Money", &Money::zero("USDC")),
-            make_golden("money_negative", "Money", &mk_money(-5000, 2, "USD")),
-            make_golden("money_18dec", "Money", &mk_money(123456789012345678i64, 18, "BTC")),
+            g("money_usd", "Money", &mm(12345, 2, "USD"))?,
+            g("money_zero", "Money", &ids::Money::zero("USDC"))?,
+            g("money_negative", "Money", &mm(-5000, 2, "USD"))?,
+            g("money_18dec", "Money", &mm(123456789012345678i64, 18, "BTC"))?,
         ],
-    );
+    )?;
 
-    // ── MarketKey (2 vectors) ──
-    write_goldens(
+    write(
         out,
         "market_key.json",
         &[
-            make_golden("market_key_kalshi", "MarketKey", &mk_key("mkt:kalshi:BTC-75")),
-            make_golden(
-                "market_key_polymarket",
-                "MarketKey",
-                &mk_key("mkt:polymarket:WILL-BTC-TOUCH-100K"),
-            ),
+            g("market_key_kalshi", "MarketKey", &mk("kalshi", "BTC-75")?)?,
+            g("market_key_polymarket", "MarketKey", &mk("polymarket", "WILL-BTC-TOUCH-100K")?)?,
         ],
-    );
+    )?;
 
-    // ── Confidence (3 vectors) ──
-    write_goldens(
+    write(
         out,
         "confidence.json",
         &[
-            make_golden("confidence_zero", "Confidence", &Confidence::new(Decimal::ZERO).unwrap()),
-            make_golden(
-                "confidence_half",
-                "Confidence",
-                &Confidence::new(Decimal::new(5, 1)).unwrap(),
-            ),
-            make_golden("confidence_one", "Confidence", &Confidence::new(Decimal::ONE).unwrap()),
+            g("confidence_zero", "Confidence", &decimal::Confidence::new(Decimal::ZERO)?)?,
+            g("confidence_half", "Confidence", &decimal::Confidence::new(dec(5, 1))?)?,
+            g("confidence_one", "Confidence", &decimal::Confidence::new(Decimal::ONE)?)?,
         ],
-    );
+    )?;
 
-    // ── EdgeDecomposition (3 vectors) ──
-    write_goldens(
+    let ec = |f, s, g, lq, c| opportunity::EdgeCosts {
+        fees: f,
+        slippage_est: s,
+        funding_cost: Decimal::ZERO,
+        gas_cost: g,
+        bridge_cost: Decimal::ZERO,
+        settlement_mismatch_discount: Decimal::ZERO,
+        liquidity_haircut: lq,
+        staleness_penalty: Decimal::ZERO,
+        confidence_penalty: c,
+    };
+    write(
         out,
         "edge.json",
         &[
-            make_golden(
+            g(
                 "edge_positive_net",
                 "EdgeDecomposition",
-                &EdgeDecomposition::compute(
-                    Decimal::new(100, 2),
-                    EdgeCosts {
-                        fees: Decimal::new(10, 2),
-                        slippage_est: Decimal::new(5, 2),
-                        funding_cost: Decimal::ZERO,
-                        gas_cost: Decimal::new(2, 2),
-                        bridge_cost: Decimal::ZERO,
-                        settlement_mismatch_discount: Decimal::ZERO,
-                        liquidity_haircut: Decimal::new(3, 2),
-                        staleness_penalty: Decimal::ZERO,
-                        confidence_penalty: Decimal::ZERO,
-                    },
+                &opportunity::EdgeDecomposition::compute(
+                    dec(100, 2),
+                    ec(dec(10, 2), dec(5, 2), dec(2, 2), dec(3, 2), Decimal::ZERO),
                 ),
-            ),
-            make_golden(
+            )?,
+            g(
                 "edge_zero_net",
                 "EdgeDecomposition",
-                &EdgeDecomposition::compute(
-                    Decimal::new(20, 2),
-                    EdgeCosts {
-                        fees: Decimal::new(10, 2),
-                        slippage_est: Decimal::new(5, 2),
-                        funding_cost: Decimal::ZERO,
-                        gas_cost: Decimal::new(2, 2),
-                        bridge_cost: Decimal::ZERO,
-                        settlement_mismatch_discount: Decimal::ZERO,
-                        liquidity_haircut: Decimal::new(3, 2),
-                        staleness_penalty: Decimal::ZERO,
-                        confidence_penalty: Decimal::ZERO,
-                    },
+                &opportunity::EdgeDecomposition::compute(
+                    dec(20, 2),
+                    ec(dec(10, 2), dec(5, 2), dec(2, 2), dec(3, 2), Decimal::ZERO),
                 ),
-            ),
-            make_golden(
+            )?,
+            g(
                 "edge_explicit_zeros",
                 "EdgeDecomposition",
-                &EdgeDecomposition::compute(
-                    Decimal::new(10, 2),
-                    EdgeCosts {
-                        fees: Decimal::ZERO,
-                        slippage_est: Decimal::ZERO,
-                        funding_cost: Decimal::ZERO,
-                        gas_cost: Decimal::ZERO,
-                        bridge_cost: Decimal::ZERO,
-                        settlement_mismatch_discount: Decimal::ZERO,
-                        liquidity_haircut: Decimal::new(10, 2),
-                        staleness_penalty: Decimal::ZERO,
-                        confidence_penalty: Decimal::ZERO,
-                    },
+                &opportunity::EdgeDecomposition::compute(
+                    dec(10, 2),
+                    ec(Decimal::ZERO, Decimal::ZERO, Decimal::ZERO, dec(10, 2), Decimal::ZERO),
                 ),
-            ),
+            )?,
         ],
-    );
+    )?;
 
-    // ── Quote (2 vectors) ──
-    write_goldens(
-        out,
-        "quote.json",
-        &[
-            make_golden(
-                "quote_full",
-                "Quote",
-                &Quote {
-                    market: mk_key("mkt:kalshi:BTC-75"),
-                    bid: Some(Decimal::new(65, 2)),
-                    ask: Some(Decimal::new(67, 2)),
-                    mid: Some(Decimal::new(66, 2)),
-                    last: None,
-                    bid_size: Some(Decimal::new(1000, 0)),
-                    ask_size: Some(Decimal::new(500, 0)),
-                    ts: ts(),
-                    source: QuoteSource::Stream,
-                    seq: Some(1),
-                },
-            ),
-            make_golden(
-                "quote_minimal",
-                "Quote",
-                &Quote {
-                    market: mk_key("mkt:polymarket:TEST"),
-                    bid: None,
-                    ask: None,
-                    mid: None,
-                    last: Some(Decimal::new(50, 2)),
-                    bid_size: None,
-                    ask_size: None,
-                    ts: ts(),
-                    source: QuoteSource::Poll,
-                    seq: None,
-                },
-            ),
+    let q1 = quote::Quote {
+        market: mk("kalshi", "BTC-75")?,
+        bid: Some(dec(65, 2)),
+        ask: Some(dec(67, 2)),
+        mid: Some(dec(66, 2)),
+        last: None,
+        bid_size: Some(dec(1000, 0)),
+        ask_size: Some(dec(500, 0)),
+        ts: t,
+        source: quote::QuoteSource::Stream,
+        seq: Some(1),
+    };
+    let q2 = quote::Quote {
+        market: mk("polymarket", "TEST")?,
+        bid: None,
+        ask: None,
+        mid: None,
+        last: Some(dec(50, 2)),
+        bid_size: None,
+        ask_size: None,
+        ts: t,
+        source: quote::QuoteSource::Poll,
+        seq: None,
+    };
+    write(out, "quote.json", &[g("quote_full", "Quote", &q1)?, g("quote_minimal", "Quote", &q2)?])?;
+
+    let ob1 = quote::OrderBook::new(
+        mk("kalshi", "BTC-75")?,
+        vec![
+            quote::BookLevel { price: dec(995, 2), size: dec(10, 0) },
+            quote::BookLevel { price: dec(990, 2), size: dec(5, 0) },
         ],
-    );
-
-    // ── OrderBook (2 vectors) ──
-    write_goldens(
+        vec![
+            quote::BookLevel { price: dec(1000, 2), size: dec(10, 0) },
+            quote::BookLevel { price: dec(1005, 2), size: dec(5, 0) },
+        ],
+        2,
+        t,
+        Some(42),
+    )?;
+    let ob2 = quote::OrderBook::new(mk("polymarket", "EMPTY")?, vec![], vec![], 0, t, None)?;
+    write(
         out,
         "order_book.json",
         &[
-            make_golden(
-                "order_book_simple",
-                "OrderBook",
-                &OrderBook::new(
-                    mk_key("mkt:kalshi:BTC-75"),
-                    vec![
-                        BookLevel { price: Decimal::new(995, 2), size: Decimal::new(10, 0) },
-                        BookLevel { price: Decimal::new(990, 2), size: Decimal::new(5, 0) },
-                    ],
-                    vec![
-                        BookLevel { price: Decimal::new(1000, 2), size: Decimal::new(10, 0) },
-                        BookLevel { price: Decimal::new(1005, 2), size: Decimal::new(5, 0) },
-                    ],
-                    2,
-                    ts(),
-                    Some(42),
-                )
-                .unwrap(),
-            ),
-            make_golden(
-                "order_book_empty_sides",
-                "OrderBook",
-                &OrderBook::new(mk_key("mkt:polymarket:EMPTY"), vec![], vec![], 0, ts(), None)
-                    .unwrap(),
-            ),
+            g("order_book_simple", "OrderBook", &ob1)?,
+            g("order_book_empty_sides", "OrderBook", &ob2)?,
         ],
-    );
+    )?;
 
-    // ── OrderIntent (2 vectors) ──
-    let quote_snap = Quote {
-        market: mk_key("mkt:kalshi:INTC-50"),
-        bid: Some(Decimal::new(65, 2)),
-        ask: Some(Decimal::new(67, 2)),
+    let snap = quote::Quote {
+        market: mk_u("mkt:kalshi:INTC-50"),
+        bid: Some(dec(65, 2)),
+        ask: Some(dec(67, 2)),
         mid: None,
         last: None,
         bid_size: None,
         ask_size: None,
-        ts: ts(),
-        source: QuoteSource::Stream,
+        ts: t,
+        source: quote::QuoteSource::Stream,
         seq: None,
     };
-    write_goldens(
+    #[allow(clippy::unwrap_used)]
+    let u = || ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+    let oi1 = order::OrderIntent {
+        id: u(),
+        market: mk_u("mkt:kalshi:INTC-50"),
+        side: order::Side::Buy,
+        order_type: order::OrderType::Limit,
+        limit_price: Some(dec(66, 2)),
+        size: dec(10, 0),
+        size_unit: order::SizeUnit::Contracts,
+        tif: order::TimeInForce::Gtc,
+        paper: true,
+        origin: order::Origin::new(order::OriginKind::User, 3, u())?,
+        quote_snapshot: snap.clone(),
+        caps_version: u(),
+        created_ts: t,
+    };
+    let oi2 = order::OrderIntent {
+        id: u(),
+        market: mk_u("mkt:polymarket:TEST"),
+        side: order::Side::Sell,
+        order_type: order::OrderType::Market,
+        limit_price: None,
+        size: dec(5, 0),
+        size_unit: order::SizeUnit::Shares,
+        tif: order::TimeInForce::Ioc,
+        paper: false,
+        origin: order::Origin::new(order::OriginKind::Automation, 1, u())?,
+        quote_snapshot: snap,
+        caps_version: u(),
+        created_ts: t,
+    };
+    write(
         out,
         "order_intent.json",
         &[
-            make_golden(
-                "intent_limit_buy",
-                "OrderIntent",
-                &OrderIntent {
-                    id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    market: mk_key("mkt:kalshi:INTC-50"),
-                    side: Side::Buy,
-                    order_type: OrderType::Limit,
-                    limit_price: Some(Decimal::new(66, 2)),
-                    size: Decimal::new(10, 0),
-                    size_unit: SizeUnit::Contracts,
-                    tif: TimeInForce::Gtc,
-                    paper: true,
-                    origin: Origin::new(OriginKind::User, 3, mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"))
-                        .unwrap(),
-                    quote_snapshot: quote_snap.clone(),
-                    caps_version: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    created_ts: ts(),
-                },
-            ),
-            make_golden(
-                "intent_market_sell",
-                "OrderIntent",
-                &OrderIntent {
-                    id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    market: mk_key("mkt:polymarket:TEST"),
-                    side: Side::Sell,
-                    order_type: OrderType::Market,
-                    limit_price: None,
-                    size: Decimal::new(5, 0),
-                    size_unit: SizeUnit::Shares,
-                    tif: TimeInForce::Ioc,
-                    paper: false,
-                    origin: Origin::new(
-                        OriginKind::Automation,
-                        1,
-                        mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    )
-                    .unwrap(),
-                    quote_snapshot: quote_snap,
-                    caps_version: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    created_ts: ts(),
-                },
-            ),
+            g("intent_limit_buy", "OrderIntent", &oi1)?,
+            g("intent_market_sell", "OrderIntent", &oi2)?,
         ],
-    );
+    )?;
 
-    // ── RiskVerdict (2 vectors) ──
-    write_goldens(
+    write(
         out,
         "risk_verdict.json",
         &[
-            make_golden(
+            g(
                 "verdict_allow",
                 "RiskVerdict",
-                &RiskVerdict {
-                    intent_id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    verdict: RiskVerdictStatus::Allow,
+                &order::RiskVerdict {
+                    intent_id: u(),
+                    verdict: order::RiskVerdictStatus::Allow,
                     reasons: vec![],
-                    ts: ts(),
+                    ts: t,
                 },
-            ),
-            make_golden(
+            )?,
+            g(
                 "verdict_deny",
                 "RiskVerdict",
-                &RiskVerdict {
-                    intent_id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    verdict: RiskVerdictStatus::Deny,
-                    reasons: vec![RiskReason {
-                        code: RiskReasonCode::CapExceeded,
+                &order::RiskVerdict {
+                    intent_id: u(),
+                    verdict: order::RiskVerdictStatus::Deny,
+                    reasons: vec![order::RiskReason {
+                        code: order::RiskReasonCode::CapExceeded,
                         detail: "cap $500 < $1000".into(),
                     }],
-                    ts: ts(),
+                    ts: t,
                 },
-            ),
+            )?,
         ],
-    );
+    )?;
 
-    // ── Order + Fill (2 vectors each) ──
-    write_goldens(
+    write(
         out,
         "order.json",
         &[
-            make_golden(
+            g(
                 "order_live",
                 "Order",
-                &Order {
-                    order_id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    market: mk_key("mkt:kalshi:INTC-50"),
-                    side: Side::Buy,
-                    price: Decimal::new(66, 2),
-                    size: Decimal::new(10, 0),
-                    fee: mk_money(50, 2, "USD"),
-                    venue_ref: serde_json::json!({"order_ref": "kalshi-123"}),
-                    ts: ts(),
+                &order::Order {
+                    order_id: u(),
+                    market: mk_u("mkt:kalshi:INTC-50"),
+                    side: order::Side::Buy,
+                    price: dec(66, 2),
+                    size: dec(10, 0),
+                    fee: mm(50, 2, "USD"),
+                    venue_ref: jo(serde_json::json!({"order_ref":"kalshi-123"}))?,
+                    ts: t,
                     paper: false,
                 },
-            ),
-            make_golden(
+            )?,
+            g(
                 "order_paper",
                 "Order",
-                &Order {
-                    order_id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    market: mk_key("mkt:polymarket:TEST"),
-                    side: Side::Sell,
-                    price: Decimal::new(5050, 2),
-                    size: Decimal::new(5, 0),
-                    fee: mk_money(125, 3, "USDC"),
-                    venue_ref: serde_json::json!({"order_ref": "pm-456"}),
-                    ts: ts(),
+                &order::Order {
+                    order_id: u(),
+                    market: mk_u("mkt:polymarket:TEST"),
+                    side: order::Side::Sell,
+                    price: dec(5050, 2),
+                    size: dec(5, 0),
+                    fee: mm(125, 3, "USDC"),
+                    venue_ref: jo(serde_json::json!({"order_ref":"pm-456"}))?,
+                    ts: t,
                     paper: true,
                 },
-            ),
+            )?,
         ],
-    );
+    )?;
 
-    write_goldens(
+    write(
         out,
         "fill.json",
         &[
-            make_golden(
+            g(
                 "fill_partial",
                 "Fill",
-                &Fill {
-                    order_id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    market: mk_key("mkt:kalshi:INTC-50"),
-                    side: Side::Buy,
-                    price: Decimal::new(66, 2),
-                    size: Decimal::new(6, 0),
-                    fee: mk_money(30, 2, "USD"),
-                    venue_ref: serde_json::json!({"fill_ref": "kalshi-f-789"}),
-                    ts: ts(),
+                &order::Fill {
+                    order_id: u(),
+                    market: mk_u("mkt:kalshi:INTC-50"),
+                    side: order::Side::Buy,
+                    price: dec(66, 2),
+                    size: dec(6, 0),
+                    fee: mm(30, 2, "USD"),
+                    venue_ref: jo(serde_json::json!({"fill_ref":"kalshi-f-789"}))?,
+                    ts: t,
                     paper: false,
                 },
-            ),
-            make_golden(
+            )?,
+            g(
                 "fill_full",
                 "Fill",
-                &Fill {
-                    order_id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                    market: mk_key("mkt:polymarket:TEST"),
-                    side: Side::Sell,
-                    price: Decimal::new(5050, 2),
-                    size: Decimal::new(5, 0),
-                    fee: mk_money(125, 3, "USDC"),
-                    venue_ref: serde_json::json!({"fill_ref": "pm-f-012"}),
-                    ts: ts(),
+                &order::Fill {
+                    order_id: u(),
+                    market: mk_u("mkt:polymarket:TEST"),
+                    side: order::Side::Sell,
+                    price: dec(5050, 2),
+                    size: dec(5, 0),
+                    fee: mm(125, 3, "USDC"),
+                    venue_ref: jo(serde_json::json!({"fill_ref":"pm-f-012"}))?,
+                    ts: t,
                     paper: true,
                 },
-            ),
+            )?,
         ],
-    );
+    )?;
 
-    // ── Position (2 vectors) ──
-    write_goldens(
+    write(
         out,
         "position.json",
         &[
-            make_golden(
+            g(
                 "position_long",
                 "Position",
-                &Position {
-                    market: mk_key("mkt:kalshi:INTC-50"),
-                    side_exposure: Decimal::new(100, 0),
-                    avg_price: Decimal::new(65, 2),
-                    size: Decimal::new(10, 0),
-                    realized_pnl: mk_money(0, 0, "USD"),
-                    unrealized_pnl: mk_money(1000, 2, "USD"),
-                    ts: ts(),
+                &order::Position {
+                    market: mk_u("mkt:kalshi:INTC-50"),
+                    side_exposure: dec(100, 0),
+                    avg_price: dec(65, 2),
+                    size: dec(10, 0),
+                    realized_pnl: mm(0, 0, "USD"),
+                    unrealized_pnl: mm(1000, 2, "USD"),
+                    ts: t,
                 },
-            ),
-            make_golden(
+            )?,
+            g(
                 "position_flat",
                 "Position",
-                &Position {
-                    market: mk_key("mkt:polymarket:TEST"),
+                &order::Position {
+                    market: mk_u("mkt:polymarket:TEST"),
                     side_exposure: Decimal::ZERO,
                     avg_price: Decimal::ZERO,
                     size: Decimal::ZERO,
-                    realized_pnl: mk_money(-5000, 2, "USD"),
-                    unrealized_pnl: Money::zero("USD"),
-                    ts: ts(),
+                    realized_pnl: mm(-5000, 2, "USD"),
+                    unrealized_pnl: ids::Money::zero("USD"),
+                    ts: t,
                 },
-            ),
+            )?,
         ],
-    );
+    )?;
 
-    // ── CapsSnapshot (1 vector) ──
-    write_goldens(
+    write(
         out,
         "caps_snapshot.json",
-        &[make_golden(
+        &[g(
             "caps_default",
             "CapsSnapshot",
-            &CapsSnapshot {
-                version: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                per_order_max: mk_money(50000, 2, "USD"),
-                daily_max: mk_money(100000, 2, "USD"),
+            &order::CapsSnapshot {
+                version: u(),
+                per_order_max: mm(50000, 2, "USD"),
+                daily_max: mm(100000, 2, "USD"),
                 per_venue: serde_json::Map::new(),
                 per_kind: serde_json::Map::new(),
             },
-        )],
-    );
+        )?],
+    )?;
 
-    // ── Market (1 vector) ──
-    write_goldens(
+    write(
         out,
         "market.json",
-        &[make_golden(
+        &[g(
             "market_kalshi_open",
             "Market",
-            &Market {
-                key: mk_key("mkt:kalshi:BTC-75"),
-                venue: VenueId::new("kalshi"),
-                kind: InstrumentKind::BinaryContract,
+            &market::Market {
+                key: mk_u("mkt:kalshi:BTC-75"),
+                venue: v("kalshi")?,
+                kind: market::InstrumentKind::BinaryContract,
                 title: "BTC above $75k?".into(),
                 description_ref: "BTC-75K-JUL10".into(),
-                status: MarketStatus::Open,
+                status: market::MarketStatus::Open,
                 close_ts: None,
                 resolve_ts: None,
                 outcome: None,
                 jurisdiction_flags: vec!["US".into()],
-                venue_ref: aether_core::market::JsonObject::new(
-                    serde_json::json!({"ticker": "BTC-75K-JUL10"}),
-                )
-                .unwrap(),
-                meta: aether_core::market::JsonObject::new(
-                    serde_json::json!({"tick_size": "0.01"}),
-                )
-                .unwrap(),
+                venue_ref: jo(serde_json::json!({"ticker":"BTC-75K-JUL10"}))?,
+                meta: jo(serde_json::json!({"tick_size":"0.01"}))?,
             },
-        )],
-    );
+        )?],
+    )?;
 
-    // ── PriceSemantics (3 vectors) ──
-    write_goldens(
+    use market::DecimalString;
+    write(
         out,
         "price_semantics.json",
         &[
-            make_golden(
+            g(
                 "ps_probability",
                 "PriceSemantics",
-                &PriceSemantics::Probability {
-                    tick_size: aether_core::market::DecimalString::new("0.01").unwrap(),
-                },
-            ),
-            make_golden(
+                &market::PriceSemantics::Probability { tick_size: DecimalString::new("0.01")? },
+            )?,
+            g(
                 "ps_scalar",
                 "PriceSemantics",
-                &PriceSemantics::Scalar {
+                &market::PriceSemantics::Scalar {
                     unit: "points".into(),
-                    min: aether_core::market::DecimalString::new("0").unwrap(),
-                    max: aether_core::market::DecimalString::new("100").unwrap(),
+                    min: DecimalString::new("0")?,
+                    max: DecimalString::new("100")?,
                 },
-            ),
-            make_golden("ps_currency", "PriceSemantics", &PriceSemantics::Currency),
+            )?,
+            g("ps_currency", "PriceSemantics", &market::PriceSemantics::Currency)?,
         ],
-    );
+    )?;
 
-    // ── Opportunity (1 vector) ──
-    write_goldens(
+    write(
         out,
         "opportunity.json",
-        &[make_golden(
+        &[g(
             "opp_arbitrage",
             "Opportunity",
-            &Opportunity {
-                id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
-                kind: OpportunityKind::Arbitrage,
+            &opportunity::Opportunity {
+                id: u(),
+                kind: opportunity::OpportunityKind::Arbitrage,
                 legs: vec![
-                    OpportunityLeg {
-                        market: mk_key("mkt:kalshi:BTC-75"),
-                        side: Side::Buy,
-                        target_price: Some(Decimal::new(65, 2)),
-                        size_hint: Some(Decimal::new(10, 0)),
+                    opportunity::OpportunityLeg {
+                        market: mk_u("mkt:kalshi:BTC-75"),
+                        side: order::Side::Buy,
+                        target_price: Some(dec(65, 2)),
+                        size_hint: Some(dec(10, 0)),
                     },
-                    OpportunityLeg {
-                        market: mk_key("mkt:polymarket:WILL-BTC-TOUCH-100K"),
-                        side: Side::SellNo,
-                        target_price: Some(Decimal::new(68, 2)),
-                        size_hint: Some(Decimal::new(10, 0)),
+                    opportunity::OpportunityLeg {
+                        market: mk_u("mkt:polymarket:WILL-BTC-TOUCH-100K"),
+                        side: order::Side::SellNo,
+                        target_price: Some(dec(68, 2)),
+                        size_hint: Some(dec(10, 0)),
                     },
                 ],
-                gross_edge: Decimal::new(300, 2),
-                edge: EdgeDecomposition::compute(
-                    Decimal::new(300, 2),
-                    EdgeCosts {
-                        fees: Decimal::new(20, 2),
-                        slippage_est: Decimal::new(5, 2),
-                        funding_cost: Decimal::ZERO,
-                        gas_cost: Decimal::new(3, 2),
-                        bridge_cost: Decimal::ZERO,
-                        settlement_mismatch_discount: Decimal::ZERO,
-                        liquidity_haircut: Decimal::new(2, 2),
-                        staleness_penalty: Decimal::ZERO,
-                        confidence_penalty: Decimal::new(10, 2),
-                    },
+                gross_edge: dec(300, 2),
+                edge: opportunity::EdgeDecomposition::compute(
+                    dec(300, 2),
+                    ec(dec(20, 2), dec(5, 2), dec(3, 2), dec(2, 2), dec(10, 2)),
                 ),
-                confidence: Confidence::new(Decimal::new(8, 1)).unwrap(),
-                detected_ts: ts(),
+                confidence: decimal::Confidence::new(dec(8, 1))?,
+                detected_ts: t,
                 expires_ts: None,
-                explain_ref: BrainRef {
-                    object_id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+                explain_ref: opportunity::BrainRef {
+                    object_id: u(),
                     provenance_hash: "abc123def456".into(),
                 },
-                trace_id: mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+                trace_id: u(),
             },
-        )],
-    );
+        )?],
+    )?;
 
-    // ── AuditEvent (1 vector) ──
-    write_goldens(
+    write(
         out,
         "audit_event.json",
-        &[make_golden(
+        &[g(
             "audit_genesis",
             "AuditEvent",
-            &AuditEvent {
+            &audit::AuditEvent {
                 seq: 1,
                 prev_hash: String::new(),
                 hash: "sha256:abc123def456".into(),
-                ts: ts(),
+                ts: t,
                 actor: "system".into(),
                 action: "genesis".into(),
                 subject: "audit_chain".into(),
                 payload_hash: "sha256:000".into(),
             },
-        )],
-    );
+        )?],
+    )?;
 
-    // ── ErrorEnvelope (2 vectors) ──
-    write_goldens(
+    write(
         out,
         "error_envelope.json",
         &[
-            make_golden(
+            g(
                 "error_invalid",
                 "ErrorEnvelope",
-                &ErrorEnvelope::new(
-                    ErrorCode::InvalidArgument,
+                &error::ErrorEnvelope::new(
+                    error::ErrorCode::InvalidArgument,
                     "market key not found",
-                    mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+                    u(),
                 ),
-            ),
-            make_golden(
+            )?,
+            g(
                 "error_unavailable",
                 "ErrorEnvelope",
-                &ErrorEnvelope::new(
-                    ErrorCode::Unavailable,
+                &error::ErrorEnvelope::new(
+                    error::ErrorCode::Unavailable,
                     "venue not reachable",
-                    mk_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+                    u(),
                 ),
-            ),
+            )?,
         ],
-    );
+    )?;
 
     println!("Golden vectors generated in {out}");
-    println!("Files: money, market_key, confidence, edge, quote, order_book, order_intent, risk_verdict, order, fill, position, caps_snapshot, market, price_semantics, opportunity, audit_event, error_envelope");
+    Ok(())
 }

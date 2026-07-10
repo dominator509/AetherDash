@@ -10,6 +10,7 @@ pub mod canonical;
 pub mod decimal;
 pub mod error;
 pub mod ids;
+pub mod json;
 pub mod market;
 pub mod opportunity;
 pub mod order;

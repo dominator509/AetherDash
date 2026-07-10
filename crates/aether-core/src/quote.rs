@@ -139,7 +139,7 @@ mod tests {
     use rust_decimal::Decimal;
 
     fn mk_key() -> MarketKey {
-        MarketKey::new(&VenueId::new("kalshi"), "TEST-1")
+        MarketKey::new(&VenueId::new("kalshi").unwrap(), "TEST-1").unwrap()
     }
 
     fn ts() -> UtcTime {

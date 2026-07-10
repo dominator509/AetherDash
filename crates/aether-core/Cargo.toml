@@ -11,12 +11,12 @@ workspace = true
 
 [features]
 default = []
-golden_gen = []
+golden-gen = []
 
 [[bin]]
 name = "gen-goldens"
 path = "src/bin/gen-goldens.rs"
-required-features = ["golden_gen"]
+required-features = ["golden-gen"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

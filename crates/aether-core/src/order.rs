@@ -2,6 +2,7 @@
 
 use crate::decimal::{decimal_option_string, decimal_string};
 use crate::ids::{MarketKey, Money, Ulid};
+use crate::json::JsonObject;
 use crate::quote::Quote;
 use crate::time::UtcTime;
 use rust_decimal::Decimal;
@@ -186,7 +187,7 @@ pub struct Order {
     #[serde(with = "decimal_string")]
     pub size: Decimal,
     pub fee: Money,
-    pub venue_ref: serde_json::Value,
+    pub venue_ref: JsonObject,
     pub ts: UtcTime,
     pub paper: bool,
 }
@@ -203,7 +204,7 @@ pub struct Fill {
     #[serde(with = "decimal_string")]
     pub size: Decimal,
     pub fee: Money,
-    pub venue_ref: serde_json::Value,
+    pub venue_ref: JsonObject,
     pub ts: UtcTime,
     pub paper: bool,
 }
@@ -245,7 +246,7 @@ mod tests {
 
     #[allow(dead_code)]
     fn test_market_key() -> MarketKey {
-        MarketKey::new(&VenueId::new("kalshi"), "INTC-50")
+        MarketKey::new(&VenueId::new("kalshi").unwrap(), "INTC-50").unwrap()
     }
 
     #[allow(dead_code)]

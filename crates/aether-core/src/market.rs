@@ -125,38 +125,9 @@ impl<'de> Deserialize<'de> for PriceSemantics {
     }
 }
 
-/// A validated JSON object — rejects non-object values on deserialization.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct JsonObject(serde_json::Value);
-
-impl JsonObject {
-    pub fn new(value: serde_json::Value) -> Result<Self, JsonObjectError> {
-        if !value.is_object() {
-            return Err(JsonObjectError);
-        }
-        Ok(Self(value))
-    }
-    pub fn as_value(&self) -> &serde_json::Value {
-        &self.0
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("value must be a JSON object, not array/string/number/boolean/null")]
-pub struct JsonObjectError;
-
-impl Serialize for JsonObject {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        self.0.serialize(s)
-    }
-}
-
-impl<'de> Deserialize<'de> for JsonObject {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let v = serde_json::Value::deserialize(d)?;
-        JsonObject::new(v).map_err(serde::de::Error::custom)
-    }
-}
+// Re-export JsonObject from the shared json module (used by Market, Order, Fill)
+pub use crate::json::JsonObject;
+pub use crate::json::JsonObjectError;
 
 /// A trading market. SPEC-001: description_ref is NOT optional per spec.
 /// jurisdiction_flags is required (emit empty array, never omit).
@@ -203,7 +174,7 @@ mod tests {
     fn market_serde_includes_required_fields() {
         let m = Market {
             key: MarketKey::from_string_unchecked("mkt:kalshi:BTC-75"),
-            venue: VenueId::new("kalshi"),
+            venue: VenueId::new("kalshi").unwrap(),
             kind: InstrumentKind::BinaryContract,
             title: "BTC above $75k?".into(),
             description_ref: "BTC-75K-JUL10".into(),
