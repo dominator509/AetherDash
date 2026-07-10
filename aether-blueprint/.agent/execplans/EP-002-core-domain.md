@@ -47,8 +47,8 @@ Per-milestone commands above; plan-level: all three test suites green via `scrip
 Golden regeneration is explicit (`--features golden-gen`) and diff-reviewed - a changed golden is a canonical-bytes break and needs a Decision Log entry + downstream hash-impact note (none yet at this stage, which is why goldens land NOW). Type additions later follow SPEC-001's amendment rule.
 
 ## Progress
-- [ ] M1 Scalars  - [ ] M2 Market data  - [ ] M3 Orders  - [ ] M4 Opportunity
-- [ ] M5 Goldens  - [ ] M6 Proto  - [ ] M7 TS  - [ ] M8 Python
+- [x] M1 Scalars  - [x] M2 Market data  - [x] M3 Orders  - [x] M4 Opportunity
+- [x] M5 Goldens (vectors written, binary generator deferred)  - [x] M6 Proto  - [ ] M7 TS  - [ ] M8 Python
 
 ## Surprises & Discoveries
 (serde preserve_order + decimal formatting realities go here)
