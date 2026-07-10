@@ -1,0 +1,15 @@
+[project]
+name = "aether-py"
+version = "0.1.0"
+description = "AETHER Terminal — Python domain type mirrors"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependencies]
+pydantic = ">=2"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]

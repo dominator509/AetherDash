@@ -14,7 +14,8 @@
       "staleness_penalty": "0",
       "confidence_penalty": "0",
       "net_edge": "0.80"
-    }
+    },
+    "sha256": "c5c250456e7ca6701139d319c860cd698e5d9e79a512f53a4366df094037c5a9"
   },
   {
     "name": "edge_zero_net",
@@ -30,8 +31,9 @@
       "liquidity_haircut": "0.03",
       "staleness_penalty": "0",
       "confidence_penalty": "0",
-      "net_edge": "0"
-    }
+      "net_edge": "0.00"
+    },
+    "sha256": "ebfa70fef8d6b1b79a9b68ebdf6e1d078c0ca15e2fb26e2f7e5f2c6e2834d8cb"
   },
   {
     "name": "edge_explicit_zeros",
@@ -47,7 +49,8 @@
       "liquidity_haircut": "0.10",
       "staleness_penalty": "0",
       "confidence_penalty": "0",
-      "net_edge": "0"
-    }
+      "net_edge": "0.00"
+    },
+    "sha256": "e7602728c72eaff2dd4a9fa629a499cc7719d3ca4442203683ec5b75ab7fdae3"
   }
 ]

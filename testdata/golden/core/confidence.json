@@ -1,0 +1,20 @@
+[
+  {
+    "name": "confidence_zero",
+    "type": "Confidence",
+    "value": "0",
+    "sha256": "98089e6d36f78e9766c9ea34d5acb3611f3a92cd81c5eb102095d924ffc7d08b"
+  },
+  {
+    "name": "confidence_half",
+    "type": "Confidence",
+    "value": "0.5",
+    "sha256": "55a1a301b2e39a34ca61eee36a76e8c97ad7c2d71a91906baad643dcfc1f2928"
+  },
+  {
+    "name": "confidence_one",
+    "type": "Confidence",
+    "value": "1",
+    "sha256": "391552c099c101b131feaf24c5795a6a15bc8ec82015424e0d2b4274a369a0bf"
+  }
+]

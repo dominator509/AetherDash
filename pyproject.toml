@@ -8,7 +8,7 @@ license = { text = "AGPL-3.0-or-later" }
 [tool.uv.workspace]
 # EP-001: minimal workspace. Each EP appends its members when directories are created.
 # Expected layout: pylib, server/brain, server/llm_router, server/alerts, etc.
-members = []
+members = ["pylib"]
 
 [tool.ruff]
 target-version = "py311"
@@ -46,6 +46,14 @@ exclude = ["\\.venv", "target", "node_modules"]
 module = "server.*"
 disallow_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = "aether_py.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "aether_py.tests.*"
+disallow_untyped_defs = false
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["pylib", "server"]
@@ -62,4 +70,5 @@ dev = [
     "mypy>=1.10",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pydantic>=2",
 ]

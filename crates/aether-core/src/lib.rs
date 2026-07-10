@@ -6,6 +6,7 @@
 // all three planes (client, server, connectors).
 
 pub mod audit;
+pub mod canonical;
 pub mod decimal;
 pub mod error;
 pub mod ids;

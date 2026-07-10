@@ -25,12 +25,104 @@ pub enum MarketStatus {
     Resolved,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+/// PriceSemantics with validated decimal string fields.
+/// tick_size, min, max are decimal strings — validated on deserialization.
+#[derive(Debug, Clone, PartialEq)]
 pub enum PriceSemantics {
-    Probability { tick_size: String },
-    Scalar { unit: String, min: String, max: String },
+    Probability { tick_size: DecimalString },
+    Scalar { unit: String, min: DecimalString, max: DecimalString },
     Currency,
+}
+
+/// A validated decimal string — always parses as a valid Decimal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecimalString(String);
+
+impl DecimalString {
+    pub fn new(s: impl Into<String>) -> Result<Self, rust_decimal::Error> {
+        let s = s.into();
+        rust_decimal::Decimal::from_str_exact(&s)?;
+        Ok(Self(s))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Serialize for DecimalString {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for DecimalString {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        rust_decimal::Decimal::from_str_exact(&s)
+            .map_err(|e| serde::de::Error::custom(format!("invalid decimal string: {e}")))?;
+        Ok(Self(s))
+    }
+}
+
+// Custom serde for PriceSemantics through validation
+impl Serialize for PriceSemantics {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        match self {
+            PriceSemantics::Probability { tick_size } => {
+                let mut st = serializer.serialize_struct("PriceSemantics", 2)?;
+                st.serialize_field("kind", "probability")?;
+                st.serialize_field("tick_size", tick_size)?;
+                st.end()
+            }
+            PriceSemantics::Scalar { unit, min, max } => {
+                let mut st = serializer.serialize_struct("PriceSemantics", 4)?;
+                st.serialize_field("kind", "scalar")?;
+                st.serialize_field("unit", unit)?;
+                st.serialize_field("min", min)?;
+                st.serialize_field("max", max)?;
+                st.end()
+            }
+            PriceSemantics::Currency => {
+                let mut st = serializer.serialize_struct("PriceSemantics", 1)?;
+                st.serialize_field("kind", "currency")?;
+                st.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PriceSemantics {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Wire {
+            kind: String,
+            #[serde(default)]
+            tick_size: Option<DecimalString>,
+            #[serde(default)]
+            unit: Option<String>,
+            #[serde(default)]
+            min: Option<DecimalString>,
+            #[serde(default)]
+            max: Option<DecimalString>,
+        }
+        let w = Wire::deserialize(deserializer)?;
+        match w.kind.as_str() {
+            "probability" => Ok(PriceSemantics::Probability {
+                tick_size: w
+                    .tick_size
+                    .ok_or_else(|| serde::de::Error::missing_field("tick_size"))?,
+            }),
+            "scalar" => Ok(PriceSemantics::Scalar {
+                unit: w.unit.ok_or_else(|| serde::de::Error::missing_field("unit"))?,
+                min: w.min.ok_or_else(|| serde::de::Error::missing_field("min"))?,
+                max: w.max.ok_or_else(|| serde::de::Error::missing_field("max"))?,
+            }),
+            "currency" => Ok(PriceSemantics::Currency),
+            other => Err(serde::de::Error::custom(format!("unknown PriceSemantics kind: {other}"))),
+        }
+    }
 }
 
 /// A trading market. SPEC-001: description_ref is NOT optional per spec.

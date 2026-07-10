@@ -1,0 +1,38 @@
+[
+  {
+    "name": "money_usd",
+    "type": "Money",
+    "value": {
+      "amount": "123.45",
+      "currency": "USD"
+    },
+    "sha256": "844c77879c66bf0fdc54379a4a1e3e184b77d62af9e7649619323e8e116b0273"
+  },
+  {
+    "name": "money_zero",
+    "type": "Money",
+    "value": {
+      "amount": "0",
+      "currency": "USDC"
+    },
+    "sha256": "869e2aaaeb8c82beeaf7140ad9ba953a7cf36ac7631e1c943b3eb1f15ad52030"
+  },
+  {
+    "name": "money_negative",
+    "type": "Money",
+    "value": {
+      "amount": "-50.00",
+      "currency": "USD"
+    },
+    "sha256": "4ec97a079ed14c1a5f1c1fd2ed1ec96a637d8465e64161cd06d5383cba0b9fec"
+  },
+  {
+    "name": "money_18dec",
+    "type": "Money",
+    "value": {
+      "amount": "0.123456789012345678",
+      "currency": "BTC"
+    },
+    "sha256": "9b2b39c87627f54604b70a49e85ef682c5a352d8a532db28d90eaf68edbf6395"
+  }
+]

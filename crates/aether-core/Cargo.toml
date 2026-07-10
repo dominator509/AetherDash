@@ -9,6 +9,15 @@ license = "AGPL-3.0-or-later"
 [lints]
 workspace = true
 
+[features]
+default = []
+golden_gen = []
+
+[[bin]]
+name = "gen-goldens"
+path = "src/bin/gen-goldens.rs"
+required-features = ["golden_gen"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -16,6 +25,8 @@ rust_decimal = { version = "1", features = ["serde"] }
 ulid = { version = "1", features = ["serde"] }
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 thiserror = "2"
+sha2 = "0.10"
+hex = "0.4"
 
 [dev-dependencies]
 proptest = "1"

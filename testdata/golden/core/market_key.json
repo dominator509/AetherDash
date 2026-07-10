@@ -1,0 +1,14 @@
+[
+  {
+    "name": "market_key_kalshi",
+    "type": "MarketKey",
+    "value": "mkt:kalshi:BTC-75",
+    "sha256": "921877ef0e8748b8a4289ffa573bd35d821e13ce610b5ae0a09b94ecceacbd09"
+  },
+  {
+    "name": "market_key_polymarket",
+    "type": "MarketKey",
+    "value": "mkt:polymarket:WILL-BTC-TOUCH-100K",
+    "sha256": "fe6dc5189c781dcae585087683bb66869f9fae036de6252916b15942e4f10920"
+  }
+]
