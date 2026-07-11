@@ -1,25 +1,27 @@
 use crate::auth;
-use aether_core::{MarketKey, OrderType, Origin, OriginKind, Side, SizeUnit, TimeInForce, Ulid};
+use aether_core::{
+    MarketKey, OrderIntent, OrderType, Origin, OriginKind, Side, SizeUnit, TimeInForce, Ulid,
+    UtcTime,
+};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-// ── Client intent body (validated domain types) ──
+// ── Client-submitted order intent body (canonical shape, minus origin) ──
 
 fn default_paper() -> bool {
     true
 }
 
-/// Client-supplied order-intent payload. Every field uses the canonical
-/// aether_core domain type so invalid enums, malformed market keys, and
-/// bad decimal formats are rejected during deserialization or validation.
-///
-/// Origin is NEVER taken from the client body — it is always stamped from
-/// the authenticated session after validation succeeds.
-///
-/// `paper` defaults to `true`. Omitting it produces a paper-trade intent,
-/// never a live order.
+/// The client-submitted payload for an order intent. Matches the canonical
+/// `aether_core::OrderIntent` minus the `origin` field (which is stamped
+/// server-side from the authenticated session). Every field uses the canonical
+/// domain type so invalid enums, malformed market keys, and bad decimal formats
+/// are rejected during deserialization or validation.
 #[derive(Debug, Deserialize)]
-struct ClientIntentBody {
+struct ClientOrderIntentBody {
+    /// Optional client-suggested intent ID. Server generates one if missing.
+    #[serde(default)]
+    id: Option<String>,
     market: MarketKey,
     side: Side,
     order_type: OrderType,
@@ -30,13 +32,22 @@ struct ClientIntentBody {
     tif: TimeInForce,
     #[serde(default = "default_paper")]
     paper: bool,
+    /// Quote snapshot at intent-creation time. Required for the canonical
+    /// OrderIntent; the gateway accepts it from the client (stub — EP-401
+    /// will fetch from the market data service).
+    #[serde(default)]
+    quote_snapshot: Option<aether_core::Quote>,
+    /// Capability-set version. Client-supplied for now; EP-401 sources from DB.
+    #[serde(default)]
+    caps_version: Option<String>,
+    /// Creation timestamp (RFC3339). Client-supplied for now; EP-401 stamps
+    /// server-side.
+    #[serde(default)]
+    created_ts: Option<String>,
 }
 
-/// Gateway-validated order draft with stamped trusted origin.
-/// The gateway cannot populate quote_snapshot or caps_version — those are
-/// added downstream by the order service (EP-401).
-#[derive(Debug)]
-struct GatewayOrderDraft {
+/// Client-validated fields, ready for origin stamping into a canonical OrderIntent.
+struct ValidatedIntentFields {
     id: Ulid,
     market: MarketKey,
     side: Side,
@@ -46,21 +57,29 @@ struct GatewayOrderDraft {
     size_unit: SizeUnit,
     tif: TimeInForce,
     paper: bool,
-    origin: Origin,
+    quote_snapshot: aether_core::Quote,
+    caps_version: Ulid,
+    created_ts: UtcTime,
 }
 
-impl ClientIntentBody {
-    /// Validate decimal strings and semantic rules.
+impl ClientOrderIntentBody {
+    /// Validate decimal strings and semantic rules, producing validated fields
+    /// for constructing a canonical `aether_core::OrderIntent`.
     /// Error messages never echo client-controlled values per SPEC-006.
-    fn validate(self) -> Result<ValidatedFields, String> {
-        // Validate size: must be a positive decimal string
+    fn validate(self) -> Result<ValidatedIntentFields, String> {
+        let id = match self.id {
+            Some(ref s) if !s.is_empty() => {
+                Ulid::from_string(s).map_err(|_| "intent id must be a valid ULID".to_string())?
+            }
+            _ => Ulid::new(),
+        };
+
         let size = Decimal::from_str_exact(&self.size)
             .map_err(|_| "size must be a decimal string".to_string())?;
         if size <= Decimal::ZERO {
             return Err("size must be positive".to_string());
         }
 
-        // Validate limit_price if present
         let limit_price = self
             .limit_price
             .filter(|s| !s.is_empty())
@@ -70,7 +89,6 @@ impl ClientIntentBody {
             })
             .transpose()?;
 
-        // Semantic rules
         match self.order_type {
             OrderType::Limit => {
                 if limit_price.is_none() {
@@ -84,7 +102,36 @@ impl ClientIntentBody {
             }
         }
 
-        Ok(ValidatedFields {
+        // Stub quote_snapshot: accept from client or use a minimal placeholder.
+        // EP-401: the gateway will fetch a real quote from the market data service.
+        let quote_snapshot = self.quote_snapshot.unwrap_or_else(|| aether_core::Quote {
+            market: self.market.clone(),
+            bid: None,
+            ask: None,
+            mid: None,
+            last: None,
+            bid_size: None,
+            ask_size: None,
+            ts: UtcTime::now(),
+            source: aether_core::QuoteSource::Snapshot,
+            seq: None,
+        });
+
+        let caps_version = match self.caps_version {
+            Some(ref s) if !s.is_empty() => {
+                Ulid::from_string(s).map_err(|_| "caps_version must be a valid ULID".to_string())?
+            }
+            _ => Ulid::new(),
+        };
+
+        let created_ts = match self.created_ts {
+            Some(ref s) if !s.is_empty() => serde_json::from_str::<UtcTime>(&format!("\"{s}\""))
+                .map_err(|_| "created_ts must be an RFC3339 UTC timestamp".to_string())?,
+            _ => UtcTime::now(),
+        };
+
+        Ok(ValidatedIntentFields {
+            id,
             market: self.market,
             side: self.side,
             order_type: self.order_type,
@@ -93,20 +140,11 @@ impl ClientIntentBody {
             size_unit: self.size_unit,
             tif: self.tif,
             paper: self.paper,
+            quote_snapshot,
+            caps_version,
+            created_ts,
         })
     }
-}
-
-/// Client-validated fields, ready for origin stamping.
-struct ValidatedFields {
-    market: MarketKey,
-    side: Side,
-    order_type: OrderType,
-    limit_price: Option<Decimal>,
-    size: Decimal,
-    size_unit: SizeUnit,
-    tif: TimeInForce,
-    paper: bool,
 }
 
 // ── Client → Server frames ──
@@ -135,7 +173,6 @@ pub enum ClientFrame {
 // ── Server → Client frames ──
 // Several variants (FeedItem, Quote, OrderUpdate, Alert, Explain, Degradation)
 // are protocol contract definitions that will be constructed by EP-201/EP-305.
-// The test all_server_frame_variants_constructible proves they are constructible.
 #[allow(dead_code)]
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
@@ -193,19 +230,14 @@ fn session_origin_kind(kind: &str) -> Result<OriginKind, String> {
     }
 }
 
-/// Parse the session's actor identifier into a canonical Ulid.
-/// Falls back to generating a new Ulid for non-Ulid identifiers (stub tokens).
-fn parse_session_actor(session: &auth::SessionInfo) -> Ulid {
-    // Try origin.actor_id first, then session.actor_id
+/// Extract the canonical actor ULID from the authenticated session.
+/// Authentication state must contain a valid ULID; generating an unrelated
+/// ephemeral identity would break audit continuity. Reject the request if
+/// neither actor field is a valid ULID.
+fn parse_session_actor(session: &auth::SessionInfo) -> Result<Ulid, String> {
     Ulid::from_string(&session.origin.actor_id)
         .or_else(|_| Ulid::from_string(&session.actor_id))
-        .unwrap_or_else(|_| {
-            tracing::warn!(
-                actor_id = %session.actor_id,
-                "session actor_id is not a valid ULID; generating ephemeral id (EP-401: use real sessions)"
-            );
-            Ulid::new()
-        })
+        .map_err(|_| "authenticated session has no valid actor ULID".to_string())
 }
 
 /// Dispatch a client frame to its server-frame response.
@@ -253,17 +285,19 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
         ClientFrame::OrderIntent { id, trace_id, body } => {
             let trace_id = make_trace_id(&id, &trace_id);
 
-            // Phase 1: deserialize into domain types (rejects invalid enums,
-            // malformed market keys, missing mandatory fields).
-            let parsed: ClientIntentBody = match serde_json::from_value(body) {
+            // Phase 1: deserialize into domain types. Use a fixed safe message
+            // because serde errors for unknown enum variants can echo the
+            // rejected value (SPEC-006).
+            let parsed: ClientOrderIntentBody = match serde_json::from_value(body) {
                 Ok(p) => p,
-                Err(e) => {
+                Err(_e) => {
+                    tracing::debug!(error = %_e, "order_intent deserialization failed");
                     return ServerFrame::Error {
                         id,
                         trace_id,
                         body: aether_core::ErrorEnvelope::new(
                             aether_core::ErrorCode::InvalidArgument,
-                            format!("invalid order_intent: {e}"),
+                            "order intent contains invalid or missing fields",
                             Ulid::new(),
                         ),
                     };
@@ -302,8 +336,24 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }
             };
 
-            // Phase 4: stamp the canonical Origin from the authenticated session.
-            let actor_ulid = parse_session_actor(session);
+            // Phase 4: extract the authenticated actor ULID. If the session
+            // does not carry a canonical actor ULID, reject the request.
+            let actor_ulid = match parse_session_actor(session) {
+                Ok(ulid) => ulid,
+                Err(e) => {
+                    return ServerFrame::Error {
+                        id,
+                        trace_id,
+                        body: aether_core::ErrorEnvelope::new(
+                            aether_core::ErrorCode::Unauthenticated,
+                            e,
+                            Ulid::new(),
+                        ),
+                    };
+                }
+            };
+
+            // Phase 5: stamp the canonical Origin from the authenticated session.
             let origin = match Origin::new(origin_kind, session.tier, actor_ulid) {
                 Ok(o) => o,
                 Err(e) => {
@@ -319,12 +369,11 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }
             };
 
-            // Phase 5: construct the canonical gateway order draft with
-            // trusted origin. This object is passed into the confirmation
-            // workflow so downstream services receive a fully validated,
-            // origin-stamped intent.
-            let draft = GatewayOrderDraft {
-                id: Ulid::new(),
+            // Phase 6: construct the canonical aether_core::OrderIntent with
+            // the stamped trusted Origin. This is the single canonical intent
+            // type defined by SPEC-003 — not a gateway-local partial shape.
+            let intent = OrderIntent {
+                id: validated.id,
                 market: validated.market,
                 side: validated.side,
                 order_type: validated.order_type,
@@ -334,33 +383,42 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 tif: validated.tif,
                 paper: validated.paper,
                 origin,
+                quote_snapshot: validated.quote_snapshot,
+                caps_version: validated.caps_version,
+                created_ts: validated.created_ts,
             };
 
             let limit_str =
-                draft.limit_price.as_ref().map(|p| format!(" @{p}")).unwrap_or_default();
+                intent.limit_price.as_ref().map(|p| format!(" @{p}")).unwrap_or_default();
             let action_summary = format!(
                 "{order_type:?} {side:?} {size}{limit_str} {size_unit:?} {market} {tif:?} (paper={paper}) [id={id}]",
-                order_type = draft.order_type,
-                side = draft.side,
-                size = draft.size,
+                order_type = intent.order_type,
+                side = intent.side,
+                size = intent.size,
                 limit_str = limit_str,
-                size_unit = draft.size_unit,
-                market = draft.market,
-                tif = draft.tif,
-                paper = draft.paper,
-                id = draft.id,
+                size_unit = intent.size_unit,
+                market = intent.market,
+                tif = intent.tif,
+                paper = intent.paper,
+                id = intent.id,
             );
+
+            let tier_reason = if !intent.paper {
+                format!(
+                    "EP-401: live order requires tier-5 live authorization (caller tier {}) — not executed",
+                    session.tier
+                )
+            } else {
+                format!("EP-401: tier {} paper trade — allow-with-note", session.tier)
+            };
 
             ServerFrame::ConfirmRequired {
                 id,
                 trace_id,
                 ref_id: uuid::Uuid::new_v4().to_string(),
                 action_summary,
-                tier_reason: format!(
-                    "EP-401: tier {} not enforced yet — allow-with-note",
-                    session.tier
-                ),
-                actor_id: draft.origin.actor_id.to_string(),
+                tier_reason,
+                actor_id: intent.origin.actor_id.to_string(),
                 origin_kind: session.origin.kind.clone(),
             }
         }
@@ -390,14 +448,20 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
 mod tests {
     use super::*;
 
-    /// A valid minimal OrderIntent body payload — uses proper domain types.
+    /// A valid deterministic ULID for test actor identities.
+    const ACTOR_ALICE: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    const ACTOR_BOB: &str = "01ARZ3NDEKTSV4RRFFQ69G5FBF";
+    const ACTOR_SYSTEM: &str = "01ARZ3NDEKTSV4RRFFQ69G5FCF";
+
+    /// A valid minimal OrderIntent body payload — uses proper domain types
+    /// matching the canonical aether_core::OrderIntent minus origin.
     const VALID_INTENT_BODY: &str = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00"}"#;
 
     fn test_session() -> auth::SessionInfo {
         auth::SessionInfo {
-            actor_id: "alice".into(),
+            actor_id: ACTOR_ALICE.into(),
             tier: 3,
-            origin: auth::OriginInfo { kind: "user".into(), actor_id: "alice".into() },
+            origin: auth::OriginInfo { kind: "user".into(), actor_id: ACTOR_ALICE.into() },
         }
     }
 
@@ -521,8 +585,6 @@ mod tests {
 
     #[test]
     fn trace_id_distinct_from_client_id() {
-        // When both id and trace_id are provided and differ,
-        // trace_id must propagate the explicit trace_id value.
         let ping = r#"{"type":"ping","id":"req-123","trace_id":"trace-456"}"#;
         let frame: ClientFrame = serde_json::from_str(ping).unwrap();
         let response = dispatch(frame, &test_session());
@@ -557,15 +619,18 @@ mod tests {
     #[test]
     fn session_origin_stamped_on_order_intent() {
         let session = auth::SessionInfo {
-            actor_id: "bob".into(),
+            actor_id: ACTOR_BOB.into(),
             tier: 1,
-            origin: auth::OriginInfo { kind: "automation".into(), actor_id: "bob".into() },
+            origin: auth::OriginInfo { kind: "automation".into(), actor_id: ACTOR_BOB.into() },
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
-        assert!(json.contains("\"actor_id\""), "should contain actor_id: {json}");
+        assert!(
+            json.contains(&format!("\"actor_id\":\"{ACTOR_BOB}\"")),
+            "must contain the exact authenticated actor ULID: {json}"
+        );
         assert!(
             json.contains("\"origin_kind\":\"automation\""),
             "should contain origin_kind: {json}"
@@ -594,7 +659,10 @@ mod tests {
         assert!(json.contains("Market"), "missing order_type: {json}");
         assert!(json.contains("1.5"), "missing size: {json}");
         assert!(json.contains("Base"), "missing size_unit: {json}");
-        assert!(json.contains("\"actor_id\""), "origin should be stamped: {json}");
+        assert!(
+            json.contains(&format!("\"actor_id\":\"{ACTOR_ALICE}\"")),
+            "must contain exact authenticated actor ULID: {json}"
+        );
         assert!(json.contains("\"origin_kind\":\"user\""), "origin_kind should be session origin");
     }
 
@@ -606,14 +674,19 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "invalid body type should produce error: {json}");
         assert!(json.contains("invalid_argument"), "should use invalid_argument: {json}");
+        // Error message must not echo raw client input (SPEC-006)
+        assert!(
+            !json.contains("invalid order_intent:"),
+            "error must not echo serde detail: {json}"
+        );
     }
 
     #[test]
     fn order_intent_origin_never_from_client() {
         let session = auth::SessionInfo {
-            actor_id: "trusted-system".into(),
+            actor_id: ACTOR_SYSTEM.into(),
             tier: 4,
-            origin: auth::OriginInfo { kind: "agent".into(), actor_id: "trusted-system".into() },
+            origin: auth::OriginInfo { kind: "agent".into(), actor_id: ACTOR_SYSTEM.into() },
         };
         let body = r#"{"market":"mkt:kalshi:BTC-75","side":"sell","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"50000.00","extra_field":"ignored"}"#;
         let oi = make_intent(body);
@@ -621,10 +694,9 @@ mod tests {
         let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"origin_kind\":\"agent\""), "origin_kind from session: {json}");
-        assert!(json.contains("\"actor_id\""), "actor_id must be present: {json}");
         assert!(
-            !json.contains("trusted-system"),
-            "non-Ulid actor IDs must not appear as canonical actor_id: {json}"
+            json.contains(&format!("\"actor_id\":\"{ACTOR_SYSTEM}\"")),
+            "must contain exact authenticated actor ULID: {json}"
         );
         assert!(!json.contains("extra_field"), "unknown fields must not leak: {json}");
     }
@@ -633,7 +705,6 @@ mod tests {
 
     #[test]
     fn intent_paper_defaults_to_true() {
-        // Omitting paper should default to true (paper trade), never false (live).
         let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00"}"#;
         let oi = make_intent(body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -644,7 +715,7 @@ mod tests {
     }
 
     #[test]
-    fn intent_explicit_paper_false_accepted() {
+    fn intent_explicit_paper_false_accepted_with_warning() {
         let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","paper":false}"#;
         let oi = make_intent(body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -652,9 +723,75 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(
             json.contains("confirm_required"),
-            "explicit paper=false should be accepted: {json}"
+            "explicit paper=false should be accepted (stub): {json}"
         );
         assert!(json.contains("paper=false"), "explicit paper=false must be honored: {json}");
+        // Must carry explicit "requires live authorization" notice
+        assert!(
+            json.contains("live order requires tier-5 live authorization"),
+            "paper=false must document live auth requirement: {json}"
+        );
+    }
+
+    // ── Authenticated actor continuity ───────────────────────────────
+
+    #[test]
+    fn intent_stamps_exact_authenticated_actor() {
+        let session = auth::SessionInfo {
+            actor_id: ACTOR_BOB.into(),
+            tier: 3,
+            origin: auth::OriginInfo { kind: "user".into(), actor_id: ACTOR_BOB.into() },
+        };
+        let oi = make_intent(VALID_INTENT_BODY);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &session);
+        let json = serde_json::to_string(&response).unwrap();
+        // The actor_id in the response must be the exact authenticated ULID.
+        assert!(
+            json.contains(&format!("\"actor_id\":\"{ACTOR_BOB}\"")),
+            "must stamp exact authenticated actor ULID: {json}"
+        );
+    }
+
+    #[test]
+    fn intent_rejects_invalid_actor_ulid() {
+        // Session with a non-ULID actor_id must be rejected.
+        let session = auth::SessionInfo {
+            actor_id: "not-a-valid-ulid".into(),
+            tier: 3,
+            origin: auth::OriginInfo { kind: "user".into(), actor_id: "not-a-valid-ulid".into() },
+        };
+        let oi = make_intent(VALID_INTENT_BODY);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &session);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "non-ULID actor must be rejected: {json}");
+        assert!(
+            json.contains("unauthenticated"),
+            "must use unauthenticated code for invalid actor: {json}"
+        );
+    }
+
+    // ── Deserialization errors do not echo client input ──────────────
+
+    #[test]
+    fn intent_invalid_enum_value_does_not_leak_input() {
+        // Serde errors for unknown enum variants can include the rejected value.
+        // The error response must use a fixed safe message.
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"long","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "invalid side must error: {json}");
+        // Must NOT echo "long" (the rejected input) in the message
+        let msg_start = json.find("\"message\":\"").unwrap();
+        let msg_end = json[msg_start..].find("\",\"").unwrap() + msg_start + 1;
+        let message = &json[msg_start..msg_end];
+        assert!(
+            !message.contains("long"),
+            "error message must not echo rejected enum value: {message}"
+        );
     }
 
     // ── Adversarial: deserialization ─────────────────────────────────
@@ -741,9 +878,9 @@ mod tests {
     #[test]
     fn intent_client_supplied_origin_data_is_ignored() {
         let session = auth::SessionInfo {
-            actor_id: "real-user".into(),
+            actor_id: ACTOR_ALICE.into(),
             tier: 2,
-            origin: auth::OriginInfo { kind: "user".into(), actor_id: "real-user".into() },
+            origin: auth::OriginInfo { kind: "user".into(), actor_id: ACTOR_ALICE.into() },
         };
         let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","origin_kind":"attacker","actor_id":"evil"}"#;
         let oi = make_intent(body);
@@ -753,10 +890,9 @@ mod tests {
         assert!(!json.contains("attacker"), "client origin_kind must not leak: {json}");
         assert!(!json.contains("evil"), "client actor_id must not leak: {json}");
         assert!(json.contains("\"origin_kind\":\"user\""), "origin from session: {json}");
-        assert!(json.contains("\"actor_id\""), "actor_id must be present: {json}");
         assert!(
-            !json.contains("real-user"),
-            "non-Ulid actor IDs must not appear as canonical actor_id: {json}"
+            json.contains(&format!("\"actor_id\":\"{ACTOR_ALICE}\"")),
+            "must contain exact authenticated ULID: {json}"
         );
     }
 
@@ -818,9 +954,9 @@ mod tests {
     #[test]
     fn intent_unknown_origin_kind_is_error() {
         let session = auth::SessionInfo {
-            actor_id: "alice".into(),
+            actor_id: ACTOR_ALICE.into(),
             tier: 3,
-            origin: auth::OriginInfo { kind: "superuser".into(), actor_id: "alice".into() },
+            origin: auth::OriginInfo { kind: "superuser".into(), actor_id: ACTOR_ALICE.into() },
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -839,7 +975,6 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "malformed limit_price must error: {json}");
         assert!(json.contains("invalid_argument"), "got: {json}");
-        // Error message must not echo the raw input per SPEC-006
         assert!(!json.contains("xyz"), "error must not echo raw input: {json}");
     }
 
@@ -853,12 +988,31 @@ mod tests {
         assert!(json.contains("\"error\""), "empty size must error: {json}");
     }
 
+    // ── Canonical OrderIntent field coverage ─────────────────────────
+
+    #[test]
+    fn intent_accepts_full_canonical_shape() {
+        // All canonical OrderIntent fields except origin, as SPEC-003 defines.
+        let body = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","limit_price":"65000.00","size":"0.01","size_unit":"contracts","tif":"gtc","paper":true,"quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(
+            json.contains("confirm_required"),
+            "full canonical intent shape must be accepted: {json}"
+        );
+        // The stamped actor_id must be the exact authenticated ULID
+        assert!(
+            json.contains(&format!("\"actor_id\":\"{ACTOR_ALICE}\"")),
+            "must stamp exact actor: {json}"
+        );
+    }
+
     // ── Server frame coverage ────────────────────────────────────────
 
     #[test]
     fn all_server_frame_variants_constructible() {
-        // Ensure every ServerFrame variant can be constructed (silences
-        // dead-code warnings without broad allow annotations).
         let frames: Vec<ServerFrame> = vec![
             ServerFrame::FeedItem { id: None, trace_id: None, body: serde_json::json!({}) },
             ServerFrame::Quote { id: None, trace_id: None, body: serde_json::json!({}) },
