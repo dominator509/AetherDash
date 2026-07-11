@@ -4,13 +4,12 @@ Full implementations: EP-201 (brain), EP-202 (LLM), EP-203 (alerts)."""
 import tomllib
 from pathlib import Path
 
+from auth import AuthError, authenticate
+from error_envelope import ErrorCode, new_error_envelope
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
-from auth import AuthError, authenticate
-from error_envelope import ErrorCode, new_error_envelope
 
 app = FastAPI(title="AETHER MCP Server", version="0.1.0")
 
@@ -25,12 +24,21 @@ async def http_exception_handler(request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
-    """Convert FastAPI validation errors into ErrorEnvelope format."""
+    """Convert FastAPI validation errors into ErrorEnvelope format.
+    Returns only field/location metadata — never raw input values."""
+    sanitized = [
+        {
+            "loc": list(e.get("loc", [])),
+            "type": e.get("type", ""),
+        }
+        for e in exc.errors()
+    ]
     return JSONResponse(
         status_code=400,
         content=new_error_envelope(
             code=ErrorCode.invalid_argument,
-            message="Invalid request: " + str(exc.errors()),
+            message="Invalid request",
+            details=str(sanitized),
         ),
     )
 
@@ -88,7 +96,7 @@ async def healthz():
 async def list_tools(authorization: str | None = Header(None)):
     """List tools available to the authenticated session's tier."""
     try:
-        session = authenticate(authorization)
+        session = await authenticate(authorization)
     except AuthError as e:
         _abort(401, ErrorCode.unauthenticated, str(e))
 
@@ -100,7 +108,7 @@ async def list_tools(authorization: str | None = Header(None)):
 async def call_tool(tool_name: str, authorization: str | None = Header(None)):
     """Stub: echo back the tool name. Real implementations in EP-201+."""
     try:
-        session = authenticate(authorization)
+        session = await authenticate(authorization)
     except AuthError as e:
         _abort(401, ErrorCode.unauthenticated, str(e))
 
