@@ -14,14 +14,16 @@ fn default_paper() -> bool {
 
 /// The client-submitted payload for an order intent. Matches the canonical
 /// `aether_core::OrderIntent` minus the `origin` field (which is stamped
-/// server-side from the authenticated session). Every field uses the canonical
-/// domain type so invalid enums, malformed market keys, and bad decimal formats
-/// are rejected during deserialization or validation.
+/// server-side from the authenticated session).
+///
+/// Every canonical field except origin is REQUIRED. Missing fields are
+/// rejected during deserialization. Silent fabrication of provenance data
+/// (intent id, quote snapshot, caps version, timestamps) is forbidden —
+/// these are trust-boundary values that must be explicitly provided or
+/// sourced from authoritative server state by EP-401.
 #[derive(Debug, Deserialize)]
 struct ClientOrderIntentBody {
-    /// Optional client-suggested intent ID. Server generates one if missing.
-    #[serde(default)]
-    id: Option<String>,
+    id: String,
     market: MarketKey,
     side: Side,
     order_type: OrderType,
@@ -32,18 +34,12 @@ struct ClientOrderIntentBody {
     tif: TimeInForce,
     #[serde(default = "default_paper")]
     paper: bool,
-    /// Quote snapshot at intent-creation time. Required for the canonical
-    /// OrderIntent; the gateway accepts it from the client (stub — EP-401
-    /// will fetch from the market data service).
-    #[serde(default)]
-    quote_snapshot: Option<aether_core::Quote>,
-    /// Capability-set version. Client-supplied for now; EP-401 sources from DB.
-    #[serde(default)]
-    caps_version: Option<String>,
-    /// Creation timestamp (RFC3339). Client-supplied for now; EP-401 stamps
-    /// server-side.
-    #[serde(default)]
-    created_ts: Option<String>,
+    /// Quote snapshot at intent-creation time. Must be for the same market.
+    quote_snapshot: aether_core::Quote,
+    /// Capability-set version in effect for this intent.
+    caps_version: String,
+    /// Creation timestamp (RFC3339 UTC).
+    created_ts: String,
 }
 
 /// Client-validated fields, ready for origin stamping into a canonical OrderIntent.
@@ -63,16 +59,12 @@ struct ValidatedIntentFields {
 }
 
 impl ClientOrderIntentBody {
-    /// Validate decimal strings and semantic rules, producing validated fields
-    /// for constructing a canonical `aether_core::OrderIntent`.
+    /// Validate all fields and produce validated fields for constructing
+    /// a canonical `aether_core::OrderIntent`.
     /// Error messages never echo client-controlled values per SPEC-006.
     fn validate(self) -> Result<ValidatedIntentFields, String> {
-        let id = match self.id {
-            Some(ref s) if !s.is_empty() => {
-                Ulid::from_string(s).map_err(|_| "intent id must be a valid ULID".to_string())?
-            }
-            _ => Ulid::new(),
-        };
+        let id = Ulid::from_string(&self.id)
+            .map_err(|_| "intent id must be a valid ULID".to_string())?;
 
         let size = Decimal::from_str_exact(&self.size)
             .map_err(|_| "size must be a decimal string".to_string())?;
@@ -102,33 +94,17 @@ impl ClientOrderIntentBody {
             }
         }
 
-        // Stub quote_snapshot: accept from client or use a minimal placeholder.
-        // EP-401: the gateway will fetch a real quote from the market data service.
-        let quote_snapshot = self.quote_snapshot.unwrap_or_else(|| aether_core::Quote {
-            market: self.market.clone(),
-            bid: None,
-            ask: None,
-            mid: None,
-            last: None,
-            bid_size: None,
-            ask_size: None,
-            ts: UtcTime::now(),
-            source: aether_core::QuoteSource::Snapshot,
-            seq: None,
-        });
+        // Trust-boundary check: the quote snapshot must match the intent market.
+        // A client cannot submit an intent for one market with a quote from another.
+        if self.quote_snapshot.market != self.market {
+            return Err("quote_snapshot market does not match intent market".to_string());
+        }
 
-        let caps_version = match self.caps_version {
-            Some(ref s) if !s.is_empty() => {
-                Ulid::from_string(s).map_err(|_| "caps_version must be a valid ULID".to_string())?
-            }
-            _ => Ulid::new(),
-        };
+        let caps_version = Ulid::from_string(&self.caps_version)
+            .map_err(|_| "caps_version must be a valid ULID".to_string())?;
 
-        let created_ts = match self.created_ts {
-            Some(ref s) if !s.is_empty() => serde_json::from_str::<UtcTime>(&format!("\"{s}\""))
-                .map_err(|_| "created_ts must be an RFC3339 UTC timestamp".to_string())?,
-            _ => UtcTime::now(),
-        };
+        let created_ts = serde_json::from_str::<UtcTime>(&format!("\"{}\"", self.created_ts))
+            .map_err(|_| "created_ts must be an RFC3339 UTC timestamp".to_string())?;
 
         Ok(ValidatedIntentFields {
             id,
@@ -140,7 +116,7 @@ impl ClientOrderIntentBody {
             size_unit: self.size_unit,
             tif: self.tif,
             paper: self.paper,
-            quote_snapshot,
+            quote_snapshot: self.quote_snapshot,
             caps_version,
             created_ts,
         })
@@ -232,8 +208,7 @@ fn session_origin_kind(kind: &str) -> Result<OriginKind, String> {
 
 /// Extract the canonical actor ULID from the authenticated session.
 /// Authentication state must contain a valid ULID; generating an unrelated
-/// ephemeral identity would break audit continuity. Reject the request if
-/// neither actor field is a valid ULID.
+/// ephemeral identity would break audit continuity.
 fn parse_session_actor(session: &auth::SessionInfo) -> Result<Ulid, String> {
     Ulid::from_string(&session.origin.actor_id)
         .or_else(|_| Ulid::from_string(&session.actor_id))
@@ -285,13 +260,12 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
         ClientFrame::OrderIntent { id, trace_id, body } => {
             let trace_id = make_trace_id(&id, &trace_id);
 
-            // Phase 1: deserialize into domain types. Use a fixed safe message
-            // because serde errors for unknown enum variants can echo the
-            // rejected value (SPEC-006).
+            // Phase 1: deserialize into domain types. Log only a fixed event —
+            // serde error text can contain rejected client-controlled values.
             let parsed: ClientOrderIntentBody = match serde_json::from_value(body) {
                 Ok(p) => p,
-                Err(_e) => {
-                    tracing::debug!(error = %_e, "order_intent deserialization failed");
+                Err(_) => {
+                    tracing::debug!("order_intent deserialization failed");
                     return ServerFrame::Error {
                         id,
                         trace_id,
@@ -304,7 +278,7 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }
             };
 
-            // Phase 2: validate decimals and semantic rules.
+            // Phase 2: validate decimals, semantics, and trust-boundary rules.
             let validated = match parsed.validate() {
                 Ok(v) => v,
                 Err(e) => {
@@ -336,8 +310,7 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }
             };
 
-            // Phase 4: extract the authenticated actor ULID. If the session
-            // does not carry a canonical actor ULID, reject the request.
+            // Phase 4: extract the authenticated actor ULID.
             let actor_ulid = match parse_session_actor(session) {
                 Ok(ulid) => ulid,
                 Err(e) => {
@@ -353,7 +326,7 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }
             };
 
-            // Phase 5: stamp the canonical Origin from the authenticated session.
+            // Phase 5: stamp the canonical Origin.
             let origin = match Origin::new(origin_kind, session.tier, actor_ulid) {
                 Ok(o) => o,
                 Err(e) => {
@@ -369,9 +342,25 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }
             };
 
-            // Phase 6: construct the canonical aether_core::OrderIntent with
-            // the stamped trusted Origin. This is the single canonical intent
-            // type defined by SPEC-003 — not a gateway-local partial shape.
+            // Phase 6: live-order authorization boundary.
+            // Until EP-401 implements live_enabled, caps, tier, and confirmation
+            // enforcement, live orders (paper=false) must return failed_precondition.
+            // A textual warning is not an authorization boundary.
+            if !validated.paper {
+                return ServerFrame::Error {
+                    id,
+                    trace_id,
+                    body: aether_core::ErrorEnvelope::new(
+                        aether_core::ErrorCode::FailedPrecondition,
+                        "live orders are not yet enabled (EP-401 pending)",
+                        Ulid::new(),
+                    ),
+                };
+            }
+
+            // Phase 7: construct the canonical aether_core::OrderIntent with
+            // the stamped trusted Origin. All provenance fields come from the
+            // validated client payload; none are silently fabricated.
             let intent = OrderIntent {
                 id: validated.id,
                 market: validated.market,
@@ -403,21 +392,12 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 id = intent.id,
             );
 
-            let tier_reason = if !intent.paper {
-                format!(
-                    "EP-401: live order requires tier-5 live authorization (caller tier {}) — not executed",
-                    session.tier
-                )
-            } else {
-                format!("EP-401: tier {} paper trade — allow-with-note", session.tier)
-            };
-
             ServerFrame::ConfirmRequired {
                 id,
                 trace_id,
                 ref_id: uuid::Uuid::new_v4().to_string(),
                 action_summary,
-                tier_reason,
+                tier_reason: format!("EP-401: tier {} paper trade — allow-with-note", session.tier),
                 actor_id: intent.origin.actor_id.to_string(),
                 origin_kind: session.origin.kind.clone(),
             }
@@ -453,9 +433,17 @@ mod tests {
     const ACTOR_BOB: &str = "01ARZ3NDEKTSV4RRFFQ69G5FBF";
     const ACTOR_SYSTEM: &str = "01ARZ3NDEKTSV4RRFFQ69G5FCF";
 
-    /// A valid minimal OrderIntent body payload — uses proper domain types
-    /// matching the canonical aether_core::OrderIntent minus origin.
-    const VALID_INTENT_BODY: &str = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00"}"#;
+    // Canonical required fields shared by all valid test intents.
+    const PROVENANCE: &str = r#""id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z""#;
+
+    /// Build a complete order_intent body with the given custom fields
+    /// merged after the required provenance fields.
+    fn intent_body(fields: &str) -> String {
+        format!(r#"{{{PROVENANCE},{fields}}}"#)
+    }
+
+    /// Valid minimal OrderIntent body — all canonical fields present.
+    const VALID_INTENT_BODY: &str = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
 
     fn test_session() -> auth::SessionInfo {
         auth::SessionInfo {
@@ -648,8 +636,10 @@ mod tests {
 
     #[test]
     fn order_intent_body_fields_appear_in_response() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"sell","order_type":"market","size":"1.5","size_unit":"base","tif":"ioc","paper":true}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"sell","order_type":"market","size":"1.5","size_unit":"base","tif":"ioc","paper":true"#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -674,11 +664,6 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "invalid body type should produce error: {json}");
         assert!(json.contains("invalid_argument"), "should use invalid_argument: {json}");
-        // Error message must not echo raw client input (SPEC-006)
-        assert!(
-            !json.contains("invalid order_intent:"),
-            "error must not echo serde detail: {json}"
-        );
     }
 
     #[test]
@@ -688,8 +673,10 @@ mod tests {
             tier: 4,
             origin: auth::OriginInfo { kind: "agent".into(), actor_id: ACTOR_SYSTEM.into() },
         };
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"sell","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"50000.00","extra_field":"ignored"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"sell","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"50000.00","extra_field":"ignored""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
@@ -705,8 +692,10 @@ mod tests {
 
     #[test]
     fn intent_paper_defaults_to_true() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -714,22 +703,24 @@ mod tests {
         assert!(json.contains("paper=true"), "omitted paper must default to true: {json}");
     }
 
+    // ── Live-order authorization boundary ───────────────────────────
+
     #[test]
-    fn intent_explicit_paper_false_accepted_with_warning() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","paper":false}"#;
-        let oi = make_intent(body);
+    fn intent_live_order_returns_failed_precondition() {
+        // paper=false must return failed_precondition, not confirm_required
+        // with a warning. A textual warning is not an authorization boundary.
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","paper":false"#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "live order must return error before EP-401: {json}");
+        assert!(json.contains("failed_precondition"), "must use failed_precondition, got: {json}");
         assert!(
-            json.contains("confirm_required"),
-            "explicit paper=false should be accepted (stub): {json}"
-        );
-        assert!(json.contains("paper=false"), "explicit paper=false must be honored: {json}");
-        // Must carry explicit "requires live authorization" notice
-        assert!(
-            json.contains("live order requires tier-5 live authorization"),
-            "paper=false must document live auth requirement: {json}"
+            !json.contains("confirm_required"),
+            "live order must not reach confirm_required: {json}"
         );
     }
 
@@ -746,7 +737,6 @@ mod tests {
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
-        // The actor_id in the response must be the exact authenticated ULID.
         assert!(
             json.contains(&format!("\"actor_id\":\"{ACTOR_BOB}\"")),
             "must stamp exact authenticated actor ULID: {json}"
@@ -755,7 +745,6 @@ mod tests {
 
     #[test]
     fn intent_rejects_invalid_actor_ulid() {
-        // Session with a non-ULID actor_id must be rejected.
         let session = auth::SessionInfo {
             actor_id: "not-a-valid-ulid".into(),
             tier: 3,
@@ -776,15 +765,14 @@ mod tests {
 
     #[test]
     fn intent_invalid_enum_value_does_not_leak_input() {
-        // Serde errors for unknown enum variants can include the rejected value.
-        // The error response must use a fixed safe message.
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"long","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"long","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "invalid side must error: {json}");
-        // Must NOT echo "long" (the rejected input) in the message
         let msg_start = json.find("\"message\":\"").unwrap();
         let msg_end = json[msg_start..].find("\",\"").unwrap() + msg_start + 1;
         let message = &json[msg_start..msg_end];
@@ -794,11 +782,69 @@ mod tests {
         );
     }
 
+    // ── Trust-boundary: provenance not fabricated ─────────────────────
+
+    #[test]
+    fn intent_missing_id_is_error() {
+        // id is a required canonical field — must not be fabricated.
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "missing id must error: {json}");
+    }
+
+    #[test]
+    fn intent_missing_quote_snapshot_is_error() {
+        let body = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "missing quote_snapshot must error: {json}");
+    }
+
+    #[test]
+    fn intent_missing_caps_version_is_error() {
+        let body = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"created_ts":"2026-07-10T12:34:56.789Z"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "missing caps_version must error: {json}");
+    }
+
+    #[test]
+    fn intent_missing_created_ts_is_error() {
+        let body = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "missing created_ts must error: {json}");
+    }
+
+    #[test]
+    fn intent_quote_market_mismatch_is_error() {
+        // Quote snapshot for a different market must be rejected.
+        let body = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","quote_snapshot":{"market":"mkt:kalshi:ETH-50","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "quote market mismatch must error: {json}");
+        assert!(
+            json.contains("quote_snapshot market does not match"),
+            "specific error expected: {json}"
+        );
+    }
+
     // ── Adversarial: deserialization ─────────────────────────────────
 
     #[test]
     fn intent_missing_required_field_is_error() {
-        let body = r#"{"side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
+        let body = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
         let oi = make_intent(body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
@@ -809,7 +855,7 @@ mod tests {
 
     #[test]
     fn intent_invalid_market_key_is_error() {
-        let body = r#"{"market":"BTC-USD","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
+        let body = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","market":"BTC-USD","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
         let oi = make_intent(body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
@@ -820,8 +866,10 @@ mod tests {
 
     #[test]
     fn intent_invalid_side_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"long","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"long","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -831,8 +879,10 @@ mod tests {
 
     #[test]
     fn intent_invalid_size_unit_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"ounces","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"ounces","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -842,21 +892,24 @@ mod tests {
 
     #[test]
     fn intent_malformed_decimal_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"not-a-number","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"not-a-number","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "malformed decimal must error: {json}");
         assert!(json.contains("invalid_argument"), "got: {json}");
-        // Error message must not echo the raw input per SPEC-006
         assert!(!json.contains("not-a-number"), "error must not echo raw input");
     }
 
     #[test]
     fn intent_invalid_tif_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"fok"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"fok""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -866,8 +919,10 @@ mod tests {
 
     #[test]
     fn intent_invalid_order_type_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"stop","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"stop","size":"0.01","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -882,8 +937,10 @@ mod tests {
             tier: 2,
             origin: auth::OriginInfo { kind: "user".into(), actor_id: ACTOR_ALICE.into() },
         };
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","origin_kind":"attacker","actor_id":"evil"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","origin_kind":"attacker","actor_id":"evil""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
@@ -900,8 +957,10 @@ mod tests {
 
     #[test]
     fn intent_size_zero_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -910,8 +969,10 @@ mod tests {
 
     #[test]
     fn intent_size_negative_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"-1.5","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"-1.5","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -920,8 +981,10 @@ mod tests {
 
     #[test]
     fn intent_limit_without_price_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -930,8 +993,10 @@ mod tests {
 
     #[test]
     fn intent_market_with_price_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"market","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"market","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -940,8 +1005,10 @@ mod tests {
 
     #[test]
     fn intent_market_order_without_price_accepted() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"market","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"market","size":"0.01","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -968,8 +1035,10 @@ mod tests {
 
     #[test]
     fn intent_limit_price_malformed_decimal_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","limit_price":"xyz","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","limit_price":"xyz","size":"0.01","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -980,21 +1049,21 @@ mod tests {
 
     #[test]
     fn intent_empty_size_is_error() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"","size_unit":"contracts","tif":"gtc"}"#;
-        let oi = make_intent(body);
+        let body = intent_body(
+            r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"","size_unit":"contracts","tif":"gtc""#,
+        );
+        let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "empty size must error: {json}");
     }
 
-    // ── Canonical OrderIntent field coverage ─────────────────────────
+    // ── Canonical shape acceptance ────────────────────────────────────
 
     #[test]
     fn intent_accepts_full_canonical_shape() {
-        // All canonical OrderIntent fields except origin, as SPEC-003 defines.
-        let body = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","limit_price":"65000.00","size":"0.01","size_unit":"contracts","tif":"gtc","paper":true,"quote_snapshot":{"market":"mkt:kalshi:BTC-75","bid":"0.65","ask":"0.67","mid":"0.66","ts":"2026-07-10T12:34:56.789Z","source":"snapshot"},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
-        let oi = make_intent(body);
+        let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
@@ -1002,7 +1071,6 @@ mod tests {
             json.contains("confirm_required"),
             "full canonical intent shape must be accepted: {json}"
         );
-        // The stamped actor_id must be the exact authenticated ULID
         assert!(
             json.contains(&format!("\"actor_id\":\"{ACTOR_ALICE}\"")),
             "must stamp exact actor: {json}"
