@@ -96,7 +96,7 @@ async def healthz():
 async def list_tools(authorization: str | None = Header(None)):
     """List tools available to the authenticated session's tier."""
     try:
-        session = authenticate(authorization)
+        session = await authenticate(authorization)
     except AuthError as e:
         _abort(401, ErrorCode.unauthenticated, str(e))
 
@@ -108,7 +108,7 @@ async def list_tools(authorization: str | None = Header(None)):
 async def call_tool(tool_name: str, authorization: str | None = Header(None)):
     """Stub: echo back the tool name. Real implementations in EP-201+."""
     try:
-        session = authenticate(authorization)
+        session = await authenticate(authorization)
     except AuthError as e:
         _abort(401, ErrorCode.unauthenticated, str(e))
 
