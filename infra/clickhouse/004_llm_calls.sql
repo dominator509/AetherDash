@@ -1,6 +1,6 @@
 -- SPEC-002: LLM call audit -- 180d TTL, cost metrics source for OBSERVABILITY.md
 CREATE TABLE IF NOT EXISTS llm_calls (
-    ts DateTime64(3),
+    ts DateTime,
     provider LowCardinality(String),
     model LowCardinality(String),
     purpose LowCardinality(String),

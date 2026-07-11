@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS md_ticks (
     venue String,
     market_key String,
-    ts DateTime64(6),
+    ts DateTime,
     bid Nullable(String),
     ask Nullable(String),
     mid Nullable(String),

@@ -4,19 +4,28 @@ set -euo pipefail
 
 CH_URL="${AETHER_CLICKHOUSE__URL:-http://localhost:8123}"
 CH_DB="${AETHER_CLICKHOUSE__DATABASE:-aether}"
-CH_AUTH="${AETHER_CLICKHOUSE__USER:-aether}:${AETHER_CLICKHOUSE__PASSWORD:-aether}"
-CURL="curl -fsS -u \"$CH_AUTH\" \"$CH_URL\""
+CH_USER="${AETHER_CLICKHOUSE__USER:-aether}"
+CH_PASS="${AETHER_CLICKHOUSE__PASSWORD:-aether}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Create database if not exists
-$CURL --data-binary "CREATE DATABASE IF NOT EXISTS ${CH_DB}" >/dev/null 2>&1
+curl -fsS -u "${CH_USER}:${CH_PASS}" "${CH_URL}" \
+    --data-binary "CREATE DATABASE IF NOT EXISTS ${CH_DB}" >/dev/null
 
 echo "Applying ClickHouse DDL to ${CH_URL} database=${CH_DB} ..."
 for f in "$SCRIPT_DIR"/*.sql; do
     if [ -f "$f" ]; then
         echo "  $(basename "$f")"
-        $CURL --data-binary "@${f}" >/dev/null
+        # Strip `--` comments and split on `;` — ClickHouse HTTP API
+        # requires one statement per request and does not support comments.
+        sed '/^--/d' "$f" | tr '\n' ' ' | sed 's/;/;\n/g' | while IFS= read -r stmt; do
+            stmt="$(echo "$stmt" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            if [ -n "$stmt" ] && [ "$stmt" != ";" ]; then
+                curl -fsS -u "${CH_USER}:${CH_PASS}" "${CH_URL}" \
+                    --data-binary "${stmt}" >/dev/null
+            fi
+        done
     fi
 done
 echo "ClickHouse DDL complete."
