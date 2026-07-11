@@ -17,9 +17,9 @@ use aether_bus::producer::StubProducer;
 use aether_bus::quarantine::{Quarantine, QuarantineMessage};
 use sha2::Digest;
 
-#[test]
+#[tokio::test]
 #[ignore = "requires AETHER_INTEGRATION_TEST=1"]
-fn quarantine_publish_and_consume_roundtrip() {
+async fn quarantine_publish_and_consume_roundtrip() {
     if std::env::var("AETHER_INTEGRATION_TEST").unwrap_or_default() != "1" {
         eprintln!("SKIP: set AETHER_INTEGRATION_TEST=1 to run");
         return;
@@ -31,8 +31,9 @@ fn quarantine_publish_and_consume_roundtrip() {
 
     // ── Step 1: Publish via StubProducer ──────────────────────────
     let producer = StubProducer::new();
-    let hash =
-        Quarantine::publish(&producer, venue, reason, raw_payload).expect("publish should succeed");
+    let hash = Quarantine::publish(&producer, venue, reason, raw_payload)
+        .await
+        .expect("publish should succeed");
 
     // ── Step 2: Verify topic ─────────────────────────────────────
     {
@@ -58,8 +59,10 @@ fn quarantine_publish_and_consume_roundtrip() {
 
     // ── Step 4: Consume via StubConsumer ─────────────────────────
     let consumer = StubConsumer::new(Arc::clone(&producer.sent));
-    let envelopes: Vec<Envelope<QuarantineMessage>> =
-        consumer.consume::<QuarantineMessage>().expect("consume should succeed");
+    let envelopes: Vec<Envelope<QuarantineMessage>> = consumer
+        .consume::<QuarantineMessage>(&["quarantine.kalshi"])
+        .await
+        .expect("consume should succeed");
 
     assert_eq!(envelopes.len(), 1, "exactly one envelope expected");
 

@@ -22,8 +22,7 @@ pub struct OriginInfo {
 /// Panics if the pool cannot be created (e.g., invalid URL).
 #[allow(clippy::expect_used)]
 pub fn init_db_pool(database_url: &str) -> PgPool {
-    PgPool::connect_lazy(database_url)
-        .expect("failed to create Postgres connection pool")
+    PgPool::connect_lazy(database_url).expect("failed to create Postgres connection pool")
 }
 
 /// Validate a bearer token and return session info.
@@ -50,10 +49,7 @@ pub async fn validate_token(
         return Ok(SessionInfo {
             actor_id: actor_id.clone(),
             tier: 3, // Stub: tier 3 for test tokens (can access paper)
-            origin: OriginInfo {
-                kind: "user".into(),
-                actor_id,
-            },
+            origin: OriginInfo { kind: "user".into(), actor_id },
         });
     }
 
@@ -72,10 +68,7 @@ pub async fn validate_token(
             return Ok(SessionInfo {
                 actor_id: aid,
                 tier: tier as u8,
-                origin: OriginInfo {
-                    kind: origin_kind,
-                    actor_id,
-                },
+                origin: OriginInfo { kind: origin_kind, actor_id },
             });
         }
     }

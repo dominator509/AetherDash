@@ -41,7 +41,7 @@ impl Quarantine {
     /// wraps it in an [`Envelope`] with schema `aether.quarantine.v1`,
     /// and sends it via the given producer to `quarantine.{venue}`.
     /// Returns the SHA-256 hex hash of the raw payload on success.
-    pub fn publish<P: MessageProducer>(
+    pub async fn publish<P: MessageProducer>(
         producer: &P,
         venue: &str,
         reason: &str,
@@ -51,7 +51,7 @@ impl Quarantine {
         let hash = msg.raw_hash.clone();
         let envelope = Envelope::new("quarantine", msg);
         let topic = Self::topic_for(venue);
-        producer.send(&topic, envelope)?;
+        producer.send(&topic, envelope).await?;
         Ok(hash)
     }
 }
@@ -166,11 +166,12 @@ impl QuarantineStorage {
 /// the serialized envelopes in MinIO for forensic preservation.
 ///
 /// Returns the number of messages processed.
-pub fn quarantine_consume_and_store<C: MessageConsumer>(
+pub async fn quarantine_consume_and_store<C: MessageConsumer>(
     consumer: &C,
     storage: &QuarantineStorage,
+    topics: &[&str],
 ) -> Result<usize, QuarantineError> {
-    let envelopes = consumer.consume::<QuarantineMessage>()?;
+    let envelopes = consumer.consume::<QuarantineMessage>(topics).await?;
 
     let count = envelopes.len();
     for envelope in &envelopes {
@@ -212,10 +213,10 @@ mod tests {
         assert_eq!(Quarantine::topic_for("polymarket"), "quarantine.polymarket");
     }
 
-    #[test]
-    fn quarantine_publish_sends_to_correct_topic() {
+    #[tokio::test]
+    async fn quarantine_publish_sends_to_correct_topic() {
         let producer = StubProducer::new();
-        let hash = Quarantine::publish(&producer, "kalshi", "bad json", b"garbage").unwrap();
+        let hash = Quarantine::publish(&producer, "kalshi", "bad json", b"garbage").await.unwrap();
 
         let sent = producer.sent.lock().unwrap();
         assert_eq!(sent.len(), 1);
@@ -227,10 +228,10 @@ mod tests {
         assert_eq!(hash, expected);
     }
 
-    #[test]
-    fn quarantine_publish_envelope_schema() {
+    #[tokio::test]
+    async fn quarantine_publish_envelope_schema() {
         let producer = StubProducer::new();
-        let _ = Quarantine::publish(&producer, "kalshi", "bad json", b"garbage").unwrap();
+        let _ = Quarantine::publish(&producer, "kalshi", "bad json", b"garbage").await.unwrap();
 
         let sent = producer.sent.lock().unwrap();
         let json = &sent[0].1;
@@ -238,14 +239,17 @@ mod tests {
         assert_eq!(envelope["schema"], "aether.quarantine.v1");
     }
 
-    #[test]
-    fn quarantine_consume_returns_envelopes() {
+    #[tokio::test]
+    async fn quarantine_consume_returns_envelopes() {
         let producer = StubProducer::new();
-        Quarantine::publish(&producer, "kalshi", "bad json", b"garbage").unwrap();
-        Quarantine::publish(&producer, "polymarket", "no payload", b"trash").unwrap();
+        Quarantine::publish(&producer, "kalshi", "bad json", b"garbage").await.unwrap();
+        Quarantine::publish(&producer, "polymarket", "no payload", b"trash").await.unwrap();
 
         let consumer = StubConsumer::new(producer.sent.clone());
-        let envelopes = consumer.consume::<QuarantineMessage>().unwrap();
+        let envelopes = consumer
+            .consume::<QuarantineMessage>(&["quarantine.kalshi", "quarantine.polymarket"])
+            .await
+            .unwrap();
 
         assert_eq!(envelopes.len(), 2);
         assert_eq!(envelopes[0].schema, "aether.quarantine.v1");

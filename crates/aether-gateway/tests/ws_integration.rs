@@ -22,15 +22,14 @@ type WsStream = WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::Tc
 
 /// Start the gateway on a random port and return the bound address.
 async fn start_gateway() -> String {
-    let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://aether:aether@localhost:5432/aether".into());
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://aether:aether@localhost:5432/aether".into());
     let pool = aether_gateway::auth::init_db_pool(&database_url);
     let state = aether_gateway::AppState { pool };
     let app = aether_gateway::build_router(state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("failed to bind to random port");
+    let listener =
+        tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("failed to bind to random port");
     let addr = listener.local_addr().unwrap();
     let addr_str = format!("127.0.0.1:{}", addr.port());
 
@@ -57,10 +56,7 @@ async fn recv_frame(socket: &mut WsStream) -> String {
 
 /// Send a JSON text frame.
 async fn send_frame(socket: &mut WsStream, json: &str) {
-    socket
-        .send(Message::Text(json.to_string()))
-        .await
-        .unwrap();
+    socket.send(Message::Text(json.to_string())).await.unwrap();
 }
 
 #[test]
@@ -85,15 +81,11 @@ fn ws_ping_pong() {
         let ping = r#"{"type":"ping","id":"p1"}"#;
         send_frame(&mut socket, ping).await;
         let response = recv_frame(&mut socket).await;
-        assert!(
-            response.contains("\"pong\""),
-            "expected pong, got: {response}"
-        );
+        assert!(response.contains("\"pong\""), "expected pong, got: {response}");
         assert!(response.contains("\"id\":\"p1\""));
 
         // --- Subscribe -> command_result ---
-        let subscribe =
-            r#"{"type":"subscribe","id":"s1","channels":["quotes:mkt:kalshi:BTC-75"]}"#;
+        let subscribe = r#"{"type":"subscribe","id":"s1","channels":["quotes:mkt:kalshi:BTC-75"]}"#;
         send_frame(&mut socket, subscribe).await;
         let response = recv_frame(&mut socket).await;
         assert!(

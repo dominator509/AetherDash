@@ -1,9 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use axum::{
-    extract::State,
-    response::Json,
-};
+use axum::{extract::State, response::Json};
 use serde::Serialize;
 
 use crate::AppState;
@@ -25,19 +22,13 @@ pub struct ReadinessResponse {
 
 /// Liveness probe — always returns "ok" as long as the process is alive.
 pub async fn healthz() -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok".into(),
-        service: "gateway".into(),
-    })
+    Json(HealthResponse { status: "ok".into(), service: "gateway".into() })
 }
 
 /// Readiness probe — checks Postgres connectivity before declaring ready.
 /// Returns "ok" if DB is reachable, "degraded" if not.
 pub async fn readyz(State(state): State<AppState>) -> Json<ReadinessResponse> {
-    let db_status = match sqlx::query_scalar::<_, i32>("SELECT 1")
-        .fetch_one(&state.pool)
-        .await
-    {
+    let db_status = match sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&state.pool).await {
         Ok(1) => "ok".to_string(),
         Ok(_) => "degraded".to_string(),
         Err(_) => "unreachable".to_string(),

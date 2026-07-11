@@ -31,9 +31,7 @@ impl Default for StubProducer {
 }
 impl StubProducer {
     pub fn new() -> Self {
-        Self {
-            sent: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
-        }
+        Self { sent: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())) }
     }
 }
 impl MessageProducer for StubProducer {
@@ -44,10 +42,7 @@ impl MessageProducer for StubProducer {
     ) -> Result<(), ProducerError> {
         let json =
             serde_json::to_string(&envelope).map_err(|e| ProducerError::Send(e.to_string()))?;
-        self.sent
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push((topic.to_string(), json));
+        self.sent.lock().unwrap_or_else(|e| e.into_inner()).push((topic.to_string(), json));
         Ok(())
     }
 }

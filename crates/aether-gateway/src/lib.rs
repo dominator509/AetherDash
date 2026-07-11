@@ -74,14 +74,13 @@ async fn handle_socket(mut socket: WebSocket, session: auth::SessionInfo) {
                 }
                 Err(e) => {
                     tracing::warn!(%e, "failed to deserialize frame");
-                    health::UNKNOWN_FRAME_COUNT
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    health::UNKNOWN_FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let error_frame = frames::ServerFrame::Error {
                         id: None,
                         trace_id: Some(uuid::Uuid::new_v4().to_string()),
                         body: ErrorEnvelope::new(
                             ErrorCode::InvalidArgument,
-                            format!("failed to parse frame: {e}"),
+                            "failed to parse frame",
                             Ulid::new(),
                         ),
                     };
