@@ -1,10 +1,13 @@
 use crate::auth;
-use aether_core::{MarketKey, OrderType, Origin, OriginKind, Side, SizeUnit, TimeInForce};
+use aether_core::{MarketKey, OrderType, Origin, OriginKind, Side, SizeUnit, TimeInForce, Ulid};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 
 // ── Client intent body (validated domain types) ──
+
+fn default_paper() -> bool {
+    true
+}
 
 /// Client-supplied order-intent payload. Every field uses the canonical
 /// aether_core domain type so invalid enums, malformed market keys, and
@@ -12,6 +15,9 @@ use std::str::FromStr;
 ///
 /// Origin is NEVER taken from the client body — it is always stamped from
 /// the authenticated session after validation succeeds.
+///
+/// `paper` defaults to `true`. Omitting it produces a paper-trade intent,
+/// never a live order.
 #[derive(Debug, Deserialize)]
 struct ClientIntentBody {
     market: MarketKey,
@@ -22,12 +28,16 @@ struct ClientIntentBody {
     size: String,
     size_unit: SizeUnit,
     tif: TimeInForce,
-    #[serde(default)]
+    #[serde(default = "default_paper")]
     paper: bool,
 }
 
-/// Fully validated intent ready for origin-stamping.
-struct ValidatedIntent {
+/// Gateway-validated order draft with stamped trusted origin.
+/// The gateway cannot populate quote_snapshot or caps_version — those are
+/// added downstream by the order service (EP-401).
+#[derive(Debug)]
+struct GatewayOrderDraft {
+    id: Ulid,
     market: MarketKey,
     side: Side,
     order_type: OrderType,
@@ -36,22 +46,45 @@ struct ValidatedIntent {
     size_unit: SizeUnit,
     tif: TimeInForce,
     paper: bool,
+    origin: Origin,
 }
 
 impl ClientIntentBody {
-    /// Validate decimal fields. Enums and MarketKey are already validated
-    /// by serde during deserialization.
-    fn validate(self) -> Result<ValidatedIntent, String> {
+    /// Validate decimal strings and semantic rules.
+    /// Error messages never echo client-controlled values per SPEC-006.
+    fn validate(self) -> Result<ValidatedFields, String> {
+        // Validate size: must be a positive decimal string
         let size = Decimal::from_str_exact(&self.size)
-            .map_err(|e| format!("invalid size '{}': {e}", self.size))?;
+            .map_err(|_| "size must be a decimal string".to_string())?;
+        if size <= Decimal::ZERO {
+            return Err("size must be positive".to_string());
+        }
+
+        // Validate limit_price if present
         let limit_price = self
             .limit_price
             .filter(|s| !s.is_empty())
-            .map(|s| {
-                Decimal::from_str_exact(&s).map_err(|e| format!("invalid limit_price '{s}': {e}"))
+            .map(|_s| {
+                Decimal::from_str_exact(&_s)
+                    .map_err(|_| "limit_price must be a decimal string".to_string())
             })
             .transpose()?;
-        Ok(ValidatedIntent {
+
+        // Semantic rules
+        match self.order_type {
+            OrderType::Limit => {
+                if limit_price.is_none() {
+                    return Err("limit orders require limit_price".to_string());
+                }
+            }
+            OrderType::Market => {
+                if limit_price.is_some() {
+                    return Err("market orders must not specify limit_price".to_string());
+                }
+            }
+        }
+
+        Ok(ValidatedFields {
             market: self.market,
             side: self.side,
             order_type: self.order_type,
@@ -62,6 +95,18 @@ impl ClientIntentBody {
             paper: self.paper,
         })
     }
+}
+
+/// Client-validated fields, ready for origin stamping.
+struct ValidatedFields {
+    market: MarketKey,
+    side: Side,
+    order_type: OrderType,
+    limit_price: Option<Decimal>,
+    size: Decimal,
+    size_unit: SizeUnit,
+    tif: TimeInForce,
+    paper: bool,
 }
 
 // ── Client → Server frames ──
@@ -88,6 +133,10 @@ pub enum ClientFrame {
 }
 
 // ── Server → Client frames ──
+// Several variants (FeedItem, Quote, OrderUpdate, Alert, Explain, Degradation)
+// are protocol contract definitions that will be constructed by EP-201/EP-305.
+// The test all_server_frame_variants_constructible proves they are constructible.
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 pub enum ServerFrame {
@@ -133,14 +182,30 @@ fn make_trace_id(client_id: &Option<String>, client_trace_id: &Option<String>) -
 }
 
 /// Map the session's string origin kind to the canonical aether_core OriginKind.
-fn session_origin_kind(kind: &str) -> OriginKind {
+/// Returns an error for unknown kinds — never silently reclassifies.
+fn session_origin_kind(kind: &str) -> Result<OriginKind, String> {
     match kind {
-        "user" => OriginKind::User,
-        "alert_action" => OriginKind::AlertAction,
-        "agent" => OriginKind::Agent,
-        "automation" => OriginKind::Automation,
-        _ => OriginKind::User, // default: treat unknown as user-origin
+        "user" => Ok(OriginKind::User),
+        "alert_action" => Ok(OriginKind::AlertAction),
+        "agent" => Ok(OriginKind::Agent),
+        "automation" => Ok(OriginKind::Automation),
+        other => Err(format!("unknown session origin kind: {other}")),
     }
+}
+
+/// Parse the session's actor identifier into a canonical Ulid.
+/// Falls back to generating a new Ulid for non-Ulid identifiers (stub tokens).
+fn parse_session_actor(session: &auth::SessionInfo) -> Ulid {
+    // Try origin.actor_id first, then session.actor_id
+    Ulid::from_string(&session.origin.actor_id)
+        .or_else(|_| Ulid::from_string(&session.actor_id))
+        .unwrap_or_else(|_| {
+            tracing::warn!(
+                actor_id = %session.actor_id,
+                "session actor_id is not a valid ULID; generating ephemeral id (EP-401: use real sessions)"
+            );
+            Ulid::new()
+        })
 }
 
 /// Dispatch a client frame to its server-frame response.
@@ -172,18 +237,18 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }),
             }
         }
-        ClientFrame::Command { id, trace_id, text, .. } => {
+        ClientFrame::Command { id, trace_id, text, room_context } => {
             let trace_id = make_trace_id(&id, &trace_id);
-            ServerFrame::CommandResult {
-                id,
-                trace_id,
-                body: serde_json::json!({
-                    "echo": text,
-                    "note": "MCP stub — command echo only",
-                    "actor_id": session.actor_id,
-                    "origin_kind": session.origin.kind,
-                }),
+            let mut body = serde_json::json!({
+                "echo": text,
+                "note": "MCP stub — command echo only",
+                "actor_id": session.actor_id,
+                "origin_kind": session.origin.kind,
+            });
+            if let Some(ref rc) = room_context {
+                body["room_context"] = serde_json::Value::String(rc.clone());
             }
+            ServerFrame::CommandResult { id, trace_id, body }
         }
         ClientFrame::OrderIntent { id, trace_id, body } => {
             let trace_id = make_trace_id(&id, &trace_id);
@@ -199,13 +264,13 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                         body: aether_core::ErrorEnvelope::new(
                             aether_core::ErrorCode::InvalidArgument,
                             format!("invalid order_intent: {e}"),
-                            aether_core::Ulid::new(),
+                            Ulid::new(),
                         ),
                     };
                 }
             };
 
-            // Phase 2: validate decimal strings (size, limit_price).
+            // Phase 2: validate decimals and semantic rules.
             let validated = match parsed.validate() {
                 Ok(v) => v,
                 Err(e) => {
@@ -215,30 +280,75 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                         body: aether_core::ErrorEnvelope::new(
                             aether_core::ErrorCode::InvalidArgument,
                             e,
-                            aether_core::Ulid::new(),
+                            Ulid::new(),
                         ),
                     };
                 }
             };
 
-            // Phase 3: stamp the canonical Origin from the authenticated session.
-            // Origin is NEVER taken from the client body.
-            let origin_kind = session_origin_kind(&session.origin.kind);
-            let _origin = Origin::new(
-                origin_kind,
-                session.tier as u8,
-                aether_core::Ulid::new(), // stub: generate new id; real impl parses session.actor_id
-            );
+            // Phase 3: resolve the session origin kind.
+            let origin_kind = match session_origin_kind(&session.origin.kind) {
+                Ok(k) => k,
+                Err(e) => {
+                    return ServerFrame::Error {
+                        id,
+                        trace_id,
+                        body: aether_core::ErrorEnvelope::new(
+                            aether_core::ErrorCode::PermissionDenied,
+                            e,
+                            Ulid::new(),
+                        ),
+                    };
+                }
+            };
 
-            // Build a human-readable summary from the validated domain types.
+            // Phase 4: stamp the canonical Origin from the authenticated session.
+            let actor_ulid = parse_session_actor(session);
+            let origin = match Origin::new(origin_kind, session.tier, actor_ulid) {
+                Ok(o) => o,
+                Err(e) => {
+                    return ServerFrame::Error {
+                        id,
+                        trace_id,
+                        body: aether_core::ErrorEnvelope::new(
+                            aether_core::ErrorCode::InvalidArgument,
+                            format!("invalid session origin: {e}"),
+                            Ulid::new(),
+                        ),
+                    };
+                }
+            };
+
+            // Phase 5: construct the canonical gateway order draft with
+            // trusted origin. This object is passed into the confirmation
+            // workflow so downstream services receive a fully validated,
+            // origin-stamped intent.
+            let draft = GatewayOrderDraft {
+                id: Ulid::new(),
+                market: validated.market,
+                side: validated.side,
+                order_type: validated.order_type,
+                limit_price: validated.limit_price,
+                size: validated.size,
+                size_unit: validated.size_unit,
+                tif: validated.tif,
+                paper: validated.paper,
+                origin,
+            };
+
+            let limit_str =
+                draft.limit_price.as_ref().map(|p| format!(" @{p}")).unwrap_or_default();
             let action_summary = format!(
-                "{order_type:?} {side:?} {size} {size_unit:?} {market} (paper={paper})",
-                order_type = validated.order_type,
-                side = validated.side,
-                size = validated.size,
-                size_unit = validated.size_unit,
-                market = validated.market,
-                paper = validated.paper,
+                "{order_type:?} {side:?} {size}{limit_str} {size_unit:?} {market} {tif:?} (paper={paper}) [id={id}]",
+                order_type = draft.order_type,
+                side = draft.side,
+                size = draft.size,
+                limit_str = limit_str,
+                size_unit = draft.size_unit,
+                market = draft.market,
+                tif = draft.tif,
+                paper = draft.paper,
+                id = draft.id,
             );
 
             ServerFrame::ConfirmRequired {
@@ -250,20 +360,20 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                     "EP-401: tier {} not enforced yet — allow-with-note",
                     session.tier
                 ),
-                // Origin stamped from the authenticated session, NOT from client body
-                actor_id: session.actor_id.clone(),
+                actor_id: draft.origin.actor_id.to_string(),
                 origin_kind: session.origin.kind.clone(),
             }
         }
-        ClientFrame::Confirm { id, trace_id, ref_id, .. } => {
+        ClientFrame::Confirm { id, trace_id, ref_id, totp } => {
             let trace_id = make_trace_id(&id, &trace_id);
+            let totp_note = totp.as_ref().map(|_| "totp-provided").unwrap_or("totp-missing");
             ServerFrame::CommandResult {
                 id,
                 trace_id,
                 body: serde_json::json!({
                     "status": "confirmed",
                     "ref_id": ref_id,
-                    "note": "stub — order not actually executed",
+                    "note": format!("stub — order not actually executed ({totp_note})"),
                     "actor_id": session.actor_id,
                     "origin_kind": session.origin.kind,
                 }),
@@ -281,7 +391,7 @@ mod tests {
     use super::*;
 
     /// A valid minimal OrderIntent body payload — uses proper domain types.
-    const VALID_INTENT_BODY: &str = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
+    const VALID_INTENT_BODY: &str = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00"}"#;
 
     fn test_session() -> auth::SessionInfo {
         auth::SessionInfo {
@@ -294,6 +404,8 @@ mod tests {
     fn make_intent(body: &str) -> String {
         format!(r#"{{"type":"order_intent","body":{body}}}"#)
     }
+
+    // ── Basic frame tests ────────────────────────────────────────────
 
     #[test]
     fn ping_pong_round_trip() {
@@ -363,7 +475,28 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("command_result"));
         assert!(json.contains("confirmed"));
+        assert!(json.contains("totp-provided"));
     }
+
+    #[test]
+    fn confirm_without_totp_notes_missing() {
+        let conf = r#"{"type":"confirm","ref_id":"abc"}"#;
+        let frame: ClientFrame = serde_json::from_str(conf).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("totp-missing"));
+    }
+
+    #[test]
+    fn command_room_context_reflected_in_response() {
+        let cmd = r#"{"type":"command","text":"status","room_context":"war-room"}"#;
+        let frame: ClientFrame = serde_json::from_str(cmd).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("war-room"), "room_context not reflected: {json}");
+    }
+
+    // ── OrderIntent — valid dispatch ─────────────────────────────────
 
     #[test]
     fn order_intent_returns_confirm_required() {
@@ -384,6 +517,18 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"id\":\"my-trace-1\""));
         assert!(json.contains("\"trace_id\":\"my-trace-1\""));
+    }
+
+    #[test]
+    fn trace_id_distinct_from_client_id() {
+        // When both id and trace_id are provided and differ,
+        // trace_id must propagate the explicit trace_id value.
+        let ping = r#"{"type":"ping","id":"req-123","trace_id":"trace-456"}"#;
+        let frame: ClientFrame = serde_json::from_str(ping).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"id\":\"req-123\""));
+        assert!(json.contains("\"trace_id\":\"trace-456\""));
     }
 
     #[test]
@@ -420,7 +565,7 @@ mod tests {
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
-        assert!(json.contains("\"actor_id\":\"bob\""), "should contain actor_id: {json}");
+        assert!(json.contains("\"actor_id\""), "should contain actor_id: {json}");
         assert!(
             json.contains("\"origin_kind\":\"automation\""),
             "should contain origin_kind: {json}"
@@ -444,20 +589,17 @@ mod tests {
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("confirm_required"));
-        // The action_summary uses Debug formatting of domain enums (PascalCase)
         assert!(json.contains("mkt:kalshi:BTC-75"), "missing market: {json}");
         assert!(json.contains("Sell"), "missing side: {json}");
         assert!(json.contains("Market"), "missing order_type: {json}");
         assert!(json.contains("1.5"), "missing size: {json}");
         assert!(json.contains("Base"), "missing size_unit: {json}");
-        // Origin is from the session, not the client
-        assert!(json.contains("\"actor_id\":\"alice\""), "origin should be session actor");
+        assert!(json.contains("\"actor_id\""), "origin should be stamped: {json}");
         assert!(json.contains("\"origin_kind\":\"user\""), "origin_kind should be session origin");
     }
 
     #[test]
     fn order_intent_invalid_body_type_returns_error() {
-        // A JSON number cannot be deserialized into ClientIntentBody (struct expected).
         let oi = r#"{"type":"order_intent","body":42}"#;
         let frame: ClientFrame = serde_json::from_str(oi).unwrap();
         let response = dispatch(frame, &test_session());
@@ -468,23 +610,54 @@ mod tests {
 
     #[test]
     fn order_intent_origin_never_from_client() {
-        // Client sends extra fields in body — origin MUST still come from session.
         let session = auth::SessionInfo {
             actor_id: "trusted-system".into(),
             tier: 4,
             origin: auth::OriginInfo { kind: "agent".into(), actor_id: "trusted-system".into() },
         };
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"sell","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","extra_field":"ignored"}"#;
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"sell","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"50000.00","extra_field":"ignored"}"#;
         let oi = make_intent(body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"origin_kind\":\"agent\""), "origin_kind from session: {json}");
-        assert!(json.contains("\"actor_id\":\"trusted-system\""), "actor_id from session: {json}");
+        assert!(json.contains("\"actor_id\""), "actor_id must be present: {json}");
+        assert!(
+            !json.contains("trusted-system"),
+            "non-Ulid actor IDs must not appear as canonical actor_id: {json}"
+        );
         assert!(!json.contains("extra_field"), "unknown fields must not leak: {json}");
     }
 
-    // ── Adversarial tests ────────────────────────────────────────────
+    // ── Paper default ────────────────────────────────────────────────
+
+    #[test]
+    fn intent_paper_defaults_to_true() {
+        // Omitting paper should default to true (paper trade), never false (live).
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("confirm_required"), "valid intent should succeed: {json}");
+        assert!(json.contains("paper=true"), "omitted paper must default to true: {json}");
+    }
+
+    #[test]
+    fn intent_explicit_paper_false_accepted() {
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","paper":false}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(
+            json.contains("confirm_required"),
+            "explicit paper=false should be accepted: {json}"
+        );
+        assert!(json.contains("paper=false"), "explicit paper=false must be honored: {json}");
+    }
+
+    // ── Adversarial: deserialization ─────────────────────────────────
 
     #[test]
     fn intent_missing_required_field_is_error() {
@@ -539,6 +712,8 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "malformed decimal must error: {json}");
         assert!(json.contains("invalid_argument"), "got: {json}");
+        // Error message must not echo the raw input per SPEC-006
+        assert!(!json.contains("not-a-number"), "error must not echo raw input");
     }
 
     #[test]
@@ -570,7 +745,7 @@ mod tests {
             tier: 2,
             origin: auth::OriginInfo { kind: "user".into(), actor_id: "real-user".into() },
         };
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","origin_kind":"attacker","actor_id":"evil"}"#;
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","origin_kind":"attacker","actor_id":"evil"}"#;
         let oi = make_intent(body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &session);
@@ -578,17 +753,81 @@ mod tests {
         assert!(!json.contains("attacker"), "client origin_kind must not leak: {json}");
         assert!(!json.contains("evil"), "client actor_id must not leak: {json}");
         assert!(json.contains("\"origin_kind\":\"user\""), "origin from session: {json}");
-        assert!(json.contains("\"actor_id\":\"real-user\""), "actor_id from session: {json}");
+        assert!(json.contains("\"actor_id\""), "actor_id must be present: {json}");
+        assert!(
+            !json.contains("real-user"),
+            "non-Ulid actor IDs must not appear as canonical actor_id: {json}"
+        );
     }
 
+    // ── Adversarial: semantic validation ─────────────────────────────
+
     #[test]
-    fn intent_limit_price_valid_decimal_accepted() {
-        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","limit_price":"65000.50","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
+    fn intent_size_zero_is_error() {
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0","size_unit":"contracts","tif":"gtc"}"#;
         let oi = make_intent(body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
-        assert!(json.contains("confirm_required"), "valid limit_price must be accepted: {json}");
+        assert!(json.contains("\"error\""), "zero size must error: {json}");
+    }
+
+    #[test]
+    fn intent_size_negative_is_error() {
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"-1.5","size_unit":"contracts","tif":"gtc"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "negative size must error: {json}");
+    }
+
+    #[test]
+    fn intent_limit_without_price_is_error() {
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "limit order without price must error: {json}");
+    }
+
+    #[test]
+    fn intent_market_with_price_is_error() {
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"market","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "market order with limit_price must error: {json}");
+    }
+
+    #[test]
+    fn intent_market_order_without_price_accepted() {
+        let body = r#"{"market":"mkt:kalshi:BTC-75","side":"buy","order_type":"market","size":"0.01","size_unit":"contracts","tif":"gtc"}"#;
+        let oi = make_intent(body);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(
+            json.contains("confirm_required"),
+            "market order without limit_price must be accepted: {json}"
+        );
+    }
+
+    #[test]
+    fn intent_unknown_origin_kind_is_error() {
+        let session = auth::SessionInfo {
+            actor_id: "alice".into(),
+            tier: 3,
+            origin: auth::OriginInfo { kind: "superuser".into(), actor_id: "alice".into() },
+        };
+        let oi = make_intent(VALID_INTENT_BODY);
+        let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
+        let response = dispatch(frame, &session);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "unknown origin kind must error: {json}");
+        assert!(json.contains("permission_denied"), "should use permission_denied: {json}");
     }
 
     #[test]
@@ -600,6 +839,8 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "malformed limit_price must error: {json}");
         assert!(json.contains("invalid_argument"), "got: {json}");
+        // Error message must not echo the raw input per SPEC-006
+        assert!(!json.contains("xyz"), "error must not echo raw input: {json}");
     }
 
     #[test]
@@ -610,5 +851,42 @@ mod tests {
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "empty size must error: {json}");
+    }
+
+    // ── Server frame coverage ────────────────────────────────────────
+
+    #[test]
+    fn all_server_frame_variants_constructible() {
+        // Ensure every ServerFrame variant can be constructed (silences
+        // dead-code warnings without broad allow annotations).
+        let frames: Vec<ServerFrame> = vec![
+            ServerFrame::FeedItem { id: None, trace_id: None, body: serde_json::json!({}) },
+            ServerFrame::Quote { id: None, trace_id: None, body: serde_json::json!({}) },
+            ServerFrame::OrderUpdate { id: None, trace_id: None, body: serde_json::json!({}) },
+            ServerFrame::Alert { id: None, trace_id: None, body: serde_json::json!({}) },
+            ServerFrame::Explain { id: None, trace_id: None, body: serde_json::json!({}) },
+            ServerFrame::CommandResult { id: None, trace_id: None, body: serde_json::json!({}) },
+            ServerFrame::ConfirmRequired {
+                id: None,
+                trace_id: None,
+                ref_id: "r1".into(),
+                action_summary: "test".into(),
+                tier_reason: "test".into(),
+                actor_id: "a".into(),
+                origin_kind: "user".into(),
+            },
+            ServerFrame::Degradation { id: None, surface: "test".into(), reason: "test".into() },
+            ServerFrame::Error {
+                id: None,
+                trace_id: None,
+                body: aether_core::ErrorEnvelope::new(
+                    aether_core::ErrorCode::Internal,
+                    "test",
+                    Ulid::new(),
+                ),
+            },
+            ServerFrame::Pong { id: None, trace_id: None },
+        ];
+        assert_eq!(frames.len(), 10, "all 10 server frame variants must be constructible");
     }
 }

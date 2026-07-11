@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "aether-core",
  "hex",
+ "rand 0.8.6",
  "rdkafka",
  "serde",
  "serde_json",
@@ -40,6 +41,7 @@ dependencies = [
  "aether-core",
  "axum",
  "axum-test",
+ "rust_decimal",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

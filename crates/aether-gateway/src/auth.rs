@@ -45,7 +45,12 @@ impl fmt::Display for AuthError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AuthError::MissingToken => write!(f, "missing token"),
-            AuthError::InvalidToken(_) => write!(f, "invalid token"),
+            AuthError::InvalidToken(_token) => {
+                // _token intentionally not disclosed per SPEC-006.
+                // Field is stored for EP-401 logging/debugging.
+                let _ = _token;
+                write!(f, "invalid token")
+            }
         }
     }
 }

@@ -24,10 +24,19 @@ async fn main() {
         .route("/metrics", get(health::metrics));
 
     let bind = std::env::var("AETHER_GATEWAY__BIND").unwrap_or_else(|_| "127.0.0.1:8080".into());
-    let addr: SocketAddr = bind.parse().expect("invalid AETHER_GATEWAY__BIND");
+    let addr: SocketAddr =
+        bind.parse().unwrap_or_else(|_| panic!("invalid AETHER_GATEWAY__BIND value: {bind}"));
     tracing::info!("Gateway listening on {addr}");
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!("failed to bind TCP listener on {addr}: {e}");
+            panic!("TCP bind failed: {e}");
+        }
+    };
+    if let Err(e) = axum::serve(listener, app).await {
+        tracing::error!("axum serve exited with error: {e}");
+    }
 }
 
 async fn ws_handler(
@@ -50,7 +59,13 @@ async fn handle_socket(mut socket: WebSocket, session: auth::SessionInfo) {
             match serde_json::from_str::<frames::ClientFrame>(&text) {
                 Ok(frame) => {
                     let response = frames::dispatch(frame, &session);
-                    let json = serde_json::to_string(&response).unwrap();
+                    let json = match serde_json::to_string(&response) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            tracing::error!("Failed to serialize response: {e}");
+                            break;
+                        }
+                    };
                     if let Err(e) = socket.send(Message::Text(json)).await {
                         tracing::error!("Failed to send WS frame: {e}");
                         break;
@@ -64,11 +79,17 @@ async fn handle_socket(mut socket: WebSocket, session: auth::SessionInfo) {
                         trace_id: Some(uuid::Uuid::new_v4().to_string()),
                         body: ErrorEnvelope::new(
                             ErrorCode::InvalidArgument,
-                            format!("failed to parse frame: {e}"),
+                            "failed to parse frame",
                             Ulid::new(),
                         ),
                     };
-                    let json = serde_json::to_string(&error_frame).unwrap();
+                    let json = match serde_json::to_string(&error_frame) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            tracing::error!("Failed to serialize error frame: {e}");
+                            break;
+                        }
+                    };
                     if let Err(e) = socket.send(Message::Text(json)).await {
                         tracing::error!("Failed to send WS error frame: {e}");
                         break;
