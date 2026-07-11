@@ -75,6 +75,12 @@ pub struct CircuitBreaker {
     recent_outcomes: VecDeque<(std::time::Instant, bool)>,
 }
 
+impl Default for CircuitBreaker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CircuitBreaker {
     /// SPEC-006: 5 consecutive failures, 15-second reset timeout.
     pub const SPEC_DEFAULT_THRESHOLD: u32 = 5;

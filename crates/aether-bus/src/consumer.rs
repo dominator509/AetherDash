@@ -23,8 +23,9 @@ impl StubConsumer {
 }
 impl MessageConsumer for StubConsumer {
     fn consume<T: DeserializeOwned + Serialize>(&self) -> Result<Vec<Envelope<T>>, ConsumerError> {
+        let received = self.received.lock().map_err(|e| ConsumerError::Receive(e.to_string()))?;
         let mut result = Vec::new();
-        for (_topic, json) in self.received.lock().unwrap().iter() {
+        for (_topic, json) in received.iter() {
             if let Ok(env) = serde_json::from_str::<Envelope<T>>(json) {
                 result.push(env);
             }
