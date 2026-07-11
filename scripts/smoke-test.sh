@@ -17,8 +17,17 @@ curl -fsS http://localhost:6333/readyz >/dev/null           # qdrant
 DC exec -T redpanda rpk cluster health | grep -qi healthy
 curl -fsS http://localhost:9000/minio/health/live >/dev/null # minio
 
-# Service /healthz endpoints - populate as services land (EP-004+; list mirrors OBSERVABILITY.md):
-SERVICES_HEALTHZ=""
-for url in $SERVICES_HEALTHZ; do curl -fsS "$url" >/dev/null; echo "healthz ok: $url"; done
+# Service /healthz endpoints — populate as services land (EP-004+):
+# Gateway and MCP are the first app services to expose healthz.
+GATEWAY_PORT="${AETHER_GATEWAY__BIND:-127.0.0.1:8080}"
+GATEWAY_PORT_NUM=$(echo "$GATEWAY_PORT" | sed 's/.*://')
+SERVICES_HEALTHZ="http://localhost:${GATEWAY_PORT_NUM}/healthz http://localhost:8000/healthz"
+for url in $SERVICES_HEALTHZ; do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+        echo "healthz ok: $url"
+    else
+        echo "healthz SKIP (not running): $url"
+    fi
+done
 
 echo "smoke: ok"

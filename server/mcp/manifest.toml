@@ -1,0 +1,82 @@
+# SPEC-003: MCP tool inventory manifest — tier-filtered
+# Each tool declares: name, tier (minimum), schema path, description
+
+[[tools]]
+name = "brain.search"
+tier = 1
+description = "Semantic search across brain objects"
+
+[[tools]]
+name = "brain.get_object"
+tier = 1
+description = "Retrieve a brain object by ID"
+
+[[tools]]
+name = "markets.query"
+tier = 1
+description = "Query markets by venue, kind, or status"
+
+[[tools]]
+name = "opps.list"
+tier = 1
+description = "List detected opportunities"
+
+[[tools]]
+name = "opps.explain"
+tier = 1
+description = "Get explain tree for an opportunity"
+
+[[tools]]
+name = "metrics.snapshot"
+tier = 1
+description = "Get a snapshot of current portfolio metrics"
+
+[[tools]]
+name = "sim.run"
+tier = 2
+description = "Run a simulation scenario"
+
+[[tools]]
+name = "orders.draft"
+tier = 2
+description = "Draft an order for review"
+
+[[tools]]
+name = "alerts.configure"
+tier = 2
+description = "Configure alert rules"
+
+[[tools]]
+name = "vault.regenerate"
+tier = 2
+description = "Regenerate vault views"
+
+[[tools]]
+name = "orders.submit_paper"
+tier = 3
+description = "Submit paper order (confirm flow)"
+
+[[tools]]
+name = "swarm.launch"
+tier = 3
+description = "Launch research swarm with budget"
+
+[[tools]]
+name = "inbox.reprocess"
+tier = 3
+description = "Reprocess inbox items"
+
+[[tools]]
+name = "orders.submit"
+tier = 4
+description = "Submit live order (requires live_enabled + confirm + caps)"
+
+[[tools]]
+name = "plugins.install_signed"
+tier = 4
+description = "Install a signed plugin"
+
+[[tools]]
+name = "automation.schedule"
+tier = 4
+description = "Schedule automated task"

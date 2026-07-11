@@ -1,0 +1,21 @@
+[package]
+name = "aether-proto"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+description = "AETHER Terminal — compiled proto contracts (tonic/prost)"
+license = "AGPL-3.0-or-later"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[dependencies]
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+
+[lib]
+doctest = false
