@@ -10,7 +10,12 @@ pub enum ClientFrame {
     #[serde(rename = "unsubscribe")]
     Unsubscribe { id: Option<String>, trace_id: Option<String> },
     #[serde(rename = "command")]
-    Command { id: Option<String>, trace_id: Option<String>, text: String, room_context: Option<String> },
+    Command {
+        id: Option<String>,
+        trace_id: Option<String>,
+        text: String,
+        room_context: Option<String>,
+    },
     #[serde(rename = "order_intent")]
     OrderIntent { id: Option<String>, trace_id: Option<String>, body: serde_json::Value },
     #[serde(rename = "confirm")]

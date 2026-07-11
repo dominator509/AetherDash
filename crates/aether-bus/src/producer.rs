@@ -20,6 +20,12 @@ pub trait MessageProducer: Send + Sync {
 pub struct StubProducer {
     pub sent: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
 }
+impl Default for StubProducer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StubProducer {
     pub fn new() -> Self {
         Self { sent: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())) }
@@ -33,7 +39,10 @@ impl MessageProducer for StubProducer {
     ) -> Result<(), ProducerError> {
         let json =
             serde_json::to_string(&envelope).map_err(|e| ProducerError::Send(e.to_string()))?;
-        self.sent.lock().unwrap().push((topic.to_string(), json));
+        self.sent
+            .lock()
+            .map_err(|e| ProducerError::Send(e.to_string()))?
+            .push((topic.to_string(), json));
         Ok(())
     }
 }

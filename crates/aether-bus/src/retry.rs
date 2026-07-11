@@ -70,6 +70,12 @@ pub struct CircuitBreaker {
     half_open_probe_sent: bool,
 }
 
+impl Default for CircuitBreaker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CircuitBreaker {
     /// SPEC-006: 5 consecutive failures, 15-second reset timeout.
     pub const SPEC_DEFAULT_THRESHOLD: u32 = 5;
