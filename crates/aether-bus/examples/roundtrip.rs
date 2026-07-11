@@ -11,7 +11,8 @@ struct DemoQuote {
     ask: String,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() {
     let shared: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
     let producer = StubProducer { sent: shared.clone() };
     let consumer = StubConsumer::new(shared);
@@ -19,14 +20,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let quote =
         DemoQuote { market: "mkt:kalshi:BTC-75".into(), bid: "0.65".into(), ask: "0.67".into() };
     let envelope = Envelope::new("Quote", quote);
-    producer.send("md.ticks.kalshi", envelope)?;
+    producer.send("md.ticks.kalshi", envelope).await.unwrap_or_else(|e| panic!("send failed: {e}"));
 
-    let received: Vec<Envelope<DemoQuote>> = consumer.consume()?;
+    let received: Vec<Envelope<DemoQuote>> = consumer
+        .consume(&["md.ticks.kalshi"])
+        .await
+        .unwrap_or_else(|e| panic!("consume failed: {e}"));
     assert_eq!(received.len(), 1);
     assert_eq!(
         received[0].payload,
         DemoQuote { market: "mkt:kalshi:BTC-75".into(), bid: "0.65".into(), ask: "0.67".into() }
     );
     println!("Round-trip OK: envelope produced and consumed successfully");
-    Ok(())
 }
