@@ -6,17 +6,17 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type")]
 pub enum ClientFrame {
     #[serde(rename = "subscribe")]
-    Subscribe { id: Option<String>, channels: Vec<String> },
+    Subscribe { id: Option<String>, trace_id: Option<String>, channels: Vec<String> },
     #[serde(rename = "unsubscribe")]
-    Unsubscribe { id: Option<String> },
+    Unsubscribe { id: Option<String>, trace_id: Option<String> },
     #[serde(rename = "command")]
-    Command { id: Option<String>, text: String, room_context: Option<String> },
+    Command { id: Option<String>, trace_id: Option<String>, text: String, room_context: Option<String> },
     #[serde(rename = "order_intent")]
-    OrderIntent { id: Option<String>, body: serde_json::Value },
+    OrderIntent { id: Option<String>, trace_id: Option<String>, body: serde_json::Value },
     #[serde(rename = "confirm")]
-    Confirm { id: Option<String>, ref_id: String, totp: Option<String> },
+    Confirm { id: Option<String>, trace_id: Option<String>, ref_id: String, totp: Option<String> },
     #[serde(rename = "ping")]
-    Ping { id: Option<String> },
+    Ping { id: Option<String>, trace_id: Option<String> },
 }
 
 // ── Server → Client frames ──
@@ -53,17 +53,23 @@ pub enum ServerFrame {
     Pong { id: Option<String>, trace_id: Option<String> },
 }
 
-/// Generate a trace_id: use the client frame `id` if present, otherwise create a new UUID v4.
-fn make_trace_id(client_id: &Option<String>) -> Option<String> {
-    Some(client_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string()))
+/// Generate a trace_id: use the client-supplied `trace_id` if present,
+/// fall back to `id`, otherwise create a new UUID v4.
+fn make_trace_id(client_id: &Option<String>, client_trace_id: &Option<String>) -> Option<String> {
+    Some(
+        client_trace_id
+            .clone()
+            .or_else(|| client_id.clone())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+    )
 }
 
 /// Dispatch a client frame to its server-frame response.
 /// Stub: all channels accepted, commands echoed (real dispatch in EP-201/EP-305).
 pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame {
     match frame {
-        ClientFrame::Subscribe { id, channels } => {
-            let trace_id = make_trace_id(&id);
+        ClientFrame::Subscribe { id, trace_id, channels } => {
+            let trace_id = make_trace_id(&id, &trace_id);
             ServerFrame::CommandResult {
                 id,
                 trace_id,
@@ -75,8 +81,8 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }),
             }
         }
-        ClientFrame::Unsubscribe { id } => {
-            let trace_id = make_trace_id(&id);
+        ClientFrame::Unsubscribe { id, trace_id } => {
+            let trace_id = make_trace_id(&id, &trace_id);
             ServerFrame::CommandResult {
                 id,
                 trace_id,
@@ -87,8 +93,8 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }),
             }
         }
-        ClientFrame::Command { id, text, .. } => {
-            let trace_id = make_trace_id(&id);
+        ClientFrame::Command { id, trace_id, text, .. } => {
+            let trace_id = make_trace_id(&id, &trace_id);
             ServerFrame::CommandResult {
                 id,
                 trace_id,
@@ -100,8 +106,8 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }),
             }
         }
-        ClientFrame::OrderIntent { id, .. } => {
-            let trace_id = make_trace_id(&id);
+        ClientFrame::OrderIntent { id, trace_id, .. } => {
+            let trace_id = make_trace_id(&id, &trace_id);
             ServerFrame::ConfirmRequired {
                 id,
                 trace_id,
@@ -112,8 +118,8 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 origin_kind: session.origin.kind.clone(),
             }
         }
-        ClientFrame::Confirm { id, ref_id, .. } => {
-            let trace_id = make_trace_id(&id);
+        ClientFrame::Confirm { id, trace_id, ref_id, .. } => {
+            let trace_id = make_trace_id(&id, &trace_id);
             ServerFrame::CommandResult {
                 id,
                 trace_id,
@@ -126,8 +132,8 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }),
             }
         }
-        ClientFrame::Ping { id } => {
-            let trace_id = make_trace_id(&id);
+        ClientFrame::Ping { id, trace_id } => {
+            let trace_id = make_trace_id(&id, &trace_id);
             ServerFrame::Pong { id, trace_id }
         }
     }
@@ -141,10 +147,7 @@ mod tests {
         auth::SessionInfo {
             actor_id: "alice".into(),
             tier: 3,
-            origin: auth::OriginInfo {
-                kind: "user".into(),
-                actor_id: "alice".into(),
-            },
+            origin: auth::OriginInfo { kind: "user".into(), actor_id: "alice".into() },
         }
     }
 
@@ -260,19 +263,13 @@ mod tests {
         let session = auth::SessionInfo {
             actor_id: "bob".into(),
             tier: 1,
-            origin: auth::OriginInfo {
-                kind: "automation".into(),
-                actor_id: "bob".into(),
-            },
+            origin: auth::OriginInfo { kind: "automation".into(), actor_id: "bob".into() },
         };
         let oi = r#"{"type":"order_intent","body":{"market":"ETH-USD"}}"#;
         let frame: ClientFrame = serde_json::from_str(oi).unwrap();
         let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
-        assert!(
-            json.contains("\"actor_id\":\"bob\""),
-            "should contain actor_id: {json}"
-        );
+        assert!(json.contains("\"actor_id\":\"bob\""), "should contain actor_id: {json}");
         assert!(
             json.contains("\"origin_kind\":\"automation\""),
             "should contain origin_kind: {json}"

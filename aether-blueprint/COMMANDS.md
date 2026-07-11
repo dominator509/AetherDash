@@ -79,6 +79,11 @@ scripts/build.sh
 - Python: `uv run python -m compileall -q server pylib`
 Prints `build: ok`. Release: `cargo build --workspace --release`; client bundle: `pnpm --filter @aether/client tauri build` (ACTIVE after EP-101).
 
+## Proto generation
+```
+scripts/proto-gen.sh   # proto codegen (Rust: automatic via build.rs; TS/Python: hand-mirrored per D7)
+```
+
 ## Security check
 ```
 scripts/security-check.sh

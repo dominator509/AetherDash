@@ -15,20 +15,19 @@ pub struct OriginInfo {
     pub actor_id: String,
 }
 
-/// Validate a bearer token format. Stub: accepts "test-" prefixed tokens.
+/// Validate a bearer token format. Stub: accepts "test-" prefixed tokens in debug builds.
 /// Real implementation (EP-401): query sessions table, verify expiry, check grants.
 pub fn validate_token(token: Option<&str>) -> Result<SessionInfo, AuthError> {
     let token = token.ok_or(AuthError::MissingToken)?;
     let token = token.strip_prefix("Bearer ").unwrap_or(token);
-    if token.starts_with("test-") {
+    // Test tokens: ONLY available in debug builds (cfg(debug_assertions)).
+    // Production builds: all tokens must validate against the sessions table (EP-401).
+    if cfg!(debug_assertions) && token.starts_with("test-") {
         let actor_id = token.trim_start_matches("test-").to_string();
         Ok(SessionInfo {
             actor_id: actor_id.clone(),
             tier: 3, // Stub: tier 3 for test tokens (can access paper)
-            origin: OriginInfo {
-                kind: "user".into(),
-                actor_id,
-            },
+            origin: OriginInfo { kind: "user".into(), actor_id },
         })
     } else {
         // EP-401: real validation — query sessions table

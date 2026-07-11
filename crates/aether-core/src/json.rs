@@ -35,10 +35,8 @@ fn sort_json_keys(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(map) => {
             // Collect entries, recursively sort values, sort by key, rebuild
-            let mut entries: Vec<(String, serde_json::Value)> = map
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
+            let mut entries: Vec<(String, serde_json::Value)> =
+                map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             for (_, v) in &mut entries {
                 sort_json_keys(v);
             }

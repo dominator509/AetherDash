@@ -22,9 +22,7 @@ pub struct StubProducer {
 }
 impl StubProducer {
     pub fn new() -> Self {
-        Self {
-            sent: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
-        }
+        Self { sent: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())) }
     }
 }
 impl MessageProducer for StubProducer {

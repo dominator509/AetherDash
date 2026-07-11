@@ -14,11 +14,7 @@ pub struct Quarantine;
 
 impl Quarantine {
     /// Build a quarantine message envelope.
-    pub fn envelope(
-        venue: &str,
-        reason: &str,
-        raw_payload: &[u8],
-    ) -> QuarantineMessage {
+    pub fn envelope(venue: &str, reason: &str, raw_payload: &[u8]) -> QuarantineMessage {
         QuarantineMessage {
             venue: venue.to_string(),
             reason: reason.to_string(),
@@ -45,9 +41,7 @@ pub struct QuarantineMessage {
 
 fn chrono_now() -> String {
     use std::time::SystemTime;
-    let dur = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
+    let dur = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
     format!("{}.{:03}", dur.as_secs(), dur.subsec_millis())
 }
 

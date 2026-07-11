@@ -21,8 +21,7 @@ fn malformed_payload_routed_to_quarantine_not_md() {
 
     assert_eq!(quarantine_topic, "quarantine.demo");
     assert_eq!(md_topic, "md.ticks.demo");
-    assert_ne!(quarantine_topic, md_topic,
-        "quarantine messages must not use the md.ticks topic");
+    assert_ne!(quarantine_topic, md_topic, "quarantine messages must not use the md.ticks topic");
 
     assert_eq!(msg.raw_size, 15);
     assert!(!msg.raw_hash.is_empty(), "raw hash must be computed for MinIO storage");

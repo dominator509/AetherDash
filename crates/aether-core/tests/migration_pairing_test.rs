@@ -8,28 +8,19 @@ mod migration_pairing_tests {
     use std::process::Command;
 
     fn sqlx_migrate_dir() -> String {
-        let manifest_dir =
-            std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into());
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into());
         let path = std::path::Path::new(&manifest_dir)
             .parent()
             .unwrap() // crates/
             .parent()
             .unwrap(); // repo root/
-        path.join("infra/migrations")
-            .to_string_lossy()
-            .to_string()
+        path.join("infra/migrations").to_string_lossy().to_string()
     }
 
     fn run_migrations() {
         let dir = sqlx_migrate_dir();
         let output = Command::new("cargo")
-            .args([
-                "sqlx",
-                "migrate",
-                "run",
-                "--source",
-                dir.as_str(),
-            ])
+            .args(["sqlx", "migrate", "run", "--source", dir.as_str()])
             .output()
             .expect("failed to run cargo sqlx migrate run");
         assert!(
@@ -42,15 +33,7 @@ mod migration_pairing_tests {
     fn revert_all_migrations() {
         let dir = sqlx_migrate_dir();
         let output = Command::new("cargo")
-            .args([
-                "sqlx",
-                "migrate",
-                "revert",
-                "--source",
-                dir.as_str(),
-                "--target",
-                "0",
-            ])
+            .args(["sqlx", "migrate", "revert", "--source", dir.as_str(), "--target", "0"])
             .output()
             .expect("failed to run cargo sqlx migrate revert");
         assert!(

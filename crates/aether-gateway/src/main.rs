@@ -51,12 +51,14 @@ async fn handle_socket(mut socket: WebSocket, session: auth::SessionInfo) {
                 Ok(frame) => {
                     let response = frames::dispatch(frame, &session);
                     let json = serde_json::to_string(&response).unwrap();
-                    let _ = socket.send(Message::Text(json)).await;
+                    if let Err(e) = socket.send(Message::Text(json)).await {
+                        tracing::error!("Failed to send WS frame: {e}");
+                        break;
+                    }
                 }
                 Err(e) => {
                     tracing::warn!(%e, "failed to deserialize frame");
-                    health::UNKNOWN_FRAME_COUNT
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    health::UNKNOWN_FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let error_frame = frames::ServerFrame::Error {
                         id: None,
                         trace_id: Some(uuid::Uuid::new_v4().to_string()),
@@ -67,7 +69,10 @@ async fn handle_socket(mut socket: WebSocket, session: auth::SessionInfo) {
                         ),
                     };
                     let json = serde_json::to_string(&error_frame).unwrap();
-                    let _ = socket.send(Message::Text(json)).await;
+                    if let Err(e) = socket.send(Message::Text(json)).await {
+                        tracing::error!("Failed to send WS error frame: {e}");
+                        break;
+                    }
                 }
             }
         }

@@ -32,15 +32,15 @@ impl RetryPolicy {
     /// capped delay = min(max_delay, base_delay * 2^n)
     /// actual delay = random in [0, capped_delay]
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
-        let capped = self
-            .base_delay
-            .saturating_mul(1u32 << attempt.min(31))
-            .min(self.max_delay);
+        let capped = self.base_delay.saturating_mul(1u32 << attempt.min(31)).min(self.max_delay);
         // Full jitter: uniformly random in [0, capped]
-        // Use a simple pseudo-random value derived from the attempt number
-        // (no external rand dependency — deterministic-enough for tests)
-        let jitter = (attempt.wrapping_mul(2654435761)) as f64 / u32::MAX as f64;
-        capped.mul_f64(jitter)
+        // Use time-based entropy (no external rand dependency)
+        let entropy = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos() as u64;
+        let jitter_ns = entropy % (capped.as_nanos().max(1) as u64);
+        Duration::from_nanos(jitter_ns)
     }
 
     /// Returns true if the error is retryable.
@@ -66,12 +66,14 @@ pub struct CircuitBreaker {
     failure_window_start: Option<std::time::Instant>,
     /// Timestamp when the breaker last transitioned to Open
     opened_at: Option<std::time::Instant>,
+    /// Whether the single half-open probe has been sent (prevents multiple probes)
+    half_open_probe_sent: bool,
 }
 
 impl CircuitBreaker {
-    /// SPEC-006: 5 consecutive failures, 30-second reset timeout.
+    /// SPEC-006: 5 consecutive failures, 15-second reset timeout.
     pub const SPEC_DEFAULT_THRESHOLD: u32 = 5;
-    pub const SPEC_DEFAULT_RESET: Duration = Duration::from_secs(30);
+    pub const SPEC_DEFAULT_RESET: Duration = Duration::from_secs(15);
     pub const SPEC_ERROR_WINDOW: Duration = Duration::from_secs(30);
 
     pub fn new() -> Self {
@@ -80,6 +82,7 @@ impl CircuitBreaker {
             consecutive_failures: 0,
             failure_window_start: None,
             opened_at: None,
+            half_open_probe_sent: false,
         }
     }
 
@@ -89,22 +92,19 @@ impl CircuitBreaker {
 
     /// Record a successful request.
     /// SPEC-006: in HalfOpen, a single success transitions to Closed.
-    /// In Closed, successes reset the failure window if it has elapsed.
+    /// In Closed, successes always reset the consecutive failure count.
     pub fn record_success(&mut self) {
         match self.state {
             BreakerState::HalfOpen => {
                 self.state = BreakerState::Closed;
                 self.consecutive_failures = 0;
                 self.failure_window_start = None;
+                self.half_open_probe_sent = false;
             }
             BreakerState::Closed => {
-                // If the error window has passed, reset the counter
-                if let Some(start) = self.failure_window_start {
-                    if start.elapsed() >= Self::SPEC_ERROR_WINDOW {
-                        self.consecutive_failures = 0;
-                        self.failure_window_start = None;
-                    }
-                }
+                // Always reset consecutive failures on success in Closed
+                self.consecutive_failures = 0;
+                self.failure_window_start = None;
             }
             BreakerState::Open => { /* ignore successes while open */ }
         }
@@ -112,7 +112,17 @@ impl CircuitBreaker {
 
     /// Record a failed request.
     /// SPEC-006: 5 consecutive failures in a 30-second window → Open.
+    /// In HalfOpen, a single failure transitions back to Open.
     pub fn record_failure(&mut self) {
+        // HalfOpen probe failed → back to Open immediately
+        if self.state == BreakerState::HalfOpen {
+            self.state = BreakerState::Open;
+            self.opened_at = Some(std::time::Instant::now());
+            self.consecutive_failures = 0;
+            self.half_open_probe_sent = false;
+            return;
+        }
+
         let now = std::time::Instant::now();
 
         // Reset the failure window if it has elapsed
@@ -150,9 +160,13 @@ impl CircuitBreaker {
                 false
             }
             BreakerState::HalfOpen => {
-                // Only one probe at a time in HalfOpen
-                // (enforced by caller — we just return true here)
-                true
+                // Only one probe at a time
+                if self.half_open_probe_sent {
+                    false
+                } else {
+                    self.half_open_probe_sent = true;
+                    true
+                }
             }
         }
     }
@@ -192,13 +206,13 @@ mod tests {
     }
 
     #[test]
-    fn retry_policy_differs_per_attempt() {
+    fn retry_delay_always_within_bounds() {
         let p = RetryPolicy::default();
-        let d0 = p.delay_for_attempt(0);
-        let d1 = p.delay_for_attempt(1);
-        // With jitter they could theoretically be equal, but the cap grows
-        assert!(d1 <= p.max_delay);
-        let _ = d0;
+        for attempt in 0..5 {
+            let d = p.delay_for_attempt(attempt);
+            let cap = p.base_delay.saturating_mul(1u32 << attempt.min(31)).min(p.max_delay);
+            assert!(d <= cap, "delay {d:?} exceeds cap {cap:?} at attempt {attempt}");
+        }
     }
 
     // ── Circuit breaker ───────────────────────────────────────────────
@@ -246,14 +260,11 @@ mod tests {
     fn breaker_failure_in_half_open_reopens() {
         let mut b = CircuitBreaker::new();
         b.state = BreakerState::HalfOpen;
+        b.half_open_probe_sent = true;
         b.record_failure();
-        // One failure in HalfOpen should re-open
-        // (our impl currently only opens from Closed; let's adjust:
-        // record_failure in HalfOpen with 1 failure → should re-open)
-        // Actually the SPEC says the single probe either succeeds (→Closed)
-        // or fails (→back to Open). Let's verify the state stays HalfOpen
-        // after one failure (caller enforces the single probe)
-        assert_eq!(b.state(), BreakerState::HalfOpen);
+        // A failed half-open probe transitions back to Open
+        assert_eq!(b.state(), BreakerState::Open);
+        assert!(!b.allow_request());
     }
 
     #[test]
@@ -261,11 +272,8 @@ mod tests {
         let mut b = CircuitBreaker::new();
         b.record_failure();
         b.record_failure();
-        // Window hasn't elapsed — failures still count
         assert_eq!(b.consecutive_failures, 2);
-        // Force window to expire
-        b.failure_window_start =
-            Some(std::time::Instant::now() - Duration::from_secs(31));
+        // Any success in Closed resets the counter (no window check needed)
         b.record_success();
         assert_eq!(b.consecutive_failures, 0);
     }

@@ -279,8 +279,6 @@ impl EdgeDecomposition {
     }
 }
 
-
-
 impl fmt::Display for EdgeDecomposition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "EdgeDecomposition(gross={}, net={})", self.gross_spread, self.net_edge)

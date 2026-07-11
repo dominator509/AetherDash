@@ -46,8 +46,8 @@ Milestone validations; `verify.sh` -> `verify: ok`; `test-integration.sh` -> `in
 Codegen is regenerate-don't-edit (AGENTS.md 9); generated dirs carry a DO-NOT-EDIT header + gitattributes linguist markers. Bus example/tests tolerate re-runs via unique group suffixes in tests. Gateway is stateless (sessions in PG) - kill/restart mid-test must pass (crash-only posture, SPEC-006).
 
 ## Progress
-- [x] M1 Proto  - [x] M2 Bus  - [ ] M3 Roundtrip  - [ ] M4 Quarantine
-- [ ] M5 Gateway  - [x] M6 MCP manifest  - [ ] M7 Health/exit
+- [ ] M1 Proto  - [ ] M2 Bus  - [ ] M3 Roundtrip  - [ ] M4 Quarantine
+- [ ] M5 Gateway  - [ ] M6 MCP manifest  - [ ] M7 Health/exit
 
 ## Surprises & Discoveries
 - tonic-build pulls substantial dependency tree; disk usage ~1.2 GiB for debug build
@@ -65,12 +65,20 @@ Codegen is regenerate-don't-edit (AGENTS.md 9); generated dirs carry a DO-NOT-ED
 - Stub implementations are explicitly marked with TODO(EP-xxx) for auth, real transport, DB queries
 
 ## Outcomes & Retrospective
+What is done:
 - 4 Rust crates: aether-core, aether-proto, aether-bus, aether-gateway
-- 5 gRPC service definitions: VenueAdapter, RiskEngine, OrderRouter, WalletGuardian, Brain
-- 9 bus topics registered; envelope uses aether-core canonical serialization
-- SPEC-003 WS frame table: 6 client types, 10 server types, full deserialization coverage
-- MCP: 16 tools across 4 tiers, manifest-driven, token-authenticated
-- Retry policy: 200ms base, 30s max, 5 attempts, full jitter
-- Circuit breaker: 5 consecutive failures, 30s window, single half-open probe
-- Phase 0 exit criteria: proto compiles, bus+gateway+MCP run, healthz pattern established
-- Remaining for Phase-0 closure: live Redpanda integration, gateway DB-backed auth, quarantine MinIO path
+- 5 gRPC service definitions (proto files only — compilation pending)
+- 9 bus topic constants registered; envelope uses aether-core canonical serialization
+- SPEC-003 WS frame table: 6 client types, 10 server types
+- MCP: 16 tools across 4 tiers, token-authenticated (test tokens in dev only)
+- Gateway: WS upgrade auth, unknown-frame error frames, origin stamping
+- Circuit breaker with SPEC-006 thresholds; retry policy with full jitter
+
+What needs real infrastructure (deferred):
+- M1: Python + TypeScript proto generation, cross-language identical-byte test
+- M2: Real rdkafka producer/consumer, trace header propagation
+- M3: Live Redpanda roundtrip with svc.* consumer group
+- M4: Quarantine MinIO storage, live quarantine→md.ticks isolation test
+- M5: DB-backed auth, sqlx session query, .sqlx metadata, WS protocol tests
+- M6: PostgreSQL grant evaluation, schema references, typed result schemas
+- M7: Gateway readyz DB check, mandatory health probes in CI

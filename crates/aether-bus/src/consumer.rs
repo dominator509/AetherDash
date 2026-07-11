@@ -17,16 +17,12 @@ pub struct StubConsumer {
     pub received: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
 }
 impl StubConsumer {
-    pub fn new(
-        received: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
-    ) -> Self {
+    pub fn new(received: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>) -> Self {
         Self { received }
     }
 }
 impl MessageConsumer for StubConsumer {
-    fn consume<T: DeserializeOwned + Serialize>(
-        &self,
-    ) -> Result<Vec<Envelope<T>>, ConsumerError> {
+    fn consume<T: DeserializeOwned + Serialize>(&self) -> Result<Vec<Envelope<T>>, ConsumerError> {
         let mut result = Vec::new();
         for (_topic, json) in self.received.lock().unwrap().iter() {
             if let Ok(env) = serde_json::from_str::<Envelope<T>>(json) {

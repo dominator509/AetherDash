@@ -5,6 +5,7 @@ import tomllib
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -20,6 +21,31 @@ async def http_exception_handler(request, exc: HTTPException):
     if isinstance(exc.detail, dict):
         return JSONResponse(status_code=exc.status_code, content=exc.detail)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    """Convert FastAPI validation errors into ErrorEnvelope format."""
+    return JSONResponse(
+        status_code=400,
+        content=new_error_envelope(
+            code=ErrorCode.invalid_argument,
+            message="Invalid request: " + str(exc.errors()),
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(request, exc: Exception):
+    """Catch-all: convert unexpected errors into ErrorEnvelope."""
+    return JSONResponse(
+        status_code=500,
+        content=new_error_envelope(
+            code=ErrorCode.internal,
+            message="Internal server error",
+        ),
+    )
+
 
 MANIFEST_PATH = Path(__file__).parent / "manifest.toml"
 

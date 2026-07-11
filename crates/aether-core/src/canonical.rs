@@ -92,10 +92,8 @@ mod tests {
         use crate::json::JsonObject;
 
         // Same keys inserted in opposite orders
-        let obj_a =
-            JsonObject::new(serde_json::json!({"a": 1, "b": 2, "c": 3})).unwrap();
-        let obj_b =
-            JsonObject::new(serde_json::json!({"c": 3, "b": 2, "a": 1})).unwrap();
+        let obj_a = JsonObject::new(serde_json::json!({"a": 1, "b": 2, "c": 3})).unwrap();
+        let obj_b = JsonObject::new(serde_json::json!({"c": 3, "b": 2, "a": 1})).unwrap();
 
         let hash_a = canonical_sha256(&obj_a).unwrap();
         let hash_b = canonical_sha256(&obj_b).unwrap();

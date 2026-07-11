@@ -1,6 +1,7 @@
 """MCP auth stub — validates Bearer token, returns session tier.
 Full implementation (EP-401): query sessions table, verify grants."""
 
+import os
 from dataclasses import dataclass
 
 # Test token mapping: Bearer test-{role}
@@ -26,7 +27,11 @@ def authenticate(authorization: str | None) -> Session:
     if not authorization:
         raise AuthError("missing Authorization header")
     token = authorization.removeprefix("Bearer ").strip()
-    tier = _TEST_TOKENS.get(token)
-    if tier is None:
-        raise AuthError("invalid token")
-    return Session(actor_id=token, tier=tier)
+
+    # Test tokens: ONLY available in dev mode (EP-401: replace with DB lookup).
+    if os.environ.get("AETHER_ENV", "prod") == "dev":
+        tier = _TEST_TOKENS.get(token)
+        if tier is not None:
+            return Session(actor_id=token, tier=tier)
+
+    raise AuthError("invalid token")
