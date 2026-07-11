@@ -1,13 +1,25 @@
-"""MCP tool server — stub with tier-filtered manifest.
+"""MCP tool server — authenticated with tier-filtered manifest.
 Full implementations: EP-201 (brain), EP-202 (LLM), EP-203 (alerts)."""
 
 import tomllib
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from auth import AuthError, authenticate
+from error_envelope import ErrorCode, new_error_envelope
+
 app = FastAPI(title="AETHER MCP Server", version="0.1.0")
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    """Return ErrorEnvelope dicts as top-level body (no 'detail' wrapper)."""
+    if isinstance(exc.detail, dict):
+        return JSONResponse(status_code=exc.status_code, content=exc.detail)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 MANIFEST_PATH = Path(__file__).parent / "manifest.toml"
 
@@ -33,30 +45,51 @@ def filter_by_tier(tier: int) -> list[ToolInfo]:
     ]
 
 
+def _abort(status: int, code: ErrorCode, message: str) -> None:
+    """Raise an HTTPException with an ErrorEnvelope body."""
+    raise HTTPException(
+        status_code=status,
+        detail=new_error_envelope(code, message),
+    )
+
+
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok", "service": "mcp"}
 
 
 @app.get("/tools")
-async def list_tools(tier: int = Query(default=5, ge=1, le=5)):
-    """List tools available at or below the given tier."""
-    tools = filter_by_tier(tier)
-    return {"tier": tier, "tools": tools}
+async def list_tools(authorization: str | None = Header(None)):
+    """List tools available to the authenticated session's tier."""
+    try:
+        session = authenticate(authorization)
+    except AuthError as e:
+        _abort(401, ErrorCode.unauthenticated, str(e))
+
+    tools = filter_by_tier(session.tier)
+    return {"tier": session.tier, "tools": tools}
 
 
 @app.post("/tools/{tool_name}")
-async def call_tool(tool_name: str, tier: int = Query(default=5)):
+async def call_tool(tool_name: str, authorization: str | None = Header(None)):
     """Stub: echo back the tool name. Real implementations in EP-201+."""
+    try:
+        session = authenticate(authorization)
+    except AuthError as e:
+        _abort(401, ErrorCode.unauthenticated, str(e))
+
     manifest = load_manifest()
     tool = next((t for t in manifest if t["name"] == tool_name), None)
     if tool is None:
-        raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_name}")
-    if tier < tool["tier"]:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Tool '{tool_name}' requires tier {tool['tier']}; caller has tier {tier}",
+        _abort(404, ErrorCode.not_found, f"Unknown tool: {tool_name}")
+
+    if session.tier < tool["tier"]:
+        _abort(
+            403,
+            ErrorCode.permission_denied,
+            f"Tool '{tool_name}' requires tier {tool['tier']}; caller has tier {session.tier}",
         )
+
     return {
         "tool": tool_name,
         "result": f"stub: {tool['description']}",
@@ -66,4 +99,5 @@ async def call_tool(tool_name: str, tier: int = Query(default=5)):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)

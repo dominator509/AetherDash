@@ -46,14 +46,31 @@ Milestone validations; `verify.sh` -> `verify: ok`; `test-integration.sh` -> `in
 Codegen is regenerate-don't-edit (AGENTS.md 9); generated dirs carry a DO-NOT-EDIT header + gitattributes linguist markers. Bus example/tests tolerate re-runs via unique group suffixes in tests. Gateway is stateless (sessions in PG) - kill/restart mid-test must pass (crash-only posture, SPEC-006).
 
 ## Progress
-- [ ] M1 Proto  - [ ] M2 Bus  - [ ] M3 Roundtrip  - [ ] M4 Quarantine
-- [ ] M5 Gateway  - [ ] M6 MCP manifest  - [ ] M7 Health/exit
+- [x] M1 Proto  - [x] M2 Bus  - [ ] M3 Roundtrip  - [ ] M4 Quarantine
+- [ ] M5 Gateway  - [x] M6 MCP manifest  - [ ] M7 Health/exit
 
 ## Surprises & Discoveries
-(rdkafka build realities, tonic version pins, ts-proto availability)
+- tonic-build pulls substantial dependency tree; disk usage ~1.2 GiB for debug build
+- protoc required: install via `winget install Google.Protobuf` and set PROTOC env var
+- rdkafka cmake-build feature works on Windows with CMake installed
+- Qdrant image has no curl; healthcheck uses bash /dev/tcp HTTP
+- Gateway WS auth: token passed as `?token=` query param (WS doesn't support custom headers)
 
 ## Decision Log
-(aether-proto crate choice; TS gen path; SERVICES_HEALTHZ timing; rdkafka vs pure-rust)
+- Chose dedicated `aether-proto` crate over per-crate tonic-build (single compilation unit)
+- TS generation: hand-mirrored per D7 (ts-proto would add network dependency)
+- Python generation: hand-mirrored per D7 (grpcio-tools not installed in CI)
+- rdkafka with cmake-build: works but build time is substantial; revisit if CI times out
+- SERVICES_HEALTHZ: currently SKIPs gracefully when services aren't running; mandatory in CI
+- Stub implementations are explicitly marked with TODO(EP-xxx) for auth, real transport, DB queries
 
 ## Outcomes & Retrospective
-(Phase-0 exit evidence bundle: commands + outputs)
+- 4 Rust crates: aether-core, aether-proto, aether-bus, aether-gateway
+- 5 gRPC service definitions: VenueAdapter, RiskEngine, OrderRouter, WalletGuardian, Brain
+- 9 bus topics registered; envelope uses aether-core canonical serialization
+- SPEC-003 WS frame table: 6 client types, 10 server types, full deserialization coverage
+- MCP: 16 tools across 4 tiers, manifest-driven, token-authenticated
+- Retry policy: 200ms base, 30s max, 5 attempts, full jitter
+- Circuit breaker: 5 consecutive failures, 30s window, single half-open probe
+- Phase 0 exit criteria: proto compiles, bus+gateway+MCP run, healthz pattern established
+- Remaining for Phase-0 closure: live Redpanda integration, gateway DB-backed auth, quarantine MinIO path

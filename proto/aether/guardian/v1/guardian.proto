@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package aether.guardian.v1;
+
+// WalletGuardian — human-in-the-loop wallet protection.
+// Agents propose transactions; humans (or policy) approve or deny them.
+// Withdrawals require at minimum a TOTP confirmation from a human.
+service WalletGuardian {
+  rpc ProposeTransaction(TxSpec) returns (Proposal);
+  rpc GetProposal(ProposalRequest) returns (Proposal);
+  rpc ApproveProposal(ApproveProposalRequest) returns (Proposal);
+}
+
+message TxSpec {
+  string to = 1;
+  string value = 2;
+  string data = 3;
+  string chain_id = 4;
+}
+
+message Proposal {
+  string id = 1;
+  ProposalStatus status = 2;
+  string policy_trace = 3;
+}
+
+message ProposalRequest {
+  string id = 1;
+}
+
+message ApproveProposalRequest {
+  string id = 1;
+  Approval approval = 2;
+}
+
+message Approval {
+  string totp = 1;
+  string ts = 2;
+}
+
+enum ProposalStatus {
+  PROPOSAL_STATUS_UNSPECIFIED = 0;
+  PROPOSAL_STATUS_PENDING = 1;
+  PROPOSAL_STATUS_AUTO_APPROVED = 2;
+  PROPOSAL_STATUS_DENIED = 3;
+}

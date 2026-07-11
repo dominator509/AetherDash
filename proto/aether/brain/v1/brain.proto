@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package aether.brain.v1;
+
+import "aether/core/v1/opportunity.proto";
+import "aether/core/v1/types.proto";
+
+// Brain — long-term memory and explanation store.
+// Agents persist structured drafts here (opportunity explanations, research
+// notes, prompt traces) and retrieve them via vector-style recall.
+service Brain {
+  rpc Store(ObjectDraft) returns (aether.core.v1.BrainRef);
+  rpc Get(aether.core.v1.BrainRef) returns (ObjectDraft);
+  rpc Recall(RecallRequest) returns (RecallResponse);
+  rpc Explain(ExplainRequest) returns (ExplainTree);
+}
+
+message ObjectDraft {
+  string kind = 1;
+  string content = 2;
+  string source = 3;
+}
+
+message RecallRequest {
+  string query = 1;
+  uint32 k = 2;
+  string filters = 3;
+}
+
+message RecallResponse {
+  repeated ScoredRef refs = 1;
+}
+
+message ScoredRef {
+  aether.core.v1.BrainRef ref = 1;
+  float score = 2;
+}
+
+message ExplainRequest {
+  aether.core.v1.Ulid opportunity_id = 1;
+}
+
+message ExplainTree {
+  string tree_json = 1;
+}

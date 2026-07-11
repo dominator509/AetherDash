@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package aether.risk.v1;
+
+import "aether/core/v1/orders.proto";
+
+// RiskEngine — real-time pre-trade risk evaluation.
+// Every OrderIntent flows through this service before reaching the router.
+service RiskEngine {
+  rpc Evaluate(aether.core.v1.OrderIntent) returns (aether.core.v1.RiskVerdict);
+}

@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package aether.venue.v1;
+
+import "aether/core/v1/market_data.proto";
+import "aether/core/v1/orders.proto";
+import "aether/core/v1/types.proto";
+
+// VenueAdapter — stateless venue adapter service.
+// Each venue implementation (Polymarket, Kalshi, IBKR, etc.) implements this
+// interface.  The OrderRouter selects the correct adapter at runtime.
+service VenueAdapter {
+  // ListMarkets returns a stream of all markets matching the optional filter.
+  rpc ListMarkets(ListMarketsRequest) returns (stream aether.core.v1.Market);
+  rpc GetMarket(GetMarketRequest) returns (aether.core.v1.Market);
+  rpc StreamTicks(StreamTicksRequest) returns (stream aether.core.v1.Quote);
+  rpc StreamBook(StreamBookRequest) returns (stream aether.core.v1.OrderBook);
+  rpc SubmitOrder(aether.core.v1.Order) returns (OrderAck);
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc GetBalances(GetBalancesRequest) returns (Balances);
+  rpc Health(HealthRequest) returns (VenueHealth);
+}
+
+message ListMarketsRequest {
+  string filter = 1;
+}
+
+message GetMarketRequest {
+  aether.core.v1.MarketKey key = 1;
+}
+
+message StreamTicksRequest {
+  repeated aether.core.v1.MarketKey keys = 1;
+}
+
+message StreamBookRequest {
+  aether.core.v1.MarketKey key = 1;
+  uint32 depth = 2;
+}
+
+message CancelOrderRequest {
+  string venue_ref = 1;
+}
+
+message CancelOrderResponse {
+  bool cancelled = 1;
+}
+
+message GetBalancesRequest {}
+
+message HealthRequest {}
+
+message OrderAck {
+  string venue_ref = 1;
+  string status = 2;
+}
+
+message Balances {
+  repeated Balance balances = 1;
+}
+
+message Balance {
+  string asset = 1;
+  string free = 2;
+  string locked = 3;
+}
+
+message VenueHealth {
+  string status = 1;
+  uint64 lag_ms = 2;
+  uint32 rate_remaining = 3;
+}

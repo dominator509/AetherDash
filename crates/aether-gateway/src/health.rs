@@ -1,5 +1,9 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use axum::response::Json;
 use serde::Serialize;
+
+pub(crate) static UNKNOWN_FRAME_COUNT: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -17,5 +21,13 @@ pub async fn readyz() -> Json<HealthResponse> {
 }
 
 pub async fn metrics() -> String {
-    "# HELP gateway_connections_total Total WebSocket connections\n# TYPE gateway_connections_total counter\ngateway_connections_total 0\n".into()
+    let count = UNKNOWN_FRAME_COUNT.load(Ordering::Relaxed);
+    format!(
+        "# HELP gateway_connections_total Total WebSocket connections\n\
+         # TYPE gateway_connections_total counter\n\
+         gateway_connections_total 0\n\
+         # HELP gateway_unknown_frames_total Total unknown/rejected frames\n\
+         # TYPE gateway_unknown_frames_total counter\n\
+         gateway_unknown_frames_total {count}\n"
+    )
 }

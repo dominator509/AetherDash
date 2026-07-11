@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package aether.router.v1;
+
+import "aether/core/v1/orders.proto";
+import "aether/core/v1/types.proto";
+
+// OrderRouter — multi-venue smart order router.
+// Accepts an intent, gets a risk verdict, selects the best venue, submits
+// via the correct VenueAdapter, and returns the resulting Order or a denial.
+service OrderRouter {
+  rpc Submit(aether.core.v1.OrderIntent) returns (RouterResult);
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+  rpc Status(StatusRequest) returns (aether.core.v1.Order);
+}
+
+message RouterResult {
+  optional aether.core.v1.Order order = 1;
+  optional aether.core.v1.RiskVerdict verdict = 2;
+}
+
+message CancelRequest {
+  aether.core.v1.Ulid order_id = 1;
+}
+
+message CancelResponse {
+  bool cancelled = 1;
+}
+
+message StatusRequest {
+  aether.core.v1.Ulid order_id = 1;
+}

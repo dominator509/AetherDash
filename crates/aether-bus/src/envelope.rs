@@ -1,5 +1,9 @@
+use aether_core::canonical::canonical_json_bytes;
+use aether_core::time::UtcTime;
 use serde::{Deserialize, Serialize};
 
+/// SPEC-003 message envelope: every bus message carries
+/// { schema, trace_id, ts, payload } in canonical JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope<T: Serialize> {
     pub schema: String,
@@ -9,27 +13,25 @@ pub struct Envelope<T: Serialize> {
 }
 
 impl<T: Serialize> Envelope<T> {
+    /// Create a new envelope with the given type name.
+    /// The schema field is set to `aether.<type_name>.v1`.
+    /// Timestamp uses aether-core UtcTime (RFC3339 with millisecond precision).
     pub fn new(type_name: &str, payload: T) -> Self {
         Self {
             schema: format!("aether.{type_name}.v1"),
-            trace_id: uuid::Uuid::new_v4().to_string(),
-            ts: chrono_now_iso(),
+            trace_id: ulid_string(),
+            ts: UtcTime::now().to_string(),
             payload,
         }
     }
 
-    pub fn to_canonical_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
-        serde_json::to_vec(self)
+    /// Serialize to canonical bytes via aether-core's canonical serialization.
+    /// Uses deterministic field order and decimal-string encoding.
+    pub fn to_canonical_bytes(&self) -> Result<Vec<u8>, aether_core::canonical::CanonicalError> {
+        canonical_json_bytes(self)
     }
 }
 
-fn chrono_now_iso() -> String {
-    // Simple ISO-8601 timestamp without chrono dependency
-    use std::time::SystemTime;
-    let dur = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = dur.as_secs();
-    let millis = dur.subsec_millis();
-    format!("{secs}.{millis:03}")
+fn ulid_string() -> String {
+    aether_core::ids::Ulid::new().to_string()
 }
