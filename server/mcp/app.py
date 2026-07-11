@@ -4,13 +4,12 @@ Full implementations: EP-201 (brain), EP-202 (LLM), EP-203 (alerts)."""
 import tomllib
 from pathlib import Path
 
+from auth import AuthError, authenticate
+from error_envelope import ErrorCode, new_error_envelope
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
-from auth import AuthError, authenticate
-from error_envelope import ErrorCode, new_error_envelope
 
 app = FastAPI(title="AETHER MCP Server", version="0.1.0")
 
