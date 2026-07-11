@@ -25,12 +25,21 @@ async def http_exception_handler(request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
-    """Convert FastAPI validation errors into ErrorEnvelope format."""
+    """Convert FastAPI validation errors into ErrorEnvelope format.
+    Returns only field/location metadata — never raw input values."""
+    sanitized = [
+        {
+            "loc": list(e.get("loc", [])),
+            "type": e.get("type", ""),
+        }
+        for e in exc.errors()
+    ]
     return JSONResponse(
         status_code=400,
         content=new_error_envelope(
             code=ErrorCode.invalid_argument,
-            message="Invalid request: " + str(exc.errors()),
+            message="Invalid request",
+            details=str(sanitized),
         ),
     )
 

@@ -1,6 +1,25 @@
 use crate::auth;
 use serde::{Deserialize, Serialize};
 
+// ── Client intent body (validated fields extracted from JSON) ──
+
+/// Partial OrderIntent fields parsed from the client body.
+/// The origin (kind, tier, actor_id) is NEVER taken from the client —
+/// it is always stamped from the authenticated session.
+#[derive(Debug, Deserialize)]
+struct ClientIntentBody {
+    market: Option<String>,
+    side: Option<String>,
+    order_type: Option<String>,
+    #[serde(default)]
+    limit_price: Option<String>,
+    size: Option<String>,
+    size_unit: Option<String>,
+    tif: Option<String>,
+    #[serde(default)]
+    paper: bool,
+}
+
 // ── Client → Server frames ──
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -10,7 +29,12 @@ pub enum ClientFrame {
     #[serde(rename = "unsubscribe")]
     Unsubscribe { id: Option<String>, trace_id: Option<String> },
     #[serde(rename = "command")]
-    Command { id: Option<String>, trace_id: Option<String>, text: String, room_context: Option<String> },
+    Command {
+        id: Option<String>,
+        trace_id: Option<String>,
+        text: String,
+        room_context: Option<String>,
+    },
     #[serde(rename = "order_intent")]
     OrderIntent { id: Option<String>, trace_id: Option<String>, body: serde_json::Value },
     #[serde(rename = "confirm")]
@@ -106,14 +130,47 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }),
             }
         }
-        ClientFrame::OrderIntent { id, trace_id, .. } => {
+        ClientFrame::OrderIntent { id, trace_id, body } => {
             let trace_id = make_trace_id(&id, &trace_id);
+
+            // Parse and validate the client body. Extract fields we can validate;
+            // origin is NEVER taken from the client — it is stamped from the session.
+            let parsed: ClientIntentBody = match serde_json::from_value(body) {
+                Ok(p) => p,
+                Err(e) => {
+                    return ServerFrame::Error {
+                        id,
+                        trace_id,
+                        body: aether_core::ErrorEnvelope::new(
+                            aether_core::ErrorCode::InvalidArgument,
+                            format!("invalid order_intent body: {e}"),
+                            aether_core::Ulid::new(),
+                        ),
+                    };
+                }
+            };
+
+            // Build a summary that shows the validated intent with trusted origin
+            let action_summary = format!(
+                "{} {} {} {} {} (paper={})",
+                parsed.order_type.as_deref().unwrap_or("?"),
+                parsed.side.as_deref().unwrap_or("?"),
+                parsed.size.as_deref().unwrap_or("?"),
+                parsed.size_unit.as_deref().unwrap_or("?"),
+                parsed.market.as_deref().unwrap_or("?"),
+                parsed.paper,
+            );
+
             ServerFrame::ConfirmRequired {
                 id,
                 trace_id,
                 ref_id: uuid::Uuid::new_v4().to_string(),
-                action_summary: "paper order intent received (stub)".into(),
-                tier_reason: "EP-401: tier not enforced yet — allow-with-note".into(),
+                action_summary,
+                tier_reason: format!(
+                    "EP-401: tier {} not enforced yet — allow-with-note",
+                    session.tier
+                ),
+                // Origin is stamped from the authenticated session, NOT from client body
                 actor_id: session.actor_id.clone(),
                 origin_kind: session.origin.kind.clone(),
             }
@@ -283,5 +340,59 @@ mod tests {
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"trace_id\":"), "missing trace_id: {json}");
+    }
+
+    #[test]
+    fn order_intent_body_fields_appear_in_response() {
+        let oi = r#"{"type":"order_intent","body":{"market":"BTC-USD","side":"buy","order_type":"limit","size":"0.01","size_unit":"base","paper":true}}"#;
+        let frame: ClientFrame = serde_json::from_str(oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("confirm_required"));
+        // The action_summary should reflect the parsed fields from the client body
+        assert!(json.contains("BTC-USD"), "missing market in: {json}");
+        assert!(json.contains("buy"), "missing side in: {json}");
+        assert!(json.contains("limit"), "missing order_type in: {json}");
+        assert!(json.contains("0.01"), "missing size in: {json}");
+        assert!(json.contains("base"), "missing size_unit in: {json}");
+        // Origin is from the session, not the client
+        assert!(json.contains("\"actor_id\":\"alice\""), "origin should be session actor");
+        assert!(json.contains("\"origin_kind\":\"user\""), "origin_kind should be session origin");
+    }
+
+    #[test]
+    fn order_intent_invalid_body_returns_error() {
+        // A body that cannot be parsed as ClientIntentBody (e.g., size as number
+        // when we expect a string) should produce an Error frame.
+        let oi = r#"{"type":"order_intent","body":42}"#;
+        let frame: ClientFrame = serde_json::from_str(oi).unwrap();
+        let response = dispatch(frame, &test_session());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\""), "invalid body should produce error frame, got: {json}");
+        assert!(json.contains("invalid_argument"), "should use invalid_argument code, got: {json}");
+    }
+
+    #[test]
+    fn order_intent_origin_never_from_client() {
+        // Even if the client sends an origin-like field in the body,
+        // the response must use the session origin.
+        let session = auth::SessionInfo {
+            actor_id: "trusted-system".into(),
+            tier: 4,
+            origin: auth::OriginInfo { kind: "agent".into(), actor_id: "trusted-system".into() },
+        };
+        let oi = r#"{"type":"order_intent","body":{"market":"ETH-USD","side":"sell","origin_kind":"attacker"}}"#;
+        let frame: ClientFrame = serde_json::from_str(oi).unwrap();
+        let response = dispatch(frame, &session);
+        let json = serde_json::to_string(&response).unwrap();
+        // The response MUST use the session origin, not the attacker-controlled field
+        assert!(
+            json.contains("\"origin_kind\":\"agent\""),
+            "origin_kind must come from session, not client body: {json}"
+        );
+        assert!(
+            json.contains("\"actor_id\":\"trusted-system\""),
+            "actor_id must come from session, not client body: {json}"
+        );
     }
 }

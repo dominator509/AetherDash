@@ -1,9 +1,19 @@
 """MCP tier-filtering contract tests."""
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app import app
+
+
+@pytest.fixture(autouse=True)
+def _set_dev_env(monkeypatch):
+    """All tests in this module use AETHER_ENV=dev so test tokens are enabled.
+    Production fail-closed behavior is tested separately (see test_prod_rejects_test_tokens)."""
+    monkeypatch.setenv("AETHER_ENV", "dev")
+
 
 client = TestClient(app)
 
@@ -115,3 +125,17 @@ def test_error_envelope_format_on_errors():
     assert "message" in body
     assert body["retryable"] is False
     assert "trace_id" in body
+
+
+# ── Production fail-closed ───────────────────────────────────────────────────
+
+
+def test_prod_rejects_test_tokens(monkeypatch):
+    """In production (AETHER_ENV != dev), test tokens must be rejected."""
+    # Override the module-level fixture: force prod mode for this test only
+    monkeypatch.setenv("AETHER_ENV", "prod")
+    # Must re-import auth to pick up the env change (auth reads env at call time)
+    resp = client.get("/tools", headers=_auth("test-admin"))
+    assert resp.status_code == 401
+    body = resp.json()
+    assert body["code"] == "unauthenticated"
