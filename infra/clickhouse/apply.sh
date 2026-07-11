@@ -17,15 +17,15 @@ echo "Applying ClickHouse DDL to ${CH_URL} database=${CH_DB} ..."
 for f in "$SCRIPT_DIR"/*.sql; do
     if [ -f "$f" ]; then
         echo "  $(basename "$f")"
-        # Strip `--` comments and split on `;` — ClickHouse HTTP API
-        # requires one statement per request and does not support comments.
-        sed '/^--/d' "$f" | tr '\n' ' ' | sed 's/;/;\n/g' | while IFS= read -r stmt; do
+        # Strip `--` comments, collapse newlines, split on `;`.
+        # Process substitution avoids a subshell so curl failures propagate.
+        while IFS= read -r stmt; do
             stmt="$(echo "$stmt" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
             if [ -n "$stmt" ] && [ "$stmt" != ";" ]; then
                 curl -fsS -u "${CH_USER}:${CH_PASS}" "${CH_URL}" \
                     --data-binary "${stmt}" >/dev/null
             fi
-        done
+        done < <(sed '/^--/d' "$f" | tr '\n' ' ' | sed 's/;/;\n/g')
     fi
 done
 echo "ClickHouse DDL complete."

@@ -39,10 +39,10 @@ assert c['distance'] == 'Cosine', f'distance mismatch: {c[\"distance\"]}'
             local verify_resp
             verify_resp=$(curl -fsS "${QDRANT_URL}/collections/${name}")
             echo "$verify_resp" | ${PYTHON} -c "
-            import sys, json
-            c = json.load(sys.stdin)['result']['config']['params']['vectors']
-            assert c['size'] == ${DIMS}, f'vector size mismatch: {c[\"size\"]} != ${DIMS}'
-            assert c['distance'] == 'Cosine', f'distance mismatch: {c[\"distance\"]}'
+import sys, json
+c = json.load(sys.stdin)['result']['config']['params']['vectors']
+assert c['size'] == ${DIMS}, f'vector size mismatch: {c[\"size\"]} != ${DIMS}'
+assert c['distance'] == 'Cosine', f'distance mismatch: {c[\"distance\"]}'
             " || { echo "  ${name}: config verification FAILED"; exit 1; }
             echo "  ${name}: created and verified"
         else
