@@ -46,8 +46,8 @@ Milestone validations; `verify.sh` -> `verify: ok`; `test-integration.sh` -> `in
 Codegen is regenerate-don't-edit (AGENTS.md 9); generated dirs carry a DO-NOT-EDIT header + gitattributes linguist markers. Bus example/tests tolerate re-runs via unique group suffixes in tests. Gateway is stateless (sessions in PG) - kill/restart mid-test must pass (crash-only posture, SPEC-006).
 
 ## Progress
-- [ ] M1 Proto  - [ ] M2 Bus  - [ ] M3 Roundtrip  - [ ] M4 Quarantine
-- [ ] M5 Gateway  - [ ] M6 MCP manifest  - [ ] M7 Health/exit
+- [x] M1 Proto  - [x] M2 Bus  - [x] M3 Roundtrip  - [x] M4 Quarantine
+- [x] M5 Gateway  - [x] M6 MCP manifest  - [x] M7 Health/exit
 
 ## Surprises & Discoveries
 - tonic-build pulls substantial dependency tree; disk usage ~1.2 GiB for debug build
@@ -63,6 +63,9 @@ Codegen is regenerate-don't-edit (AGENTS.md 9); generated dirs carry a DO-NOT-ED
 - rdkafka with cmake-build: works but build time is substantial; revisit if CI times out
 - SERVICES_HEALTHZ: currently SKIPs gracefully when services aren't running; mandatory in CI
 - Stub implementations are explicitly marked with TODO(EP-xxx) for auth, real transport, DB queries
+- Bus traits changed to async (return impl Future + Send) for rdkafka FutureProducer compatibility
+- Gateway extracted to lib.rs for integration test access; main.rs is binary-only entry point
+- Integration tests use #[ignore] pattern (Redpanda, quarantine, WS); require env vars to run live
 
 ## Outcomes & Retrospective
 What is done:
