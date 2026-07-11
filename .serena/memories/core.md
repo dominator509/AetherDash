@@ -28,7 +28,7 @@ AETHER Terminal: self-hosted, AI-native terminal unifying prediction markets, eq
 - `aether-blueprint/AGENTS.md` — coding agent governance (read first)
 - `aether-blueprint/ARCHITECTURE.md` — (`mem:architecture`) boundaries, invariants, repo map, dependency rules D1-D7
 - `aether-blueprint/COMMANDS.md` — (`mem:suggested_commands`) the only legal commands
-- `aether-blueprint/DECISIONS.md` — (`mem:decisions`) ADRs
+- `aether-blueprint/DECISIONS.md` — (read file directly) ADRs
 - `aether-blueprint/ENVIRONMENT.md` — (`mem:environment`) config contract
 - `aether-blueprint/ROADMAP.md` — phase sequencing (do not implement from directly)
 - `aether-blueprint/.agent/PLANS.md` — (`mem:execution`) ExecPlan ledger; exactly one active at a time
