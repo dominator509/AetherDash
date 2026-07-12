@@ -196,10 +196,10 @@ fn make_trace_id(client_id: &Option<String>, client_trace_id: &Option<String>) -
 
 /// Map the session's string origin kind to the canonical aether_core OriginKind.
 /// Returns an error for unknown kinds — never silently reclassifies.
+/// Canonical values per SPEC-005: human, agent, automation.
 fn session_origin_kind(kind: &str) -> Result<OriginKind, String> {
     match kind {
-        "user" => Ok(OriginKind::User),
-        "alert_action" => Ok(OriginKind::AlertAction),
+        "human" => Ok(OriginKind::Human),
         "agent" => Ok(OriginKind::Agent),
         "automation" => Ok(OriginKind::Automation),
         other => Err(format!("unknown session origin kind: {other}")),
@@ -447,9 +447,11 @@ mod tests {
 
     fn test_session() -> auth::SessionInfo {
         auth::SessionInfo {
+            session_id: "test-session".into(),
             actor_id: ACTOR_ALICE.into(),
             tier: 3,
-            origin: auth::OriginInfo { kind: "user".into(), actor_id: ACTOR_ALICE.into() },
+            origin: auth::OriginInfo { kind: "human".into(), actor_id: ACTOR_ALICE.into() },
+            device_label: None,
         }
     }
 
@@ -607,9 +609,11 @@ mod tests {
     #[test]
     fn session_origin_stamped_on_order_intent() {
         let session = auth::SessionInfo {
+            session_id: "test-session".into(),
             actor_id: ACTOR_BOB.into(),
             tier: 1,
             origin: auth::OriginInfo { kind: "automation".into(), actor_id: ACTOR_BOB.into() },
+            device_label: None,
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -653,7 +657,7 @@ mod tests {
             json.contains(&format!("\"actor_id\":\"{ACTOR_ALICE}\"")),
             "must contain exact authenticated actor ULID: {json}"
         );
-        assert!(json.contains("\"origin_kind\":\"user\""), "origin_kind should be session origin");
+        assert!(json.contains("\"origin_kind\":\"human\""), "origin_kind should be session origin");
     }
 
     #[test]
@@ -669,9 +673,11 @@ mod tests {
     #[test]
     fn order_intent_origin_never_from_client() {
         let session = auth::SessionInfo {
+            session_id: "test-session".into(),
             actor_id: ACTOR_SYSTEM.into(),
             tier: 4,
             origin: auth::OriginInfo { kind: "agent".into(), actor_id: ACTOR_SYSTEM.into() },
+            device_label: None,
         };
         let body = intent_body(
             r#""market":"mkt:kalshi:BTC-75","side":"sell","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"50000.00","extra_field":"ignored""#,
@@ -729,9 +735,11 @@ mod tests {
     #[test]
     fn intent_stamps_exact_authenticated_actor() {
         let session = auth::SessionInfo {
+            session_id: "test-session".into(),
             actor_id: ACTOR_BOB.into(),
             tier: 3,
-            origin: auth::OriginInfo { kind: "user".into(), actor_id: ACTOR_BOB.into() },
+            origin: auth::OriginInfo { kind: "human".into(), actor_id: ACTOR_BOB.into() },
+            device_label: None,
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -746,9 +754,11 @@ mod tests {
     #[test]
     fn intent_rejects_invalid_actor_ulid() {
         let session = auth::SessionInfo {
+            session_id: "test-session".into(),
             actor_id: "not-a-valid-ulid".into(),
             tier: 3,
-            origin: auth::OriginInfo { kind: "user".into(), actor_id: "not-a-valid-ulid".into() },
+            origin: auth::OriginInfo { kind: "human".into(), actor_id: "not-a-valid-ulid".into() },
+            device_label: None,
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -933,9 +943,11 @@ mod tests {
     #[test]
     fn intent_client_supplied_origin_data_is_ignored() {
         let session = auth::SessionInfo {
+            session_id: "test-session".into(),
             actor_id: ACTOR_ALICE.into(),
             tier: 2,
-            origin: auth::OriginInfo { kind: "user".into(), actor_id: ACTOR_ALICE.into() },
+            origin: auth::OriginInfo { kind: "human".into(), actor_id: ACTOR_ALICE.into() },
+            device_label: None,
         };
         let body = intent_body(
             r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","origin_kind":"attacker","actor_id":"evil""#,
@@ -946,7 +958,7 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(!json.contains("attacker"), "client origin_kind must not leak: {json}");
         assert!(!json.contains("evil"), "client actor_id must not leak: {json}");
-        assert!(json.contains("\"origin_kind\":\"user\""), "origin from session: {json}");
+        assert!(json.contains("\"origin_kind\":\"human\""), "origin from session: {json}");
         assert!(
             json.contains(&format!("\"actor_id\":\"{ACTOR_ALICE}\"")),
             "must contain exact authenticated ULID: {json}"
@@ -1021,9 +1033,11 @@ mod tests {
     #[test]
     fn intent_unknown_origin_kind_is_error() {
         let session = auth::SessionInfo {
+            session_id: "test-session".into(),
             actor_id: ACTOR_ALICE.into(),
             tier: 3,
             origin: auth::OriginInfo { kind: "superuser".into(), actor_id: ACTOR_ALICE.into() },
+            device_label: None,
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -1095,7 +1109,7 @@ mod tests {
                 action_summary: "test".into(),
                 tier_reason: "test".into(),
                 actor_id: "a".into(),
-                origin_kind: "user".into(),
+                origin_kind: "human".into(),
             },
             ServerFrame::Degradation { id: None, surface: "test".into(), reason: "test".into() },
             ServerFrame::Error {

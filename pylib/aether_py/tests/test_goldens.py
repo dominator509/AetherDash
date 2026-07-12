@@ -63,6 +63,4 @@ def test_typed_golden_round_trips(fn: str) -> None:
 
         # Hash the canonical model dump (not the raw input dict)
         canonical = canonical_model_json(model)
-        assert sha256(canonical) == str(e["sha256"]), (
-            f"{e['name']}: SHA-256 mismatch"
-        )
+        assert sha256(canonical) == str(e["sha256"]), f"{e['name']}: SHA-256 mismatch"

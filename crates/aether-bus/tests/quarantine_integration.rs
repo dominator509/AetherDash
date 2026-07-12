@@ -14,7 +14,7 @@ use aether_bus::consumer::MessageConsumer;
 use aether_bus::consumer::StubConsumer;
 use aether_bus::envelope::Envelope;
 use aether_bus::producer::StubProducer;
-use aether_bus::quarantine::{Quarantine, QuarantineMessage};
+use aether_bus::quarantine::{Quarantine, QuarantineMessage, StubObjectStore};
 use sha2::Digest;
 
 #[tokio::test]
@@ -31,7 +31,8 @@ async fn quarantine_publish_and_consume_roundtrip() {
 
     // ── Step 1: Publish via StubProducer ──────────────────────────
     let producer = StubProducer::new();
-    let hash = Quarantine::publish(&producer, venue, reason, raw_payload)
+    let storage = StubObjectStore::new();
+    let hash = Quarantine::publish(&producer, &storage, venue, reason, raw_payload)
         .await
         .expect("publish should succeed");
 

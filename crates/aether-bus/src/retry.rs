@@ -221,6 +221,72 @@ impl CircuitBreaker {
     }
 }
 
+// ── send_with_retry ───────────────────────────────────────────────────
+//
+// A free function that wraps any MessageProducer::send with retry logic.
+
+use crate::envelope::Envelope;
+use crate::producer::{MessageProducer, ProducerError};
+use serde::Serialize;
+
+/// Send an envelope with retry on transient errors.
+///
+/// Uses the given [`RetryPolicy`] to retry on transient errors (transport
+/// failures, broker down, timeouts). Each retry attempt uses [full jitter]
+/// backoff. Logs each attempt at debug level.
+///
+/// The `key` parameter is forwarded to [`MessageProducer::send`] on every
+/// attempt and can be `None` for round-robin partitioning or `Some(str)` for
+/// consistent hash-based partitioning.
+///
+/// [full jitter]: Self::delay_for_attempt
+pub async fn send_with_retry<P, T>(
+    producer: &P,
+    topic: &str,
+    envelope: Envelope<T>,
+    key: Option<&str>,
+    policy: &RetryPolicy,
+) -> Result<(), ProducerError>
+where
+    P: MessageProducer,
+    T: Serialize + Send + Sync + Clone,
+{
+    if policy.max_attempts == 0 {
+        return Err(ProducerError::Send("send_with_retry called with max_attempts=0".to_string()));
+    }
+
+    for attempt in 0..policy.max_attempts {
+        if attempt > 0 {
+            let delay = policy.delay_for_attempt(attempt - 1);
+            tokio::time::sleep(delay).await;
+        }
+
+        let env = envelope.clone();
+        match producer.send(topic, env, key).await {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                if !e.is_retryable() {
+                    return Err(e);
+                }
+                let is_last = attempt + 1 >= policy.max_attempts;
+                if is_last {
+                    return Err(ProducerError::RetriesExhausted {
+                        max_retries: policy.max_attempts,
+                    });
+                }
+                tracing::debug!(
+                    attempt = attempt + 1,
+                    max_attempts = policy.max_attempts,
+                    error = %e,
+                    "transient send error, retrying"
+                );
+            }
+        }
+    }
+
+    Err(ProducerError::RetriesExhausted { max_retries: policy.max_attempts })
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -436,5 +502,124 @@ mod tests {
                 "error-rate trigger must work independently of consecutive trigger"
             );
         }
+    }
+
+    // ── send_with_retry ────────────────────────────────────────────
+
+    use crate::envelope::Envelope;
+    use crate::producer::{MessageProducer, ProducerError, StubProducer};
+
+    #[tokio::test]
+    async fn send_with_retry_succeeds_on_first_attempt() {
+        let producer = StubProducer::new();
+        let policy = RetryPolicy::default();
+        let envelope = Envelope::new("test", "hello");
+
+        send_with_retry(&producer, "test.topic", envelope, None, &policy).await.unwrap();
+
+        assert_eq!(producer.sent.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn send_with_retry_succeeds_with_key() {
+        let producer = StubProducer::new();
+        let policy = RetryPolicy::default();
+        let envelope = Envelope::new("test", "hello");
+
+        send_with_retry(&producer, "test.topic", envelope, Some("my-key"), &policy).await.unwrap();
+
+        assert_eq!(producer.sent.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn send_with_retry_passes_through_non_retryable_error() {
+        struct FailWithNonRetryable;
+        impl MessageProducer for FailWithNonRetryable {
+            async fn send<T: Serialize + Send + Sync>(
+                &self,
+                _topic: &str,
+                _envelope: Envelope<T>,
+                _key: Option<&str>,
+            ) -> Result<(), ProducerError> {
+                Err(ProducerError::Send("invalid argument".to_string()))
+            }
+        }
+
+        let policy = RetryPolicy::default();
+        let envelope = Envelope::new("test", "payload");
+
+        let result =
+            send_with_retry(&FailWithNonRetryable, "test.topic", envelope, None, &policy).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(!err.is_retryable());
+    }
+
+    #[tokio::test]
+    async fn send_with_retry_exhaustion_returns_retries_exhausted() {
+        struct AlwaysFailsTransient;
+        impl MessageProducer for AlwaysFailsTransient {
+            async fn send<T: Serialize + Send + Sync>(
+                &self,
+                _topic: &str,
+                _envelope: Envelope<T>,
+                _key: Option<&str>,
+            ) -> Result<(), ProducerError> {
+                Err(ProducerError::Send("transport failure".to_string()))
+            }
+        }
+
+        let policy = RetryPolicy { max_attempts: 3, ..RetryPolicy::default() };
+        let envelope = Envelope::new("test", "payload");
+
+        let result =
+            send_with_retry(&AlwaysFailsTransient, "test.topic", envelope, None, &policy).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ProducerError::RetriesExhausted { max_retries } => {
+                assert_eq!(max_retries, 3);
+            }
+            other => panic!("expected RetriesExhausted, got {other}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn send_with_retry_zero_attempts_returns_error_immediately() {
+        let producer = StubProducer::new();
+        let policy = RetryPolicy { max_attempts: 0, ..RetryPolicy::default() };
+        let envelope = Envelope::new("test", "payload");
+        let result = send_with_retry(&producer, "test.topic", envelope, None, &policy).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn send_with_retry_recovers_after_transient_failures() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct FlakyProducer {
+            fail_count: AtomicU32,
+        }
+        impl MessageProducer for FlakyProducer {
+            async fn send<T: Serialize + Send + Sync>(
+                &self,
+                _topic: &str,
+                _envelope: Envelope<T>,
+                _key: Option<&str>,
+            ) -> Result<(), ProducerError> {
+                let remaining = self.fail_count.fetch_sub(1, Ordering::SeqCst);
+                if remaining > 0 {
+                    Err(ProducerError::Send("transport failure".to_string()))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+
+        let producer = FlakyProducer { fail_count: AtomicU32::new(2) };
+        let policy = RetryPolicy { max_attempts: 5, ..RetryPolicy::default() };
+        let envelope = Envelope::new("test", "payload");
+
+        // Fails twice, succeeds on third attempt
+        send_with_retry(&producer, "test.topic", envelope, None, &policy).await.unwrap();
     }
 }

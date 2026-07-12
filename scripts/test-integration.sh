@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 COMPOSE="infra/dev/docker-compose.yml"
 
 command -v docker >/dev/null 2>&1 || { echo "MISSING TOOL: docker (A-06)"; exit 2; }
-if [ ! -f "$COMPOSE" ]; then echo "SKIP (marker absent): $COMPOSE -> integration tests"; echo "integration: ok"; exit 0; fi
+if [ ! -f "$COMPOSE" ]; then echo "FAIL (required infrastructure absent): $COMPOSE — integration tests cannot run without the compose stack"; exit 1; fi
 
 # Check sqlx-cli is installed (needed for migration pairing tests)
 if ! cargo sqlx --version >/dev/null 2>&1; then
@@ -24,8 +24,17 @@ until docker compose -f "$COMPOSE" exec -T postgres pg_isready -U aether >/dev/n
 done
 
 # Convention (AGENTS.md section 10, TESTING.md): Rust integration tests are #[ignore]-tagged.
+# Live tests require these markers; without them the tests skip silently.
 echo "=== Running Rust integration tests ==="
 if [ -f Cargo.toml ]; then
+    export AETHER_INTEGRATION_TEST=1
+    export AETHER_REDPANDA_TEST=1
+    export AETHER_KAFKA_BOOTSTRAP="${AETHER_KAFKA_BOOTSTRAP:-localhost:9092}"
+    export DATABASE_URL="${DATABASE_URL:-postgres://aether:aether@localhost:5432/aether}"
+    echo "  AETHER_INTEGRATION_TEST=1"
+    echo "  AETHER_REDPANDA_TEST=1"
+    echo "  AETHER_KAFKA_BOOTSTRAP=${AETHER_KAFKA_BOOTSTRAP}"
+    echo "  DATABASE_URL=${DATABASE_URL}"
     cargo test --workspace -- --ignored --test-threads=1
 else
     echo "SKIP (marker absent): Cargo.toml -> Rust integration tests"

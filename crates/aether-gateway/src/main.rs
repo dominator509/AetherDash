@@ -18,7 +18,7 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://aether:aether@localhost:5432/aether".into());
     let pool = auth::init_db_pool(&database_url);
-    let state = AppState { pool };
+    let state = AppState::new(pool);
 
     let app = aether_gateway::build_router(state);
 

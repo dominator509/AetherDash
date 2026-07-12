@@ -3,7 +3,7 @@
     "name": "order_multi_key_venue_ref",
     "type": "Order",
     "value": {
-      "order_id": "01KX6RVEVX9TFJFJH2JM5B4S2T",
+      "order_id": "01KXABM49X7ZCEFTQ7B916S5ME",
       "market": "mkt:kalshi:ORDERING-1",
       "side": "buy",
       "price": "0.66",
@@ -20,6 +20,6 @@
       "ts": "2025-07-10T12:34:56.789Z",
       "paper": false
     },
-    "sha256": "bd88d57a79a11e9448ffe22328a14639c17b0a57e4454720c2c5b088e79b4a05"
+    "sha256": "b980b8f9661bb8bb9e3dd17e6280fb8ed26eec8e09cab32100d7b09c94add1ce"
   }
 ]

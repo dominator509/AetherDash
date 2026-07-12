@@ -19,17 +19,17 @@
     "name": "empty_risk_reasons",
     "type": "RiskVerdict",
     "value": {
-      "intent_id": "01KX6RVEVZVH80GBNVFMTF5JXQ",
+      "intent_id": "01KXABM49YM3S0R16TW7NT49TC",
       "verdict": "allow",
       "ts": "2025-07-10T12:34:56.789Z"
     },
-    "sha256": "e01a94242dc66ba02d3c6ec02002ae1386552748403b8b53c7a16b1ad4460330"
+    "sha256": "9f54eba6fed5e288b0af48b41c606110806e415133601b2ec5131a1771eecb07"
   },
   {
     "name": "empty_caps_maps",
     "type": "CapsSnapshot",
     "value": {
-      "version": "01KX6RVEVZ5BA5DAGGVRZM1DT4",
+      "version": "01KXABM49YEPHTF8H8ZQMAFPZZ",
       "per_order_max": {
         "amount": "500.00",
         "currency": "USD"
@@ -39,6 +39,6 @@
         "currency": "USD"
       }
     },
-    "sha256": "8780ef3eb591b07c552ffc94b6863674e19634c1201e620260ad9d3e6012050a"
+    "sha256": "9085add6742f4c48490e56d1e9961be6304f31d79ff45d90f5ac54ab70212377"
   }
 ]

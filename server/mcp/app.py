@@ -1,21 +1,41 @@
 """MCP tool server — authenticated with tier-filtered manifest.
 Full implementations: EP-201 (brain), EP-202 (LLM), EP-203 (alerts)."""
 
-import tomllib
-from pathlib import Path
+from __future__ import annotations
 
-from auth import AuthError, authenticate
+import tomllib
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+from auth import (
+    AuthError,
+    PermissionDeniedError,
+    authenticate,
+    close_pool,
+    init_pool,
+)
 from error_envelope import ErrorCode, new_error_envelope
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-app = FastAPI(title="AETHER MCP Server", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Manage the asyncpg connection pool lifecycle."""
+    await init_pool()
+    yield
+    await close_pool()
+
+
+app = FastAPI(title="AETHER MCP Server", version="0.1.0", lifespan=lifespan)
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc: HTTPException):
+async def http_exception_handler(request: object, exc: HTTPException) -> JSONResponse:
     """Return ErrorEnvelope dicts as top-level body (no 'detail' wrapper)."""
     if isinstance(exc.detail, dict):
         return JSONResponse(status_code=exc.status_code, content=exc.detail)
@@ -23,10 +43,12 @@ async def http_exception_handler(request, exc: HTTPException):
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request, exc: RequestValidationError):
+async def validation_exception_handler(
+    request: object, exc: RequestValidationError
+) -> JSONResponse:
     """Convert FastAPI validation errors into ErrorEnvelope format.
     Returns only field/location metadata — never raw input values."""
-    sanitized = [
+    sanitized: list[dict[str, object]] = [
         {
             "loc": list(e.get("loc", [])),
             "type": e.get("type", ""),
@@ -44,7 +66,7 @@ async def validation_exception_handler(request, exc: RequestValidationError):
 
 
 @app.exception_handler(Exception)
-async def unexpected_exception_handler(request, exc: Exception):
+async def unexpected_exception_handler(request: object, exc: Exception) -> JSONResponse:
     """Catch-all: convert unexpected errors into ErrorEnvelope."""
     return JSONResponse(
         status_code=500,
@@ -64,19 +86,29 @@ class ToolInfo(BaseModel):
     description: str
 
 
-def load_manifest() -> list[dict]:
+def load_manifest() -> list[dict[str, Any]]:
     with open(MANIFEST_PATH, "rb") as f:
-        data = tomllib.load(f)
-    return data.get("tools", [])
+        data: dict[str, Any] = tomllib.load(f)
+    return data.get("tools", [])  # type: ignore[no-any-return]
 
 
-def filter_by_tier(tier: int) -> list[ToolInfo]:
+def filter_by_tier(
+    tier: int,
+    scopes: dict[str, Any] | None = None,
+) -> list[ToolInfo]:
     tools = load_manifest()
-    return [
-        ToolInfo(name=t["name"], tier=t["tier"], description=t["description"])
-        for t in tools
-        if t["tier"] <= tier
-    ]
+    filtered = []
+    for t in tools:
+        if t["tier"] <= tier:
+            # Apply scope filtering if present
+            if scopes:
+                allowed = scopes.get("allowed")
+                if allowed is not None and t["name"] not in allowed:
+                    continue
+            filtered.append(
+                ToolInfo(name=t["name"], tier=t["tier"], description=t["description"])
+            )
+    return filtered
 
 
 def _abort(status: int, code: ErrorCode, message: str) -> None:
@@ -88,27 +120,35 @@ def _abort(status: int, code: ErrorCode, message: str) -> None:
 
 
 @app.get("/healthz")
-async def healthz():
+async def healthz() -> dict[str, str]:
     return {"status": "ok", "service": "mcp"}
 
 
 @app.get("/tools")
-async def list_tools(authorization: str | None = Header(None)):
-    """List tools available to the authenticated session's tier."""
+async def list_tools(authorization: str | None = Header(None)) -> Any:
+    """List tools available to the authenticated session's tier and scopes."""
     try:
         session = await authenticate(authorization)
+    except PermissionDeniedError as e:
+        _abort(403, ErrorCode.permission_denied, str(e))
     except AuthError as e:
         _abort(401, ErrorCode.unauthenticated, str(e))
 
-    tools = filter_by_tier(session.tier)
-    return {"tier": session.tier, "tools": tools}
+    tools = filter_by_tier(session.tier, session.scopes)
+    return {
+        "tier": session.tier,
+        "tools": tools,
+        "scopes": session.scopes,
+    }
 
 
 @app.post("/tools/{tool_name}")
-async def call_tool(tool_name: str, authorization: str | None = Header(None)):
+async def call_tool(tool_name: str, authorization: str | None = Header(None)) -> Any:
     """Stub: echo back the tool name. Real implementations in EP-201+."""
     try:
         session = await authenticate(authorization)
+    except PermissionDeniedError as e:
+        _abort(403, ErrorCode.permission_denied, str(e))
     except AuthError as e:
         _abort(401, ErrorCode.unauthenticated, str(e))
 
@@ -116,12 +156,23 @@ async def call_tool(tool_name: str, authorization: str | None = Header(None)):
     tool = next((t for t in manifest if t["name"] == tool_name), None)
     if tool is None:
         _abort(404, ErrorCode.not_found, f"Unknown tool: {tool_name}")
+    assert tool is not None  # type narrowing after _abort
 
     if session.tier < tool["tier"]:
         _abort(
             403,
             ErrorCode.permission_denied,
             f"Tool '{tool_name}' requires tier {tool['tier']}; caller has tier {session.tier}",
+        )
+
+    # Check grant scopes
+    scopes = session.scopes or {}
+    allowed = scopes.get("allowed")
+    if allowed is not None and tool_name not in allowed:
+        _abort(
+            403,
+            ErrorCode.permission_denied,
+            f"Tool '{tool_name}' not in grant scopes",
         )
 
     return {

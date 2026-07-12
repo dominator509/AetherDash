@@ -52,6 +52,16 @@ export interface VenueHealth {
   rate_remaining: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- proto empty message
+export interface GetBalancesRequest {
+  // empty
+}
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- proto empty message
+export interface HealthRequest {
+  // empty
+}
+
 // ── OrderRouter (router/v1/router.proto) ──
 export interface RouterResult {
   order?: Order;

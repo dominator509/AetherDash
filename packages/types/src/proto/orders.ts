@@ -7,7 +7,7 @@ export type Side = "buy" | "sell" | "buy_no" | "sell_no";
 export type OrderType = "limit" | "market";
 export type TimeInForce = "ioc" | "gtc" | "day";
 export type SizeUnit = "contracts" | "shares" | "base" | "quote";
-export type OriginKind = "user" | "alert_action" | "agent" | "automation";
+export type OriginKind = "human" | "agent" | "automation";
 export type RiskVerdictStatus = "allow" | "deny";
 export type RiskReasonCode =
   | "liveness"

@@ -13,7 +13,7 @@
       "tif": "gtc",
       "paper": true,
       "origin": {
-        "kind": "user",
+        "kind": "human",
         "tier": 3,
         "actor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
       },
@@ -27,7 +27,7 @@
       "caps_version": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
       "created_ts": "2025-07-10T12:34:56.789Z"
     },
-    "sha256": "37807e96d24cc2a44741a983459a733f6269a002cd0d244f4b30b06e3c834848"
+    "sha256": "eab8fba2e3826847035fc598dcad0eb637c8c8d3f40afb3b36120ed7a129acf5"
   },
   {
     "name": "intent_market_sell",

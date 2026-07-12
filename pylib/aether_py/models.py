@@ -74,8 +74,7 @@ class TimeInForce(StrEnum):
 
 
 class OriginKind(StrEnum):
-    user = "user"
-    alert_action = "alert_action"
+    human = "human"
     agent = "agent"
     automation = "automation"
 
@@ -578,9 +577,7 @@ class ErrorEnvelope(BaseModel):
     def retryable_consistent(self):
         expected = self.code.is_retryable()
         if self.retryable != expected:
-            raise ValueError(
-                f"retryable={self.retryable} contradicts code={self.code}"
-            )
+            raise ValueError(f"retryable={self.retryable} contradicts code={self.code}")
         return self
 
 

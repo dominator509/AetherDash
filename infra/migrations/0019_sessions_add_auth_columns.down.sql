@@ -1,0 +1,4 @@
+ALTER TABLE sessions DROP COLUMN IF EXISTS last_seen_ts;
+ALTER TABLE sessions DROP COLUMN IF EXISTS device_label;
+ALTER TABLE sessions DROP COLUMN IF EXISTS origin_kind;
+ALTER TABLE sessions DROP COLUMN IF EXISTS tier;

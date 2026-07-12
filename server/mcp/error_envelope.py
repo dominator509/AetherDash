@@ -42,7 +42,7 @@ def new_error_envelope(
     code: ErrorCode,
     message: str,
     details: str | None = None,
-) -> dict:
+) -> dict[str, object]:
     """Factory: builds an ErrorEnvelope dict with auto-generated trace_id."""
     env = ErrorEnvelope(
         code=code,

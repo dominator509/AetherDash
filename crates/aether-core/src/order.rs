@@ -44,8 +44,7 @@ pub enum TimeInForce {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OriginKind {
-    User,
-    AlertAction,
+    Human,
     Agent,
     Automation,
 }
@@ -268,30 +267,30 @@ mod tests {
     #[test]
     fn origin_valid_tiers() {
         for t in 1..=5u8 {
-            assert!(Origin::new(OriginKind::User, t, Ulid::new()).is_ok());
+            assert!(Origin::new(OriginKind::Human, t, Ulid::new()).is_ok());
         }
     }
 
     #[test]
     fn origin_rejects_tier_zero() {
-        assert!(Origin::new(OriginKind::User, 0, Ulid::new()).is_err());
+        assert!(Origin::new(OriginKind::Human, 0, Ulid::new()).is_err());
     }
 
     #[test]
     fn origin_rejects_tier_six() {
-        assert!(Origin::new(OriginKind::User, 6, Ulid::new()).is_err());
+        assert!(Origin::new(OriginKind::Human, 6, Ulid::new()).is_err());
     }
 
     #[test]
     fn origin_deserialize_rejects_invalid_tier() {
-        let json = r#"{"kind":"user","tier":0,"actor_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"}"#;
+        let json = r#"{"kind":"human","tier":0,"actor_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"}"#;
         let result: Result<Origin, _> = serde_json::from_str(json);
         assert!(result.is_err(), "tier 0 should be rejected");
     }
 
     #[test]
     fn order_intent_rejects_numeric_decimal() {
-        let json = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","market":"mkt:kalshi:INTC-50","side":"buy","order_type":"limit","size":10,"size_unit":"contracts","tif":"gtc","paper":true,"origin":{"kind":"user","tier":3,"actor_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"},"quote_snapshot":{},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
+        let json = r#"{"id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","market":"mkt:kalshi:INTC-50","side":"buy","order_type":"limit","size":10,"size_unit":"contracts","tif":"gtc","paper":true,"origin":{"kind":"human","tier":3,"actor_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV"},"quote_snapshot":{},"caps_version":"01ARZ3NDEKTSV4RRFFQ69G5FAV","created_ts":"2026-07-10T12:34:56.789Z"}"#;
         let result: Result<OrderIntent, _> = serde_json::from_str(json);
         assert!(result.is_err(), "numeric size should be rejected");
     }

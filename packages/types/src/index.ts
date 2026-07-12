@@ -30,7 +30,7 @@ export function VenueId(s: string): VenueId {
 // mirrors: crates/aether-core (enums with #[serde(rename_all = "snake_case")])
 
 export type SizeUnit = "contracts" | "shares" | "base" | "quote";
-export type OriginKind = "user" | "alert_action" | "agent" | "automation";
+export type OriginKind = "human" | "agent" | "automation";
 export type RiskVerdictStatus = "allow" | "deny";
 export type RiskReasonCode =
   | "liveness"
@@ -494,11 +494,7 @@ export function validateAndCanonicalize(typ: string, value: unknown): string {
       assertObject(oi.origin, "OrderIntent.origin");
       const org = oi.origin as Record<string, unknown>;
       assertString(org.kind, "OrderIntent.origin.kind");
-      assertOneOf(
-        org.kind,
-        ["user", "alert_action", "agent", "automation"] as const,
-        "OrderIntent.origin.kind",
-      );
+      assertOneOf(org.kind, ["human", "agent", "automation"] as const, "OrderIntent.origin.kind");
       assertNumber(org.tier, "OrderIntent.origin.tier");
       if (!Number.isInteger(org.tier) || (org.tier as number) < 1 || (org.tier as number) > 5)
         throw new Error(`OrderIntent.origin.tier: must be 1..=5, got ${org.tier}`);

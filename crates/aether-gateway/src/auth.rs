@@ -1,18 +1,21 @@
 use std::fmt;
 
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
 /// Session information returned after successful token validation.
 #[derive(Debug, Clone)]
 pub struct SessionInfo {
+    pub session_id: String,
     pub actor_id: String,
     pub tier: u8,
     pub origin: OriginInfo,
+    pub device_label: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct OriginInfo {
-    pub kind: String, // "user", "agent", "automation"
+    pub kind: String, // "human", "agent", "automation"
     pub actor_id: String,
 }
 
@@ -47,28 +50,38 @@ pub async fn validate_token(
     if cfg!(debug_assertions) && token.starts_with("test-") {
         let actor_id = token.trim_start_matches("test-").to_string();
         return Ok(SessionInfo {
+            session_id: "test-session".into(),
             actor_id: actor_id.clone(),
             tier: 3, // Stub: tier 3 for test tokens (can access paper)
-            origin: OriginInfo { kind: "user".into(), actor_id },
+            origin: OriginInfo { kind: "human".into(), actor_id },
+            device_label: None,
         });
     }
 
     // DB lookup if a pool was provided
     if let Some(pool) = pool {
-        let row = sqlx::query_as::<_, (String, i32, String)>(
-            "SELECT actor_id, tier, origin_kind FROM sessions WHERE actor_id = $1",
+        // TODO(EP-401): upgrade to argon2id. SHA-256 is a temporary stand-in
+        // for the EP-004 migration to ensure hashed-token authentication works.
+        let hash = Sha256::digest(token.as_bytes());
+        let token_hash: String = hash.iter().map(|b| format!("{:02x}", b)).collect();
+
+        let row = sqlx::query_as::<_, (String, String, i32, String, Option<String>)>(
+            "SELECT s.id, s.user_id, s.tier, s.origin_kind, s.device_label \
+             FROM sessions s \
+             WHERE s.token_hash = $1 AND s.expires_ts > now()",
         )
-        .bind(token)
+        .bind(&token_hash)
         .fetch_optional(pool)
         .await
         .map_err(|e| AuthError::DbError(e.to_string()))?;
 
-        if let Some((actor_id, tier, origin_kind)) = row {
-            let aid = actor_id.clone();
+        if let Some((session_id, user_id, tier, origin_kind, device_label)) = row {
             return Ok(SessionInfo {
-                actor_id: aid,
+                session_id,
+                actor_id: user_id.clone(),
                 tier: tier as u8,
-                origin: OriginInfo { kind: origin_kind, actor_id },
+                origin: OriginInfo { kind: origin_kind, actor_id: user_id },
+                device_label,
             });
         }
     }
@@ -109,6 +122,18 @@ mod tests {
     /// Helper: call validate_token with no pool (test-token only path).
     async fn validate(token: Option<&str>) -> Result<SessionInfo, AuthError> {
         validate_token(None, token).await
+    }
+
+    /// Build a minimal SessionInfo for test use.
+    #[allow(dead_code)]
+    fn make_session(actor_id: &str, tier: u8, kind: &str) -> SessionInfo {
+        SessionInfo {
+            session_id: "test-session".into(),
+            actor_id: actor_id.into(),
+            tier,
+            origin: OriginInfo { kind: kind.into(), actor_id: actor_id.into() },
+            device_label: None,
+        }
     }
 
     #[tokio::test]

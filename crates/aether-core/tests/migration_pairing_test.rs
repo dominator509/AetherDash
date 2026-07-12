@@ -33,7 +33,7 @@ mod migration_pairing_tests {
     fn revert_all_migrations() {
         let dir = sqlx_migrate_dir();
         let output = Command::new("cargo")
-            .args(["sqlx", "migrate", "revert", "--source", dir.as_str(), "--target", "0"])
+            .args(["sqlx", "migrate", "revert", "--source", dir.as_str(), "--target-version", "0"])
             .output()
             .expect("failed to run cargo sqlx migrate revert");
         assert!(

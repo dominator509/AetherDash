@@ -202,7 +202,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         size_unit: order::SizeUnit::Contracts,
         tif: order::TimeInForce::Gtc,
         paper: true,
-        origin: order::Origin::new(order::OriginKind::User, 3, u())?,
+        origin: order::Origin::new(order::OriginKind::Human, 3, u())?,
         quote_snapshot: snap.clone(),
         caps_version: u(),
         created_ts: t,

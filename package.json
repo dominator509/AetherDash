@@ -5,12 +5,12 @@
   "type": "module",
   "description": "AETHER Terminal — self-hosted AI-native trading terminal",
   "scripts": {
-    "lint": "echo 'root lint: ok'",
-    "format": "echo 'root format: ok'",
-    "format:check": "echo 'root format: ok'",
-    "typecheck": "echo 'root typecheck: ok'",
-    "build": "echo 'root build: ok'",
-    "test": "echo 'root test: ok'"
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "format:check": "pnpm -r format:check",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test -- --run"
   },
   "devDependencies": {
     "eslint": "^9.0.0",
