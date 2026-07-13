@@ -17,6 +17,8 @@ Names below are the contract: EP-003/EP-004 implement them exactly; new variable
 | DATABASE_URL | Postgres DSN (sqlx) | postgres://aether:aether@localhost:5432/aether |
 | AETHER_CLICKHOUSE__URL | ClickHouse HTTP endpoint | http://localhost:8123 |
 | AETHER_CLICKHOUSE__DATABASE | ClickHouse database | aether |
+| AETHER_CLICKHOUSE__USER | ClickHouse HTTP user | aether (dev only) |
+| AETHER_CLICKHOUSE__PASSWORD | ClickHouse HTTP password | aether (dev only; operator supplied outside dev) |
 | AETHER_REDIS__URL | Redis/Dragonfly | redis://localhost:6379 |
 | AETHER_QDRANT__URL | Qdrant HTTP | http://localhost:6333 |
 | AETHER_KAFKA__BROKERS | Redpanda bootstrap | localhost:9092 |

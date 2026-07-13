@@ -91,7 +91,7 @@ async def _qdrant_search(
 
     try:
         client = _get_qdrant_client()
-        query_vector = generate_embedding(query)
+        query_vector = await generate_embedding(query)
 
         # Over-fetch chunks to account for deduplication across chunks
         # that belong to the same object.

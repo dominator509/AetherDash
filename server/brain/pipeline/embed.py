@@ -1,12 +1,16 @@
 """Pipeline stage 6: embed — chunk text and store embeddings in Qdrant.
 
 Chunks cleaned text into ~500-char segments with 50-char overlap.
-Generates content-dependent embeddings (1024-d unit vectors via SHA-256 seed).
-Stores chunks in the ``brain_chunks`` Qdrant collection (1024-d, cosine).
+Generates content-dependent embeddings (1024-d unit vectors via feature
+hashing).  Stores chunks in the ``brain_chunks`` Qdrant collection
+(1024-d, cosine).
+
+Embedding generation tries the LLM Router first but always falls through
+to the deterministic stub because LiteLLM's ``acompletion`` (used by the
+router for ``/complete``) does not support embedding models.  The router
+seam is in place for EP-206, which will select a proper embedding model.
 
 Returns the number of chunks stored.
-
-# TODO(EP-202): replace with real embeddings
 """
 
 import logging
@@ -14,6 +18,7 @@ import os
 import uuid
 
 from server.brain.router_stub import embed_text
+from server.llm_router.client import embed as llm_embed
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +28,32 @@ _EMBEDDING_DIMENSION = 1024
 
 _AETHER_QDRANT_URL = os.environ.get("AETHER_QDRANT__URL", "http://localhost:6333")
 _QDRANT_COLLECTION_CHUNKS = "brain_chunks"
+_embedding_cache: dict[str, list[float]] = {}
 
 
-def generate_embedding(text: str) -> list[float]:
-    """Generate an embedding through the local EP-202 router contract stub."""
-    return embed_text(text, _EMBEDDING_DIMENSION)
+async def generate_embedding(text: str) -> list[float]:
+    """Generate embedding via LLM router. Falls back to stub on error.
+
+    NOTE(EP-202): LiteLLM ``acompletion`` doesn't support embeddings.
+    Full embedding routing lands when EP-206 selects the model.  Router
+    seam is in place.
+    """
+    cache_text = text[:8000]
+    cached = _embedding_cache.get(cache_text)
+    if cached is not None:
+        return list(cached)
+
+    result = await llm_embed(cache_text)
+    vector = result.get("embedding", [])
+    if isinstance(vector, list) and len(vector) == _EMBEDDING_DIMENSION:
+        resolved = [float(value) for value in vector]
+    else:
+        resolved = _generate_stub_embedding(text)
+
+    if len(_embedding_cache) >= 1024:
+        _embedding_cache.clear()
+    _embedding_cache[cache_text] = resolved
+    return list(resolved)
 
 
 def _chunk_text(text: str) -> list[str]:
@@ -79,17 +105,19 @@ def _chunk_text(text: str) -> list[str]:
     return chunks
 
 
-def _generate_stub_embedding(dim: int) -> list[float]:
-    """Generate a stub embedding vector.
+def _generate_stub_embedding(text: str) -> list[float]:
+    """Generate a deterministic content-dependent stub embedding.
 
-    Returns a random unit vector for testing (seeded deterministically
-    so the same chunk always produces the same vector within a session).
+    Uses feature hashing via ``router_stub.embed_text`` so the same text
+    always produces the same unit vector.
 
-    STUB for EP-201. Real embeddings deferred to EP-202.
+    Args:
+        text: Input text to embed.
 
-    # TODO(EP-202): replace with real embedding model
+    Returns:
+        A unit vector of dimension ``_EMBEDDING_DIMENSION``.
     """
-    return embed_text("aether deterministic router stub", dim)
+    return embed_text(text, _EMBEDDING_DIMENSION)
 
 
 def _ensure_qdrant_collection() -> object | None:
@@ -133,7 +161,7 @@ def _ensure_qdrant_collection() -> object | None:
 
 
 async def run(cleaned_text: str, object_id: str, source: str) -> int:
-    """Chunk cleaned text, generate stub embeddings, store in Qdrant.
+    """Chunk cleaned text, generate embeddings, store in Qdrant.
 
     Args:
         cleaned_text: Text from the clean stage.
@@ -158,7 +186,7 @@ async def run(cleaned_text: str, object_id: str, source: str) -> int:
 
     points = []
     for i, chunk_text in enumerate(chunks):
-        embedding = generate_embedding(chunk_text)
+        embedding = await generate_embedding(chunk_text)
         point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{object_id}/chunk/{i}"))
         points.append(
             {

@@ -9,9 +9,11 @@ Docker compose stack (MinIO :9000, Postgres :5432, Qdrant :6333) with
 migrations 0015 and 0020 applied.
 """
 
+from unittest.mock import patch
+
 import pytest
 
-from server.brain.models import BrainObject, ObjectKind, Origin, Tier, now_iso
+from server.brain.models import Tier
 from server.brain.pipeline import clean, extract, summarize
 from server.brain.tests.conftest import skip_integration
 
@@ -77,66 +79,76 @@ async def test_clean_empty_bytes() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Stage 3: summarize (stub)
+# Stage 3: summarize
 # ═══════════════════════════════════════════════════════════════════════
-
-
-def _make_minimal_obj(**kwargs: object) -> BrainObject:
-    """Build a minimal BrainObject for testing."""
-    overrides = dict(kwargs)
-    return BrainObject(
-        id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
-        kind=ObjectKind(overrides.pop("kind", "note")),
-        source=overrides.pop("source", "test-feed"),
-        origin=Origin.ingest_fleet,
-        ingested_ts=now_iso(),
-        provenance_hash="0" * 64,
-        **overrides,  # type: ignore[arg-type]
-    )
 
 
 @pytest.mark.asyncio
 async def test_summarize_short_text() -> None:
-    """Summarize stub: returns full text when <= 500 chars."""
+    """Summarize: returns full text when <= 500 chars (stub fallback)."""
     text = "Short text."
-    obj = _make_minimal_obj()
-    summary = await summarize.run(text, obj)
+    summary = await summarize.run(text)
     assert summary == text
     assert len(summary) <= 500
 
 
 @pytest.mark.asyncio
 async def test_summarize_truncates_long_text() -> None:
-    """Summarize stub: truncates text > 500 chars."""
+    """Summarize: truncates text > 500 chars (stub fallback)."""
     text = "Hello world. " * 100  # ~1300 chars
-    obj = _make_minimal_obj()
-    summary = await summarize.run(text, obj)
+    summary = await summarize.run(text)
     assert len(summary) <= 500
     assert summary == text[:500]
 
 
 @pytest.mark.asyncio
 async def test_summarize_deterministic() -> None:
-    """Summarize stub: same input always produces same output."""
+    """Summarize: same input always produces same output (stub fallback)."""
     text = "Deterministic test content for verification."
-    obj = _make_minimal_obj()
-    s1 = await summarize.run(text, obj)
-    s2 = await summarize.run(text, obj)
+    s1 = await summarize.run(text)
+    s2 = await summarize.run(text)
     assert s1 == s2
 
 
 @pytest.mark.asyncio
-async def test_summarize_empty_text_uses_template() -> None:
-    """Summarize stub: empty text produces template with kind and source."""
-    obj = _make_minimal_obj(kind="document", source="feed://example.com")
-    summary = await summarize.run("", obj)
-    assert "Document" in summary
-    assert "feed://example.com" in summary
+async def test_summarize_empty_text_returns_empty_string() -> None:
+    """Summarize: empty text returns empty string (no template)."""
+    summary = await summarize.run("")
+    assert summary == ""
     assert len(summary) <= 500
 
 
+@pytest.mark.asyncio
+async def test_summarize_uses_router() -> None:
+    """Summarize: calls LLM router when available."""
+    with patch("server.brain.pipeline.summarize.llm_complete") as mock_complete:
+        mock_complete.return_value = {"text": "Summary from LLM router."}
+        result = await summarize.run("Some text to summarize.")
+        assert result == "Summary from LLM router."
+        mock_complete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_summarize_falls_back_to_stub() -> None:
+    """Summarize: falls back to stub when router fails."""
+    with patch("server.brain.pipeline.summarize.llm_complete") as mock_complete:
+        mock_complete.side_effect = Exception("Router unavailable")
+        result = await summarize.run("Some text to summarize.")
+        assert result == "Some text to summarize."
+        assert len(result) <= 500
+
+
+@pytest.mark.asyncio
+async def test_summarize_falls_back_on_empty_response() -> None:
+    """Summarize: falls back to stub when router returns empty text."""
+    with patch("server.brain.pipeline.summarize.llm_complete") as mock_complete:
+        mock_complete.return_value = {"text": ""}
+        result = await summarize.run("Some text to summarize.")
+        assert result == "Some text to summarize."
+
+
 # ═══════════════════════════════════════════════════════════════════════
-# Stage 4: extract (stub)
+# Stage 4: extract
 # ═══════════════════════════════════════════════════════════════════════
 
 
@@ -144,66 +156,103 @@ async def test_summarize_empty_text_uses_template() -> None:
 async def test_extract_finds_iso_dates() -> None:
     """Extract stub: finds ISO-8601 dates in text."""
     text = "The event occurred on 2026-07-12 and was filed on 2026-07-15."
-    entities, dates, claims = await extract.run(text)
-    assert "2026-07-12" in dates
-    assert "2026-07-15" in dates
-    assert dates["2026-07-12"] == "date"
+    result = await extract.run(text)
+    assert "2026-07-12" in result["dates"]
+    assert "2026-07-15" in result["dates"]
+    assert result["dates"]["2026-07-12"] == "date"
 
 
 @pytest.mark.asyncio
 async def test_extract_finds_timestamps() -> None:
     """Extract stub: finds ISO-8601 timestamps in text."""
     text = "Published at 2026-07-12T14:30:00Z"
-    _entities, dates, _claims = await extract.run(text)
-    assert "2026-07-12T14:30:00Z" in dates
+    result = await extract.run(text)
+    assert "2026-07-12T14:30:00Z" in result["dates"]
 
 
 @pytest.mark.asyncio
 async def test_extract_finds_capitalised_phrases() -> None:
     """Extract stub: finds 3+ word capitalised phrases."""
     text = "The New York Stock Exchange and Federal Reserve Board met today."
-    entities, _dates, _claims = await extract.run(text)
-    assert "The New York Stock Exchange" in entities
-    assert "Federal Reserve Board" in entities
+    result = await extract.run(text)
+    assert "The New York Stock Exchange" in result["entities"]
+    assert "Federal Reserve Board" in result["entities"]
 
 
 @pytest.mark.asyncio
 async def test_extract_finds_tickers() -> None:
     """Extract stub: finds $TICKER patterns."""
     text = "AAPL is up 5%, while $GOOGL and $MSFT are flat."
-    entities, _dates, _claims = await extract.run(text)
-    assert "$GOOGL" in entities
-    assert "$MSFT" in entities
+    result = await extract.run(text)
+    assert "$GOOGL" in result["entities"]
+    assert "$MSFT" in result["entities"]
 
 
 @pytest.mark.asyncio
 async def test_extract_empty_text() -> None:
     """Extract stub: returns empty lists for empty text."""
-    entities, dates, claims = await extract.run("")
-    assert entities == []
-    assert dates == {}
-    assert claims == []
+    result = await extract.run("")
+    assert result["entities"] == []
+    assert result["dates"] == {}
+    assert result["claims"] == []
 
-    entities, dates, claims = await extract.run("   ")
-    assert entities == []
-    assert dates == {}
-    assert claims == []
+    result = await extract.run("   ")
+    assert result["entities"] == []
+    assert result["dates"] == {}
+    assert result["claims"] == []
 
 
 @pytest.mark.asyncio
 async def test_extract_returns_empty_claims() -> None:
     """Extract stub: claims list is always empty (EP-202)."""
     text = "The Federal Reserve raised rates on 2026-07-12."
-    _entities, _dates, claims = await extract.run(text)
-    assert claims == []
+    result = await extract.run(text)
+    assert result["claims"] == []
 
 
 @pytest.mark.asyncio
 async def test_extract_deduplicates_entities() -> None:
     """Extract stub: same entity appears only once."""
     text = "The New York Stock Exchange is the primary exchange. New York Stock Exchange rules apply."
-    entities, _dates, _claims = await extract.run(text)
-    assert entities.count("New York Stock Exchange") == 1
+    result = await extract.run(text)
+    assert result["entities"].count("New York Stock Exchange") == 1
+
+
+@pytest.mark.asyncio
+async def test_extract_uses_router() -> None:
+    """Extract: calls LLM router when available."""
+    with patch("server.brain.pipeline.extract.llm_complete") as mock_complete:
+        mock_complete.return_value = {
+            "text": '{"entities": ["AAPL"], "dates": {"2024-01-01": "date"}, "claims": ["AAPL is up"]}'
+        }
+        result = await extract.run("AAPL is up on 2024-01-01.")
+        assert result["entities"] == ["AAPL"]
+        assert result["dates"]["2024-01-01"] == "date"
+        assert result["claims"] == ["AAPL is up"]
+        mock_complete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_extract_falls_back_to_stub() -> None:
+    """Extract: falls back to stub when router fails."""
+    with patch("server.brain.pipeline.extract.llm_complete") as mock_complete:
+        mock_complete.side_effect = Exception("Router unavailable")
+        result = await extract.run(
+            "The New York Stock Exchange announced on 2026-07-12."
+        )
+        assert "The New York Stock Exchange" in result["entities"]
+        assert "2026-07-12" in result["dates"]
+        assert result["claims"] == []
+
+
+@pytest.mark.asyncio
+async def test_extract_falls_back_on_bad_json() -> None:
+    """Extract: falls back to stub when router returns invalid JSON."""
+    with patch("server.brain.pipeline.extract.llm_complete") as mock_complete:
+        mock_complete.return_value = {"text": "Not valid JSON"}
+        result = await extract.run("The Federal Reserve Board met on 2026-07-12.")
+        assert "The Federal Reserve Board" in result["entities"]
+        assert "2026-07-12" in result["dates"]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -256,7 +305,7 @@ def test_stub_embedding_dimension() -> None:
     """Embed: stub vectors are correct dimension and unit length."""
     from server.brain.pipeline.embed import _generate_stub_embedding
 
-    vec = _generate_stub_embedding(1024)
+    vec = _generate_stub_embedding("test content for embedding")
     assert len(vec) == 1024
     # Check unit length (approximately)
     norm = sum(v * v for v in vec) ** 0.5

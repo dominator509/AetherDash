@@ -5,7 +5,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "MISSING TOOL: $1"; exit 2; }; }
 minver() { # minver <have> <want> -> ok if have >= want
-  [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]
+  awk -v have="$1" -v want="$2" 'BEGIN {
+    n = split(have, h, "."); m = split(want, w, ".");
+    for (i = 1; i <= (n > m ? n : m); i++) {
+      hv = (i <= n ? h[i] + 0 : 0); wv = (i <= m ? w[i] + 0 : 0);
+      if (hv > wv) exit 0; if (hv < wv) exit 1;
+    }
+    exit 0
+  }'
 }
 
 need git

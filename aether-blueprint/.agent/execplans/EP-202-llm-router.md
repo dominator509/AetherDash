@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-202: LLM Router, Cache-First Prompting, Local Fallback
 
-**Band:** 2xx Brain | **Phase:** 1 | **Status:** draft | **Blocked by:** EP-001
+**Band:** 2xx Brain | **Phase:** 1 | **Status:** active | **Blocked by:** EP-001
 
 ## Purpose / Big Picture
 Build the one place provider SDKs live: `server/llm_router` fronting Anthropic/DeepSeek/xAI/OpenAI-compatible/local via LiteLLM, with cache-first prompt assembly (INV-3), local-model fallback for high-frequency low-value calls, and per-call cost + cache-hit accounting into `llm_calls`. Every other service calls this; nothing else imports a provider SDK (D3).
@@ -44,13 +44,23 @@ Per-milestone; `test-unit.sh` + `test-integration.sh` green; `verify.sh` -> `ver
 Router is stateless (caches in Redis, accounting in ClickHouse); restart-safe. Cache loss = cost regression, not correctness loss (degradation test). Fallback keeps calls flowing when a provider is down (fail-open on the understanding path, SPEC-006).
 
 ## Progress
-- [ ] M1 LiteLLM+routing  - [ ] M2 Cache-first builder  - [ ] M3 Caches  - [ ] M4 Fallback  - [ ] M5 Accounting+metrics  - [ ] M6 Brain seam
+- [x] M1 LiteLLM+routing  - [x] M2 Cache-first builder  - [x] M3 Caches  - [x] M4 Fallback  - [x] M5 Accounting+metrics  - [x] M6 Brain seam
 
 ## Surprises & Discoveries
-(litellm provider quirks; tokenizer/cost mapping; cache key design)
+1. The original Brain embedding seam called the completion endpoint, discarded every response, and paid an HTTP failure penalty per chunk/query. EP-202 now exposes a dedicated LiteLLM embedding endpoint and Brain caches resolved vectors.
+2. The repository's authoritative provider variables use the `AETHER_LLM__*` namespace; the first implementation incorrectly read provider-standard names and used port 8010 instead of the reserved 8001.
+3. The dev ClickHouse instance requires HTTP basic authentication. Mock-only accounting tests hid that all live `llm_calls` inserts returned 403.
+4. Python editable installs generate `*.egg-info`; this is now ignored as a build artifact.
 
 ## Decision Log
-(HTTP vs gRPC surface; tokenizer choice; semantic-cache interface now vs later)
+1. **Internal surface:** HTTP on `AETHER_LLM__BIND` (`127.0.0.1:8001`) because the plan explicitly permits it and Brain already uses async HTTP clients.
+2. **Prompt boundary:** `/complete` accepts structured static context, dynamic inputs, and RAG chunks; raw provider-style messages are internal to the router so callers cannot place dynamic data before the cache breakpoint.
+3. **Cache identity:** exact-response keys use canonical JSON over purpose, policy, roles, and message boundaries, preventing cross-purpose/model collisions.
+4. **Embedding seam:** `/embed` uses `litellm.aembedding`; Brain retains its deterministic local vector only as an outage fallback and caches resolved vectors to preserve recall latency.
+5. **Accounting:** cache hits, missing-key attempts, provider failures, and successful calls all write `llm_calls` and update metrics. ClickHouse credentials use `AETHER_CLICKHOUSE__USER/PASSWORD` and are never logged.
+6. **Extra shared files:** `.gitignore`, `ENVIRONMENT.md`, `COMMANDS.md`, and `infra/dev/.env.example` changed because the router introduced generated artifacts, a start command, and previously undocumented required ClickHouse authentication.
 
 ## Outcomes & Retrospective
-(cache-hit numbers on the test set; providers wired; brain seam closed)
+Audit fixes wired Anthropic, DeepSeek, OpenAI embeddings, xAI (`grok-4.5`), and Ollama through LiteLLM; enforced cache-first request assembly at the HTTP boundary; added collision-safe exact caching, fallback dispatch, complete per-call accounting, and live-compatible ClickHouse authentication. All 108 router unit tests pass with provider calls stubbed at the LiteLLM boundary; the live ClickHouse row-per-call integration test also passes. The repository gate prints `verify: ok`, and `scripts/security-check.sh` prints `security: ok`.
+
+**Remaining risk:** real paid-provider calls were not executed because operator-owned API keys were not supplied. Provider selection and request dispatch are covered at the LiteLLM boundary, but account entitlement, billing, and upstream availability remain deployment-time checks (STOP S1).

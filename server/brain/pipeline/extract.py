@@ -1,18 +1,20 @@
 """Pipeline stage 4: extract — entity, date, and claim extraction.
 
-DETERMINISTIC STUB for EP-201. Parses basic patterns:
+Calls the LLM Router (``server.llm_router.client.complete``) with
+purpose ``"extract"``.  Expects JSON response with keys ``entities``,
+``dates``, ``claims``.  Falls back to a regex-based stub
+(``_stub_extract``) on router error, which parses:
 - ISO-8601 dates (``YYYY-MM-DD``, ``YYYY-MM-DDTHH:MM:SS``)
 - Capitalised phrases (3+ consecutive capitalised words)
 - Explicit tickers (``$AAPL`` style)
 - Simple possessive-entity patterns (``X's Y``)
-
-Returns ``(entities, dates, claims)``.
-
-# TODO(EP-202): replace with LLM extraction
 """
 
+import json
 import logging
 import re
+
+from server.llm_router.client import complete as llm_complete
 
 logger = logging.getLogger(__name__)
 
@@ -31,22 +33,53 @@ _RE_TICKER = re.compile(r"\$([A-Z]{1,5})\b")
 _RE_POSSESSIVE = re.compile(r"\b([A-Z][a-z]+)'s\s+([A-Za-z]+)")
 
 
-async def run(text: str) -> tuple[list[str], dict[str, str], list[str]]:
-    """Extract entities, dates, and claims from cleaned text.
+async def run(cleaned_text: str) -> dict:
+    """Extract entities, dates, claims via LLM router.
+
+    Falls back to ``_stub_extract`` if the router is unreachable or returns
+    unparseable JSON.
 
     Args:
-        text: Cleaned text from the clean stage.
+        cleaned_text: Cleaned text from the clean stage.
 
     Returns:
-        Tuple of ``(entities, dates, claims)`` where:
-        - entities: List of extracted entity strings (deduplicated).
-        - dates: Dict mapping ISO date string to a context label.
-        - claims: List of extracted claim strings (stub: empty).
+        Dict with keys:
+        - ``entities``: List of extracted entity strings (deduplicated).
+        - ``dates``: Dict mapping ISO date string to context label.
+        - ``claims``: List of extracted claim strings.
+    """
+    try:
+        result = await llm_complete(
+            "extract",
+            dynamic_inputs={"user_text": cleaned_text[:4000]},
+        )
+        text = result.get("text", "")
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    except Exception:
+        logger.debug("extract: router call failed, falling back to stub")
+    # Fallback: regex stub
+    return _stub_extract(cleaned_text)
 
-    # TODO(EP-202): replace with LLM extraction
+
+def _stub_extract(text: str) -> dict:
+    """Deterministic regex-based extraction stub.
+
+    Used as fallback when the LLM router is unavailable.
+
+    Args:
+        text: Cleaned text to extract from.
+
+    Returns:
+        Dict with keys ``entities``, ``dates``, ``claims`` (claims always
+        empty for the stub).
     """
     if not text or not text.strip():
-        return [], {}, []
+        return {"entities": [], "dates": {}, "claims": []}
 
     entities: list[str] = []
     dates: dict[str, str] = {}
@@ -86,7 +119,7 @@ async def run(text: str) -> tuple[list[str], dict[str, str], list[str]]:
         len(dates),
         len(claims),
     )
-    return entities, dates, claims
+    return {"entities": entities, "dates": dates, "claims": claims}
 
 
 def _date_label(date_str: str) -> str:

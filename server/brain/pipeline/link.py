@@ -67,37 +67,33 @@ def _ensure_kuzu_schema(conn: object) -> None:
     - HAS_TOPIC, MENTIONS, RELATES_TO edges
     """
     conn.execute(
-            "CREATE NODE TABLE IF NOT EXISTS Event ("
-            "  id STRING, label STRING, ts TIMESTAMP, source STRING, "
-            "  PRIMARY KEY (id)"
-            ")"
-        )
+        "CREATE NODE TABLE IF NOT EXISTS Event ("
+        "  id STRING, label STRING, ts TIMESTAMP, source STRING, "
+        "  PRIMARY KEY (id)"
+        ")"
+    )
     conn.execute(
-            "CREATE NODE TABLE IF NOT EXISTS Entity ("
-            "  id STRING, name STRING, kind STRING, "
-            "  PRIMARY KEY (id)"
-            ")"
-        )
+        "CREATE NODE TABLE IF NOT EXISTS Entity ("
+        "  id STRING, name STRING, kind STRING, "
+        "  PRIMARY KEY (id)"
+        ")"
+    )
     conn.execute(
-            "CREATE NODE TABLE IF NOT EXISTS Market ("
-            "  id STRING, label STRING, venue STRING, "
-            "  PRIMARY KEY (id)"
-            ")"
-        )
+        "CREATE NODE TABLE IF NOT EXISTS Market ("
+        "  id STRING, label STRING, venue STRING, "
+        "  PRIMARY KEY (id)"
+        ")"
+    )
     conn.execute(
-            "CREATE NODE TABLE IF NOT EXISTS Source ("
-            "  id STRING, uri STRING, "
-            "  PRIMARY KEY (id)"
-            ")"
-        )
+        "CREATE NODE TABLE IF NOT EXISTS Source ("
+        "  id STRING, uri STRING, "
+        "  PRIMARY KEY (id)"
+        ")"
+    )
     # Edge tables
-    conn.execute(
-            "CREATE REL TABLE IF NOT EXISTS HAS_TOPIC (  FROM Event TO Entity)"
-        )
+    conn.execute("CREATE REL TABLE IF NOT EXISTS HAS_TOPIC (  FROM Event TO Entity)")
     conn.execute("CREATE REL TABLE IF NOT EXISTS MENTIONS (  FROM Event TO Entity)")
-    conn.execute(
-            "CREATE REL TABLE IF NOT EXISTS RELATES_TO (  FROM Event TO Market)"
-        )
+    conn.execute("CREATE REL TABLE IF NOT EXISTS RELATES_TO (  FROM Event TO Market)")
     logger.debug("link: Kuzu schema ensured")
 
 

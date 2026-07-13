@@ -148,7 +148,7 @@ async def run_pipeline(object_id: str) -> None:
                 cleaned_text = cleaned_bytes.decode("utf-8", errors="replace")
 
             if obj.summary is None:
-                summary_text = await summarize.run(cleaned_text or "", obj)
+                summary_text = await summarize.run(cleaned_text or "")
                 await brain_store.update_object(object_id, summary=summary_text)
                 await brain_store.emit_ingest_event(
                     object_id, source, 3, len(summary_text.encode())
@@ -173,7 +173,8 @@ async def run_pipeline(object_id: str) -> None:
         try:
             existing_entities_list = obj.entities if obj.entities else []
             if not existing_entities_list:
-                entities, _dates, _claims = await extract.run(cleaned_text or "")
+                extract_result = await extract.run(cleaned_text or "")
+                entities = extract_result.get("entities", [])
                 # Write empty marker: entities=[] means "ran and found nothing"
                 await brain_store.update_object(object_id, entities=entities)
                 await brain_store.emit_ingest_event(

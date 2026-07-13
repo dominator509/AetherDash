@@ -22,7 +22,8 @@ for f in "$SCRIPT_DIR"/*.sql; do
         while IFS= read -r stmt; do
             stmt="$(echo "$stmt" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
             if [ -n "$stmt" ] && [ "$stmt" != ";" ]; then
-                curl -fsS -u "${CH_USER}:${CH_PASS}" "${CH_URL}" \
+                curl -fsS -u "${CH_USER}:${CH_PASS}" \
+                    "${CH_URL}/?database=${CH_DB}" \
                     --data-binary "${stmt}" >/dev/null
             fi
         done < <(sed '/^--/d' "$f" | tr '\n' ' ' | sed 's/;/;\n/g')

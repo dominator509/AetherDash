@@ -104,9 +104,7 @@ async def store_draft(draft: ObjectDraft) -> BrainRef:
     inserted_id = await store.insert_object(brain_obj, on_conflict_do_nothing=True)
     if inserted_id is None:
         # Another concurrent insert of the same source/content won.
-        existing_ref = await store.object_exists_by_raw_sha256(
-            raw_sha256, draft.source
-        )
+        existing_ref = await store.object_exists_by_raw_sha256(raw_sha256, draft.source)
         if existing_ref is not None:
             logger.debug(
                 "store_draft: concurrent dedupe by provenance_hash=%s -> %s",

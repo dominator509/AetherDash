@@ -14,7 +14,7 @@ def test_query_market_texts_returns_payload_market_keys(monkeypatch) -> None:
         get_collections=lambda: SimpleNamespace(
             collections=[SimpleNamespace(name="market_texts")]
         ),
-        query_points=lambda **kwargs: SimpleNamespace(points=points)
+        query_points=lambda **kwargs: SimpleNamespace(points=points),
     )
     monkeypatch.setattr("qdrant_client.QdrantClient", lambda **kwargs: fake_client)
 

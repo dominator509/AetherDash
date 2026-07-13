@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-201: Brain v1 - Object Model, Provenance, Recall v1, Vault View
 
-**Band:** 2xx Brain | **Phase:** 1 | **Status:** active | **Blocked by:** EP-003
+**Band:** 2xx Brain | **Phase:** 1 | **Status:** done | **Blocked by:** EP-003
 
 ## Purpose / Big Picture
 Build the Brain's spine: SPEC-011 objects with provenance across Postgres/MinIO/Qdrant/Kuzu, the ingestion pipeline through the index stage for the starter kinds, deterministic recall v1 inside the 100 ms budget, and the one-way generated Obsidian vault. Everything that "understands" (inbox, ingestion fleet, swarms, explain) builds on this.

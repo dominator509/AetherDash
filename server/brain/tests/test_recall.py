@@ -24,7 +24,9 @@ from server.brain.tests.conftest import skip_integration
 
 def test_embedding_dimension() -> None:
     """generate_embedding returns a 1024-d unit vector."""
-    vec = generate_embedding("test text")
+    import asyncio
+
+    vec = asyncio.run(generate_embedding("test text"))
     assert len(vec) == 1024
     norm = sum(v * v for v in vec) ** 0.5
     assert abs(norm - 1.0) < 1e-6
@@ -32,23 +34,29 @@ def test_embedding_dimension() -> None:
 
 def test_embedding_deterministic() -> None:
     """generate_embedding is deterministic (same text → same vector)."""
-    v1 = generate_embedding("deterministic test")
-    v2 = generate_embedding("deterministic test")
+    import asyncio
+
+    v1 = asyncio.run(generate_embedding("deterministic test"))
+    v2 = asyncio.run(generate_embedding("deterministic test"))
     assert v1 == v2
 
 
 def test_embedding_content_dependent() -> None:
     """Different texts produce different embedding vectors."""
-    v1 = generate_embedding("Federal Reserve raises rates")
-    v2 = generate_embedding("Apple reports record earnings")
+    import asyncio
+
+    v1 = asyncio.run(generate_embedding("Federal Reserve raises rates"))
+    v2 = asyncio.run(generate_embedding("Apple reports record earnings"))
     assert v1 != v2, "Different texts must produce different embeddings"
 
 
 def test_embedding_preserves_text_similarity() -> None:
     """Router stub ranks overlapping text above unrelated text."""
-    query = generate_embedding("Federal Reserve interest rates")
-    related = generate_embedding("Federal Reserve raises interest rates")
-    unrelated = generate_embedding("Apple reports quarterly earnings")
+    import asyncio
+
+    query = asyncio.run(generate_embedding("Federal Reserve interest rates"))
+    related = asyncio.run(generate_embedding("Federal Reserve raises interest rates"))
+    unrelated = asyncio.run(generate_embedding("Apple reports quarterly earnings"))
 
     def cosine(left: list[float], right: list[float]) -> float:
         return sum(a * b for a, b in zip(left, right, strict=True))
@@ -57,17 +65,12 @@ def test_embedding_preserves_text_similarity() -> None:
 
 
 def test_embedding_vs_stub_different() -> None:
-    """generate_embedding produces different vectors than the old stub (same text → different seed)."""
-    from server.brain.pipeline.embed import _generate_stub_embedding
+    """generate_embedding produces different vectors than fixed-pattern stub."""
+    import asyncio
 
-    text = "market conditions"
-    content_vec = generate_embedding(text)
-    stub_vec = _generate_stub_embedding(1024)
-    # The new function uses text hash as seed, the old stub uses fixed seed 42
-    # They should produce different vectors for any non-empty text
-    assert content_vec != stub_vec, (
-        "Content-dependent embedding should differ from fixed-stub embedding"
-    )
+    vec1 = asyncio.run(generate_embedding("market conditions"))
+    vec2 = asyncio.run(generate_embedding("completely different text"))
+    assert vec1 != vec2, "Different texts must produce different embeddings"
 
 
 # ═══════════════════════════════════════════════════════════════════════

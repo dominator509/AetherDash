@@ -14,9 +14,14 @@ if command -v gitleaks >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/
   gitleaks detect --no-banner --source . || FAIL=1
 else
   PAT='AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|ghp_[A-Za-z0-9]{36}'
-  HITS="$(grep -RInE "$PAT" . \
-      --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=target --exclude-dir=vault \
-      --exclude='*.lock' --exclude='security-check.sh' || true)"
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    HITS="$(git grep -nE "$PAT" -- ':!*.lock' ':!scripts/security-check.sh' || true)"
+  else
+    HITS="$(grep -RInE "$PAT" . \
+        --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=target \
+        --exclude-dir=vault --exclude-dir=.venv --exclude='*.lock' \
+        --exclude='security-check.sh' || true)"
+  fi
   if [ -n "$HITS" ]; then echo "FAIL: secret-like content:"; printf '%s\n' "$HITS"; FAIL=1; fi
 fi
 

@@ -29,11 +29,13 @@ def _infra_available() -> bool:
     return True
 
 
-# Skip all integration tests if infrastructure is not available
-skip_integration = pytest.mark.skipif(
-    not _infra_available(),
-    reason="requires dev stack (MinIO :9000, Postgres :5432)",
-)
+def skip_integration(test_function):
+    """Mark a live-infrastructure test and skip it when the stack is absent."""
+    marked = pytest.mark.integration(test_function)
+    return pytest.mark.skipif(
+        not _infra_available(),
+        reason="requires dev stack (MinIO :9000, Postgres :5432)",
+    )(marked)
 
 
 @pytest_asyncio.fixture
