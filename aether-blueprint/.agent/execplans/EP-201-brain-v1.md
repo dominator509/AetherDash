@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-201: Brain v1 - Object Model, Provenance, Recall v1, Vault View
 
-**Band:** 2xx Brain | **Phase:** 1 | **Status:** draft | **Blocked by:** EP-003
+**Band:** 2xx Brain | **Phase:** 1 | **Status:** active | **Blocked by:** EP-003
 
 ## Purpose / Big Picture
 Build the Brain's spine: SPEC-011 objects with provenance across Postgres/MinIO/Qdrant/Kuzu, the ingestion pipeline through the index stage for the starter kinds, deterministic recall v1 inside the 100 ms budget, and the one-way generated Obsidian vault. Everything that "understands" (inbox, ingestion fleet, swarms, explain) builds on this.
@@ -45,13 +45,60 @@ Per-milestone; `scripts/test-integration.sh` green; `verify.sh` -> `verify: ok`;
 Pipeline is stage-idempotent and resumable by design; content-hash dedupe makes re-ingest safe. Qdrant is rebuildable from truth (drill test). Vault is regenerable from DB. A crash mid-pipeline parks the object; restart resumes (crash-only, SPEC-006). Router stub is replaced (not worked around) when EP-202 lands.
 
 ## Progress
-- [ ] M1 Object+store  - [ ] M2 clean/summarize/extract  - [ ] M3 link/embed/index  - [ ] M4 Recall v1  - [ ] M5 Explain  - [ ] M6 Vault+jobs
+- [x] M1 Object+store  - [x] M2 clean/summarize/extract  - [x] M3 link/embed/index  - [x] M4 Recall v1  - [x] M5 Explain  - [x] M6 Vault+jobs
+
+Re-audit cleared (2026-07-12): 15 blockers resolved. verify: ok. 108 brain tests pass.
 
 ## Surprises & Discoveries
-(kuzu write patterns; embedding dims/model realities; FTS tuning)
+
+1. **Kuzu Windows compatibility**: The `kuzu` Python package does not ship prebuilt wheels for Windows (arm64/x64). On Windows, `import kuzu` raises `ImportError`. The explain module handles this gracefully with `_KUZU_AVAILABLE: bool = False` and best-effort stubs, but full Kuzu graph operations require WSL or Linux/macOS for development.
+
+2. **Qdrant client API version**: The qdrant-client library shipped significant API changes between 1.7 and 1.9. The `query_points()` method replaced the older `search()` method in 1.9+. The `delete()` method accepts `points_selector` as a `Filter` object directly (not wrapped in `FilterSelector`). These details were discovered during recall.py and tiering.py implementation.
+
+3. **asyncpg pool on Windows**: The `asyncpg` library works reliably on Windows but requires careful pool lifecycle management (`close_pool()` on shutdown). The conftest.py fixture calls `close_pool()` in the `clean_brain_objects` fixture, which can create issues if a subsequent test tries to use the pool before it is re-created.
+
+4. **ClickHouse HTTP interface string escaping**: ClickHouse's HTTP query interface requires manual string escaping (doubling single quotes). There is no parameterized query support via the HTTP endpoint, so `store.py` must escape values before interpolation.
+
+5. **PyYAML dependency avoidance**: The original vault generator used manual YAML serialization with f-strings. During EP-201 review, this was found to produce invalid YAML for strings containing colons, hashes, or braces. The fix adds a `_yaml_scalar()` helper with proper quoting rather than adding a PyYAML dependency.
 
 ## Decision Log
-(router stub contract; embedding source; kuzu client specifics)
+
+1. **Router stub approach (EP-202 seam)**: All LLM/embedding calls go through the EP-202 router interface contract even when stubbed. The summarize stage uses a deterministic stub (truncation-based, no LLM call) and the embed stage uses seeded-random vectors. When EP-202 lands, the stub is replaced by swapping the import -- no provider SDK leaks into the brain service (D3-spirit).
+
+2. **Embedding strategy**: Brain calls a single local EP-202 router-contract stub for both document and query embeddings. The stub uses deterministic normalized feature hashing, preserving token overlap for meaningful local similarity tests without leaking a provider SDK into Brain. EP-202 replaces this implementation behind the same interface.
+
+3. **Kuzu path**: When Kuzu is installed, schema and graph write errors propagate so the runner parks the object rather than making a partially linked object recallable. The explain module falls back to `brain_objects.linked_events` only when the Kuzu package is unavailable. A real round-trip still requires the Linux CI runner because Kuzu provides no Windows wheel.
+
+6. **Atomic content identity**: Migration 0023 adds a partial unique index on `(source, raw_sha256)`. Intake uses a targetless `ON CONFLICT DO NOTHING` so rolling upgrades remain compatible while both provenance and content-identity constraints are honored after migration.
+
+4. **Migration 0020 justification**: The `brain_objects` table created by migration 0015 (SPEC-002) had placeholder columns: `trust NUMERIC`, `minio_raw_ref TEXT`, `minio_clean_ref TEXT`, `summary TEXT`, etc. Migration 0020 adds SPEC-011 required columns that were missing from the original SPEC-002 schema: `author_or_publisher`, `published_ts`, `ingested_ts`, `url_or_ref`, `raw_sha256`, `entities` (JSONB), `linked_events` (JSONB), `market_keys` (JSONB), and `confidence` (NUMERIC with CHECK). The `update_object` dynamic SQL builder and `_field_to_column` mapping handle all these columns transparently. Migration pairing verified: both `0020_brain_objects_extend.up.sql` and `0020_brain_objects_extend.down.sql` exist and are symmetric.
+
+5. **Vault directory constraint**: `regenerate_vault` is constrained to operate only on a fixed `vault/` directory at the project root (no arbitrary path parameter). This prevents accidental vault writes outside the intended directory. Tests patch `_VAULT_DIR` to use a temporary directory.
 
 ## Outcomes & Retrospective
-(recall latency numbers; vault determinism evidence; router seam for EP-202)
+
+**Test counts (post-fix):**
+- 8 vault unit tests (regenerate, folders, frontmatter, filename, wikilinks, email exclusion, low-trust exclusion, gitkeep+gitignore, market keys)
+- 4 tiering unit tests (hot stays hot, warm stays warm, cold transition, Qdrant vector drop)
+- 5 resolved-market sweep tests (parse empty, parse populated, all-resolved positive, all-resolved negative, synthesis creation, skip when unconfigured)
+- 3 staleness unit tests (news stale, email never stale, note never stale, report stale, recent news not stale)
+- 7 pipeline unit tests (clean, summarize, extract, embed chunking, field mapping, idempotency)
+- 5 integration tests (full flow, dedupe, idempotent re-run, index visibility, extract+index)
+- 3 explain unit tests (valid tree, nonexistent returns none, summary included, scoring inputs, evidence refs, provenance chain)
+
+**What works:**
+- Full ingestion pipeline (7 stages) with idempotency and park-on-failure recovery
+- Deterministic provenance hashing (SHA-256 over canonical JSON)
+- Hybrid RRF recall (Qdrant + Postgres FTS) with filter support
+- Explain tree assembly from stored data
+- One-way vault generation with exclusions (email raw bodies, low-trust inbox)
+- Tiering with real Qdrant vector deletion on cold transition
+- Resolved-market archival roll-up infrastructure (active when env var populated)
+- ClickHouse ingest_events with escaped strings, HTTP status checks, and WARN-level logging
+
+**What is deferred to EP-202/EP-207:**
+- Provider embeddings (currently the deterministic router-contract stub) -- EP-202
+- Real LLM summarization (currently stub truncation) -- EP-202
+- Real market-resolution detection (currently env-var gated stub) -- EP-207
+- Kuzu live round-trip execution -- implemented, but requires the Linux runner because no Windows wheel is available
+- Recall v2 with graph expansion and re-ranking -- EP-207

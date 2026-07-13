@@ -1,0 +1,27 @@
+[
+  {
+    "query_text": "interest rates Federal Reserve",
+    "expected_kinds": ["news"],
+    "min_results": 1
+  },
+  {
+    "query_text": "market sentiment trading",
+    "expected_kinds": ["news", "note", "report"],
+    "min_results": 1
+  },
+  {
+    "query_text": "portfolio rebalancing fixed income",
+    "expected_kinds": ["email"],
+    "min_results": 1
+  },
+  {
+    "query_text": "earnings revenue quarterly report",
+    "expected_kinds": ["news", "report"],
+    "min_results": 1
+  },
+  {
+    "query_text": "options flow SPY put activity",
+    "expected_kinds": ["report"],
+    "min_results": 1
+  }
+]

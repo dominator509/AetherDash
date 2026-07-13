@@ -1,5 +1,7 @@
 use std::fmt;
 
+use axum::{extract::State, http::StatusCode, Json};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
@@ -89,6 +91,45 @@ pub async fn validate_token(
     Err(AuthError::InvalidToken(token.into()))
 }
 
+/// Request body for `POST /auth/validate`.
+#[derive(Deserialize)]
+pub struct ValidateRequest {
+    pub token: String,
+}
+
+/// Response body for `POST /auth/validate`.
+#[derive(Serialize)]
+pub struct ValidateResponse {
+    pub valid: bool,
+    pub actor_id: Option<String>,
+    pub tier: Option<u8>,
+}
+
+/// Handler for `POST /auth/validate`.
+///
+/// Accepts a JSON body with a `token` field and validates it against the
+/// sessions database (or test-token logic in debug builds). Returns
+/// `200 OK` with session metadata on success, `401 UNAUTHORIZED` on failure.
+pub async fn validate_handler(
+    State(state): State<crate::AppState>,
+    Json(req): Json<ValidateRequest>,
+) -> (StatusCode, Json<ValidateResponse>) {
+    match validate_token(Some(&state.pool), Some(&req.token)).await {
+        Ok(session) => (
+            StatusCode::OK,
+            Json(ValidateResponse {
+                valid: true,
+                actor_id: Some(session.actor_id),
+                tier: Some(session.tier),
+            }),
+        ),
+        Err(_) => (
+            StatusCode::UNAUTHORIZED,
+            Json(ValidateResponse { valid: false, actor_id: None, tier: None }),
+        ),
+    }
+}
+
 #[derive(Debug)]
 pub enum AuthError {
     MissingToken,
@@ -151,6 +192,24 @@ mod tests {
     #[tokio::test]
     async fn bad_token_rejected() {
         assert!(validate(Some("Bearer bad-token")).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn validate_handler_rejects_invalid_token() {
+        let result = validate_token(None, Some("Bearer bad-token")).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn validate_handler_accepts_test_token() {
+        let pool = init_db_pool("postgres://aether:aether@localhost:5432/aether");
+        let state = crate::AppState::new(pool);
+        let req = axum::Json(ValidateRequest { token: "test-alice".into() });
+        let (status, body) = validate_handler(axum::extract::State(state), req).await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert!(body.valid);
+        assert_eq!(body.actor_id.as_deref(), Some("alice"));
+        assert_eq!(body.tier, Some(3));
     }
 
     #[tokio::test]

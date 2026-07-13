@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-004: Service Contracts & Event Bus
 
-**Band:** 0xx Foundation | **Phase:** 0 | **Status:** active | **Blocked by:** EP-003
+**Band:** 0xx Foundation | **Phase:** 0 | **Status:** done | **Blocked by:** EP-003
 
 ## Purpose / Big Picture
 Make SPEC-003 executable: compiled proto for all three languages, `aether-bus` as the only way topics are named or messages enveloped, a gateway skeleton that speaks the WS frame table against real auth stubs, and the tier-filtered MCP manifest. Phase 0 exits here: producers and consumers exist, contracts are compiled truth.

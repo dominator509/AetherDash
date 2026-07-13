@@ -7,5 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 if [ ! -d client ] || [ ! -f pnpm-workspace.yaml ]; then
   echo "SKIP (marker absent): client/ -> playwright e2e"; echo "e2e: ok"; exit 0
 fi
+
+echo "=== Running Playwright E2E tests ==="
 pnpm --filter @aether/client run --if-present e2e
 echo "e2e: ok"

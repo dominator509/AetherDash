@@ -4,11 +4,12 @@ members = [
     "crates/aether-bus",
     "crates/aether-gateway",
     "crates/aether-proto",
+    "client/src-tauri",
 ]
-# EP-001: single crate scaffold. Each EP appends its members.
+# EP-001/101: single crate scaffold. Each EP appends its members.
 # Expected future members:
 #   "crates/*", "connectors/execution/*", "connectors/venues/*",
-#   "connectors/comms/*", "client/src-tauri"
+#   "connectors/comms/*"
 resolver = "2"
 
 [workspace.package]

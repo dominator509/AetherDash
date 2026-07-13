@@ -1,0 +1,26 @@
+[project]
+name = "aether-brain"
+version = "0.1.0"
+description = "AETHER Brain — knowledge graph API, tiered recall, vault-view generator"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.10",
+    "grpcio>=1.60",
+    "grpcio-tools>=1.60",
+    "minio>=7.2",
+    "asyncpg>=0.30",
+    "qdrant-client>=1.12",
+    "kuzu>=0.7",
+    "ulid-py>=1.1",
+    "httpx>=0.28.1",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["server.brain", "server.brain.*"]

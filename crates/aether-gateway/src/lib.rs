@@ -14,7 +14,7 @@ use axum::{
         Query, State,
     },
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use sqlx::PgPool;
@@ -47,6 +47,7 @@ impl AppState {
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/ws", get(ws_handler))
+        .route("/auth/validate", post(auth::validate_handler))
         .route("/healthz", get(health::healthz))
         .route("/readyz", get(health::readyz))
         .route("/metrics", get(health::metrics))
