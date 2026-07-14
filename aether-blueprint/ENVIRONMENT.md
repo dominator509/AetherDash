@@ -47,6 +47,8 @@ Names below are the contract: EP-003/EP-004 implement them exactly; new variable
 | Order router gRPC | AETHER_ROUTER__BIND | 127.0.0.1:50051 |
 | Risk engine gRPC | AETHER_RISK__BIND | 127.0.0.1:50052 |
 | Wallet Guardian gRPC | AETHER_GUARDIAN__BIND | 127.0.0.1:50053 |
+| Kalshi adapter gRPC | AETHER_VENUE__KALSHI_GRPC_ADDR | 127.0.0.1:50054 |
+| Kalshi health / metrics HTTP | AETHER_VENUE__KALSHI_HEALTH_PORT | 8084 (loopback only) |
 | Prometheus (optional dev) | - | 9090 |
 
 Only the gateway and webhook receivers may ever bind non-loopback in prod; everything else is loopback/WireGuard (SECURITY.md T1).
@@ -56,13 +58,23 @@ Only the gateway and webhook receivers may ever bind non-loopback in prod; every
 |---|---|
 | AETHER_LLM__ANTHROPIC_API_KEY / __DEEPSEEK_API_KEY / __XAI_API_KEY / __OPENAI_API_KEY | llm_router |
 | AETHER_LLM__LOCAL_ENDPOINT | llm_router (vLLM/Ollama base URL; not secret) |
-| AETHER_VENUE__KALSHI_API_KEY_ID / __KALSHI_PRIVATE_KEY_PATH | kalshi pack (key file readable by that service user only) |
+| AETHER_VENUE__KALSHI_KEY_ID | kalshi pack API key identifier |
+| AETHER_VENUE__KALSHI_PRIVATE_KEY_PATH | kalshi pack RSA private-key file (readable by that service user only) |
+| AETHER_VENUE__KALSHI_BASE_URL | kalshi REST origin (not secret; defaults to `https://external-api.demo.kalshi.co`) |
+| AETHER_VENUE__KALSHI_WS_URL | kalshi WebSocket URL (not secret; defaults to `wss://external-api.demo.kalshi.co/trade-api/ws/v2`) |
 | AETHER_VENUE__ALPACA_KEY_ID / __ALPACA_SECRET | alpaca pack (paper) |
 | AETHER_VENUE__POLYGON_RPC_URL | polymarket pack (read-only) |
 | AETHER_VENUE__HYPERLIQUID_* | hyperliquid pack (read-only in Phase 1; names finalized in EP-303) |
 | AETHER_COMMS__TELEGRAM_BOT_TOKEN / __DISCORD_BOT_TOKEN / __SLACK_BOT_TOKEN | alerts |
 | AETHER_COMMS__TWILIO_SID / __TWILIO_TOKEN / __TWILIO_FROM | alerts (Phase 2, EP-308) |
-| AETHER_INBOX__GMAIL_* / __MSGRAPH_* | inbox (names finalized in EP-204) |
+| AETHER_INBOX__GMAIL_AUDIENCE | inbox Gmail Pub/Sub push OIDC audience (not secret) |
+| AETHER_INBOX__GMAIL_PUSH_SERVICE_ACCOUNT | inbox expected Pub/Sub push service-account email (not secret) |
+| AETHER_INBOX__GMAIL_ACCESS_TOKEN | inbox Gmail API OAuth token (secret) |
+| AETHER_INBOX__GMAIL_START_HISTORY_ID | initial Gmail watch cursor; persisted after first successful batch (not secret) |
+| AETHER_INBOX__MSGRAPH_CLIENT_STATE | inbox Graph subscription shared verifier (secret) |
+| AETHER_INBOX__MSGRAPH_ACCESS_TOKEN | inbox Graph API OAuth token (secret) |
+| AETHER_INBOX__DEDUP_DB | inbox durable dedup SQLite path (not secret; default data/inbox-dedup.sqlite3) |
+| AETHER_INBOX__QUEUE_DB | inbox durable notification/cursor SQLite path (not secret; default data/inbox-queue.sqlite3) |
 | AETHER_GUARDIAN__KEYSTORE_PATH | wallet-guardian only; HARD-DENY on any other reader |
 
 ## Execution safety flags

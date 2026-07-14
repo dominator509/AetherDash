@@ -1,0 +1,21 @@
+# AETHER venue manifest. Copy this directory and replace every TEMPLATE value.
+slug = "TEMPLATE"
+display_name = "Template"
+pack_version = "0.1.0"
+capabilities = ["markets"]
+asset_kinds = ["binary_contract"]
+jurisdictions = { allowed = ["US"], blocked = [] }
+
+[endpoints]
+prod = "https://api.example.com"
+sandbox = "https://sandbox.example.com"
+
+[rate_limits]
+rest_per_min = 60
+ws_subscriptions = 0
+
+[data_sources]
+markets = { rung = "official_api" }
+
+[freshness]
+tick_stale_ms = 5000

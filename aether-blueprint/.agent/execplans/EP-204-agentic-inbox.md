@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-204: Agentic Inbox
 
-**Band:** 2xx Brain | **Phase:** 1 | **Status:** draft | **Blocked by:** EP-201
+**Band:** 2xx Brain | **Phase:** 1 | **Status:** done | **Blocked by:** EP-201
 
 ## Purpose / Big Picture
 Let the operator feed the Brain by forwarding email and documents: a webhook receiver for Gmail push / MS Graph that safely parses messages and attachments and files them as provenance-carrying Brain objects with `origin=inbox, trust=low`. This is the Brain's first real ingestion source.
@@ -43,13 +43,13 @@ Per-milestone; `test-integration.sh` green (provider stubs, no real accounts - r
 Content-hash dedup makes re-forwarding and webhook retries safe; a crash mid-fetch resumes from the provider subscription cursor. Raw is preserved so reprocess is always possible. Real provider setup (OAuth, subscriptions) is operator work gated by S1.
 
 ## Progress
-- [ ] M1 Webhooks  - [ ] M2 Fetch+dedup  - [ ] M3 Safe parsing  - [ ] M4 Filing  - [ ] M5 Reprocess
+- [x] M1 Webhooks  - [x] M2 Fetch+dedup  - [x] M3 Safe parsing  - [x] M4 Filing  - [x] M5 Reprocess
 
 ## Surprises & Discoveries
-(provider webhook/subscription realities; parser hardening)
+Gmail Pub/Sub sends an authenticated OIDC bearer token and a base64 JSON data envelope; it does not send the originally assumed snake-case fields. Graph clientState is carried on each notification entry. Thread cancellation cannot stop a hostile parser, so parsing now runs under a killed-on-timeout isolated subprocess with Windows Job Object or POSIX rlimits plus Python audit-hook capability denial.
 
 ## Decision Log
-(exact env var names; parsing sandbox mechanism)
+Provider variables are finalized in ENVIRONMENT.md. Reprocess uses the shared session/grant authenticator, invalidates derived artifacts, and reruns the existing object rather than trusting X-Tier or creating a duplicate. Webhooks commit to a SQLite WAL queue before acknowledgment; workers use expiring leases and bounded retry backoff. Gmail cursors advance only after successful filing. Parser children receive no credentials, run in isolated mode, deny network/subprocess/dynamic-load/write capabilities, and have CPU, memory, output, input, and wall-time ceilings.
 
 ## Outcomes & Retrospective
-(inbox demonstrated; hostile-parse evidence; OCR seam for EP-206)
+Authenticated webhook parsing, durable queue/cursor recovery, real provider API adapters, atomic content dedup, resource-isolated parsing, original-byte preservation, low-trust Brain filing, and authenticated in-place reprocessing are implemented. Provider-stub integration proves webhook -> durable queue -> fetch -> sandbox parse -> Brain.Store with origin=inbox and trust=low. Validation: 47 inbox tests, 6 Brain storage tests, Ruff, MyPy (24 source files), and git diff --check all pass. Real provider credentials remain operator-owned STOP S1 and were not used.

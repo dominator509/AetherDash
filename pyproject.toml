@@ -8,7 +8,7 @@ license = { text = "AGPL-3.0-or-later" }
 [tool.uv.workspace]
 # EP-001: minimal workspace. Each EP appends its members when directories are created.
 # Expected layout: pylib, server/brain, server/llm_router, server/alerts, etc.
-members = ["pylib", "server/brain", "server/llm_router"]
+members = ["pylib", "server/brain", "server/llm_router", "server/alerts", "server/inbox", "connectors"]
 
 [tool.ruff]
 target-version = "py311"
@@ -66,9 +66,20 @@ disallow_untyped_defs = false
 ignore_missing_imports = true
 disable_error_code = ["type-arg", "no-any-return"]
 
+[[tool.mypy.overrides]]
+module = "connectors.*"
+disallow_untyped_defs = false
+ignore_missing_imports = true
+disable_error_code = [
+    "import-untyped", "import-not-found", "type-arg", "attr-defined",
+    "no-untyped-def", "union-attr", "unused-ignore", "arg-type",
+    "no-any-return", "type-var", "misc", "no-untyped-call",
+    "index",
+]
+
 [tool.pytest.ini_options]
 minversion = "7.0"
-testpaths = ["pylib", "server"]
+testpaths = ["pylib", "server", "connectors"]
 pythonpath = ["."]
 addopts = ["-ra", "-q", "--strict-markers", "--strict-config"]
 markers = [

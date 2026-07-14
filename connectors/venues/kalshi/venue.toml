@@ -1,0 +1,22 @@
+slug = "kalshi"
+display_name = "Kalshi"
+pack_version = "0.1.0"
+capabilities = ["markets", "ticks", "books", "orders", "balances"]
+asset_kinds = ["binary_contract", "categorical_contract"]
+jurisdictions = { allowed = ["US"], blocked = [] }
+
+[endpoints]
+prod = "https://external-api.kalshi.com"
+sandbox = "https://external-api.demo.kalshi.co"
+
+[rate_limits]
+rest_per_min = 100
+ws_subscriptions = 100
+
+[data_sources]
+markets = { rung = "official_api" }
+ticks = { rung = "official_api" }
+
+[freshness]
+tick_stale_ms = 2000
+book_stale_ms = 500

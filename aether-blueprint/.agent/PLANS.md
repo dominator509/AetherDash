@@ -8,7 +8,7 @@ This file is the single authority on which plans exist, their status, and which 
 `pending` (contents not yet generated) -> `draft` (contents exist, not started) -> `active` (being implemented; max one) -> `done` (Definition of done met, AGENTS.md section 14) -> or `revise` (reopened with a Decision Log reason). Status changes are edits to this table plus the plan's own Progress section.
 
 ## Active plan
-**EP-202** — LLM router: cache-first prompting, local fallback
+**EP-302** — Venue pack: Polymarket read-only (CLOB, Gamma, Polygon RPC)
 
 ## Ledger
 | ID | Title | Band | Phase | Status | Blocked by |
@@ -23,14 +23,14 @@ This file is the single authority on which plans exist, their status, and which 
 | EP-103 | Command room harness (MCP client, slash commands, tier surface) | 1xx Client | 1 | draft | EP-101, EP-202 |
 | EP-104 | Advanced panels: undockable layout, order books / DOM | 1xx Client | 2 | draft | EP-102 |
 | EP-201 | Brain v1: object model, provenance, recall v1, vault view | 2xx Brain | 1 | done | EP-003 |
-| EP-202 | LLM router, cache-first prompting, local fallback | 2xx Brain | 1 | active | EP-001 |
-| EP-203 | Alert engine & comms (Telegram, Discord, Slack, inline actions) | 2xx Brain | 1 | draft | EP-004 |
-| EP-204 | Agentic inbox (Gmail push, MS Graph, parse/scan/file) | 2xx Brain | 1 | draft | EP-201 |
+| EP-202 | LLM router, cache-first prompting, local fallback | 2xx Brain | 1 | done | EP-001 |
+| EP-203 | Alert engine & comms (Telegram, Discord, Slack, inline actions) | 2xx Brain | 1 | revise | EP-004 |
+| EP-204 | Agentic inbox (Gmail push, MS Graph, parse/scan/file) | 2xx Brain | 1 | done | EP-201 |
 | EP-205 | Research swarms & decision packets | 2xx Brain | 4 | draft | EP-103, EP-202 |
 | EP-206 | Ingestion fleet, OCR, source-reliability scoring | 2xx Brain | 3 | draft | EP-201 |
 | EP-207 | Tiered recall v2: hybrid fusion, graph traversal, decay, rerank | 2xx Brain | 3 | draft | EP-201 |
-| EP-301 | Venue pack: Kalshi (reference implementation + replay fixtures) | 3xx Connectors | 1 | draft | EP-004 |
-| EP-302 | Venue pack: Polymarket read-only (CLOB, Gamma, Polygon RPC) | 3xx Connectors | 1 | draft | EP-301 |
+| EP-301 | Venue pack: Kalshi (reference implementation + replay fixtures) | 3xx Connectors | 1 | done | EP-004 |
+| EP-302 | Venue pack: Polymarket read-only (CLOB, Gamma, Polygon RPC) | 3xx Connectors | 1 | active | EP-301 |
 | EP-303 | Venue packs: Hyperliquid read, OpenBB foundation, Alpaca paper | 3xx Connectors | 1 | draft | EP-301 |
 | EP-304 | Paper trading ledger & fill recording | 3xx Connectors | 1 | draft | EP-301 |
 | EP-305 | Order router & risk engine (paper-first, then small live) | 3xx Connectors | 2 | draft | EP-304, EP-401 |

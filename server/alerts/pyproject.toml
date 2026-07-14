@@ -1,0 +1,22 @@
+[project]
+name = "aether-alerts"
+version = "0.1.0"
+description = "AETHER Alerts — rule engine and dispatch for trading opportunities"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.10",
+    "ulid-py>=1.1",
+    "asyncpg>=0.30",
+    "cryptography>=44",
+    "aiokafka>=0.12",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["server.alerts", "server.alerts.*"]

@@ -1,0 +1,21 @@
+[package]
+name = "aether-venue-TEMPLATE"
+version = "0.0.0"
+edition = "2021"
+description = "AETHER Terminal venue pack template -- replace TEMPLATE with your venue slug"
+
+[lints]
+workspace = true
+
+[dependencies]
+aether-core = { path = "../../../crates/aether-core" }
+aether-proto = { path = "../../../crates/aether-proto" }
+serde_json = "1"
+thiserror = "2"
+# TO COMPLETE: add crate-specific deps (HTTP client, auth libs, etc.)
+# tokio = { version = "1", features = ["full"] }
+# serde = { version = "1", features = ["derive"] }
+# reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+# tokio-test = "0.4"

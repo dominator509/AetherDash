@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-302: Venue Pack - Polymarket (Read-Only)
 
-**Band:** 3xx Connectors | **Phase:** 1 | **Status:** draft | **Blocked by:** EP-301
+**Band:** 3xx Connectors | **Phase:** 1 | **Status:** active | **Blocked by:** EP-301
 
 ## Purpose / Big Picture
 Bring the second prediction-market venue in read-only: markets via Gamma, books/ticks via the CLOB API, on-chain resolution state via Polygon RPC. Cross-venue arbitrage detection (EP-307) needs two prediction venues; this is the second leg - with execution deliberately absent (US geofence non-goal).

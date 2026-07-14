@@ -1,0 +1,27 @@
+{
+  "market": {
+    "ticker": "BTC-75",
+    "title": "Will Bitcoin be above $75,000 at 4 PM ET?",
+    "semi_title": "BTC > $75k?",
+    "status": "open",
+    "yes_ask": 48,
+    "yes_bid": 47,
+    "no_ask": 53,
+    "no_bid": 52,
+    "result": null,
+    "settlement_ts": null,
+    "close_ts": 1720000000000,
+    "volume": 154230,
+    "open_interest": 45200,
+    "volume_24h": 12300,
+    "open_interest_24h": 3200,
+    "created_time": 1710000000000,
+    "minimum_ts": null,
+    "maximum_ts": null,
+    "floor_strike": null,
+    "cap_strike": null,
+    "tick_size": [1, 99],
+    "yes_sub_title": "Yes",
+    "no_sub_title": "No"
+  }
+}

@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-203: Alert Engine & Comms
 
-**Band:** 2xx Brain | **Phase:** 1 | **Status:** draft | **Blocked by:** EP-004
+**Band:** 2xx Brain | **Phase:** 1 | **Status:** revise | **Blocked by:** EP-004
 
 ## Purpose / Big Picture
 Push actionable intelligence off-screen: an alert engine that consumes opportunities/events and dispatches to Telegram, Discord, and Slack with inline Simulate/Execute/Ignore actions that honor the actor's tier. Phase-1 channels; SMS/email + full approval flows are EP-308.
@@ -43,13 +43,13 @@ Per-milestone; `test-integration.sh` green (API stubs, no real tokens); `verify.
 Alert dispatch dedups by (opportunity, rule) so restarts don't re-spam; callbacks are idempotent by action id. History is the record; a crash mid-dispatch re-derives pending from the consumer offset. Paper-only seam replaced when EP-305 lands.
 
 ## Progress
-- [ ] M1 Rule engine  - [ ] M2 Telegram  - [ ] M3 Discord+Slack  - [ ] M4 Inline enforcement  - [ ] M5 History+ops
+- [x] M1 Rule engine  - [x] M2 Telegram  - [x] M3 Discord+Slack  - [ ] M4 Inline enforcement (awaits EP-304/305 effect adapters)  - [x] M5 History+ops
 
 ## Surprises & Discoveries
-(channel API/callback idioms; identity mapping; step-up-over-chat UX)
+The original implementation only formatted outbound messages and returned policy-like dictionaries. The hardened implementation verifies each platform webhook, resolves channel identities and current grants from Postgres, records per-channel delivery outcomes, and fails closed when the future simulator/router effect adapter is unavailable.
 
 ## Decision Log
-(step-up-in-chat vs bounce-to-client; rules table shape)
+Step-up and confirmation bounce to the authenticated client; chat callbacks never accept TOTP material. Execute remains paper-only and cannot produce an effect until EP-304/305 installs the shared enforcement adapter.
 
 ## Outcomes & Retrospective
-(channels live; enforcement evidence; paper seam for EP-305)
+Three channel adapters and authenticated callback endpoints are implemented with durable per-channel history and an aiokafka `opps.detected`/`alerts.outbound` path. Completion remains blocked on the EP-304/305 effect adapter; readiness and callbacks report that condition rather than simulating success.

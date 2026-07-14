@@ -42,7 +42,12 @@ logger = logging.getLogger(__name__)
 _active_tasks: dict[str, asyncio.Task] = {}
 
 
-async def store_draft(draft: ObjectDraft) -> BrainRef:
+async def store_draft(
+    draft: ObjectDraft,
+    origin: str | None = None,
+    trust: str | None = None,
+    raw_content: bytes | None = None,
+) -> BrainRef:
     """Ingest a raw content draft and return a BrainRef.
 
     Steps per SPEC-011 intake pipeline:
@@ -54,9 +59,17 @@ async def store_draft(draft: ObjectDraft) -> BrainRef:
     6. INSERT into brain_objects
     7. Emit ingest_events row (rung: 1 = intake)
     8. Return BrainRef
+
+    Args:
+        draft: The object draft to ingest.
+        origin: Override the default origin (``ingest_fleet``).
+        trust: Override the default trust level (``medium``).
+        raw_content: Original hostile bytes when ``draft.content`` is parsed text.
     """
     # 1. Hash raw content (BEFORE any I/O)
-    content_bytes = draft.content.encode("utf-8")
+    content_bytes = (
+        raw_content if raw_content is not None else draft.content.encode("utf-8")
+    )
     raw_sha256 = hashlib.sha256(content_bytes).hexdigest()
 
     # 2. Dedupe by content hash — avoid MinIO write if we already have it
@@ -87,15 +100,21 @@ async def store_draft(draft: ObjectDraft) -> BrainRef:
         return existing_by_prov
 
     # 5. Assemble BrainObject
+    resolved_origin = Origin(origin) if origin else Origin.ingest_fleet
+    resolved_trust = TrustLevel(trust) if trust else TrustLevel.medium
     obj_id = str(ulid.new())
+    clean_ref = None
+    if raw_content is not None:
+        _, clean_ref = storage.store_clean(draft.content.encode("utf-8"), draft.source)
     brain_obj = BrainObject(
         id=obj_id,
         kind=ObjectKind(draft.kind),
         source=draft.source,
-        origin=Origin.ingest_fleet,
-        trust=TrustLevel.medium,
+        origin=resolved_origin,
+        trust=resolved_trust,
         ingested_ts=ingested_ts,
         raw_ref=minio_key,
+        clean_ref=clean_ref,
         provenance_hash=provenance_hash,
         tier=Tier.warm,
     )
@@ -140,6 +159,23 @@ async def run_pipeline_for_object(obj_id: str) -> None:
     Args:
         obj_id: ULID of the object to process.
     """
+    await pipeline_runner.run_pipeline(obj_id)
+
+
+async def reprocess_object(obj_id: str) -> None:
+    """Invalidate derived artifacts and rerun an existing object's raw provenance."""
+    await store.update_object(
+        obj_id,
+        clean_ref=None,
+        summary=None,
+        entities=[],
+        linked_events=[],
+        market_keys=[],
+        confidence=None,
+        current_stage="intake",
+        parked_reason=None,
+        tier=Tier.warm,
+    )
     await pipeline_runner.run_pipeline(obj_id)
 
 

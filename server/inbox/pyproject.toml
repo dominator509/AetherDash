@@ -1,0 +1,23 @@
+[project]
+name = "aether-inbox"
+version = "0.1.0"
+description = "AETHER Agentic Inbox — Gmail/MS Graph push, fetch, parse, file to Brain"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.10",
+    "httpx>=0.27",
+    "pypdf>=5.0",
+    "ulid-py>=1.1",
+    "google-auth>=2.40",
+    "asyncpg>=0.30",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["server.inbox", "server.inbox.*"]

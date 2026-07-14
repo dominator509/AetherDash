@@ -5,12 +5,26 @@ members = [
     "crates/aether-gateway",
     "crates/aether-proto",
     "client/src-tauri",
+    "connectors/venues/kalshi",
+    "connectors/venues/_template",
 ]
 # EP-001/101: single crate scaffold. Each EP appends its members.
 # Expected future members:
 #   "crates/*", "connectors/execution/*", "connectors/venues/*",
 #   "connectors/comms/*"
 resolver = "2"
+
+# The template crate is a workspace member (for workspace-lint inheritance)
+# but excluded from default builds.  Build it explicitly:
+#   cargo build -p aether-venue-TEMPLATE
+default-members = [
+    "crates/aether-core",
+    "crates/aether-bus",
+    "crates/aether-gateway",
+    "crates/aether-proto",
+    "client/src-tauri",
+    "connectors/venues/kalshi",
+]
 
 [workspace.package]
 version = "0.1.0"
