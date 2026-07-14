@@ -49,6 +49,14 @@ Names below are the contract: EP-003/EP-004 implement them exactly; new variable
 | Wallet Guardian gRPC | AETHER_GUARDIAN__BIND | 127.0.0.1:50053 |
 | Kalshi adapter gRPC | AETHER_VENUE__KALSHI_GRPC_ADDR | 127.0.0.1:50054 |
 | Kalshi health / metrics HTTP | AETHER_VENUE__KALSHI_HEALTH_PORT | 8084 (loopback only) |
+| Polymarket adapter gRPC | AETHER_VENUE__POLYMARKET_GRPC_ADDR | 127.0.0.1:50055 |
+| Polymarket health / metrics HTTP | AETHER_VENUE__POLYMARKET_HEALTH_PORT | 8085 (loopback only) |
+| Hyperliquid adapter gRPC | AETHER_VENUE__HYPERLIQUID_GRPC_ADDR | 127.0.0.1:50056 |
+| Hyperliquid health / metrics HTTP | AETHER_VENUE__HYPERLIQUID_HEALTH_PORT | 8086 (loopback only) |
+| Alpaca adapter gRPC | AETHER_VENUE__ALPACA_GRPC_ADDR | 127.0.0.1:50057 |
+| Alpaca health / metrics HTTP | AETHER_VENUE__ALPACA_HEALTH_PORT | 8087 (loopback only) |
+| OpenBB adapter gRPC | AETHER_VENUE__OPENBB_GRPC_ADDR | 127.0.0.1:50058 |
+| OpenBB health / metrics HTTP | AETHER_VENUE__OPENBB_HEALTH_PORT | 8088 (loopback only) |
 | Prometheus (optional dev) | - | 9090 |
 
 Only the gateway and webhook receivers may ever bind non-loopback in prod; everything else is loopback/WireGuard (SECURITY.md T1).
@@ -63,7 +71,16 @@ Only the gateway and webhook receivers may ever bind non-loopback in prod; every
 | AETHER_VENUE__KALSHI_BASE_URL | kalshi REST origin (not secret; defaults to `https://external-api.demo.kalshi.co`) |
 | AETHER_VENUE__KALSHI_WS_URL | kalshi WebSocket URL (not secret; defaults to `wss://external-api.demo.kalshi.co/trade-api/ws/v2`) |
 | AETHER_VENUE__ALPACA_KEY_ID / __ALPACA_SECRET | alpaca pack (paper) |
-| AETHER_VENUE__POLYGON_RPC_URL | polymarket pack (read-only) |
+| AETHER_VENUE__POLYGON_RPC_URL | polymarket pack Polygon RPC endpoint (read-only; not secret; defaults to `https://polygon-rpc.com`) |
+| AETHER_VENUE__HYPERLIQUID_INFO_URL | hyperliquid pack Info API endpoint (not secret; defaults to `https://api.hyperliquid.xyz/info`) |
+| AETHER_VENUE__ALPACA_BASE_URL | alpaca pack REST origin (not secret; defaults to `https://paper-api.alpaca.markets`) |
+| AETHER_VENUE__ALPACA_DATA_URL | alpaca pack Data API origin (not secret; defaults to `https://data.alpaca.markets`) |
+| AETHER_VENUE__ALPACA_WS_URL | alpaca pack WebSocket URL (not secret; defaults to `wss://stream.data.alpaca.markets/v2/iex`) |
+| AETHER_VENUE__OPENBB_PROVIDER | openbb pack data provider (not secret; defaults to `yfinance`) |
+| AETHER_VENUE__OPENBB_* | openbb pack provider-specific API keys (secret; e.g. __POLYGON_API_KEY) |
+| AETHER_VENUE__POLYMARKET_GAMMA_URL | polymarket pack Gamma REST origin (not secret; defaults to `https://gamma-api.polymarket.com`) |
+| AETHER_VENUE__POLYMARKET_CLOB_URL | polymarket pack CLOB REST origin (not secret; defaults to `https://clob.polymarket.com`) |
+| AETHER_VENUE__POLYMARKET_WS_URL | polymarket pack CLOB WebSocket URL (not secret; defaults to `wss://ws-subscriptions-clob.polymarket.com/ws/market`) |
 | AETHER_VENUE__HYPERLIQUID_* | hyperliquid pack (read-only in Phase 1; names finalized in EP-303) |
 | AETHER_COMMS__TELEGRAM_BOT_TOKEN / __DISCORD_BOT_TOKEN / __SLACK_BOT_TOKEN | alerts |
 | AETHER_COMMS__TWILIO_SID / __TWILIO_TOKEN / __TWILIO_FROM | alerts (Phase 2, EP-308) |

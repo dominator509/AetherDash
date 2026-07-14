@@ -6,6 +6,9 @@ members = [
     "crates/aether-proto",
     "client/src-tauri",
     "connectors/venues/kalshi",
+    "connectors/venues/polymarket",
+    "connectors/venues/hyperliquid",
+    "connectors/venues/alpaca",
     "connectors/venues/_template",
 ]
 # EP-001/101: single crate scaffold. Each EP appends its members.
@@ -24,6 +27,7 @@ default-members = [
     "crates/aether-proto",
     "client/src-tauri",
     "connectors/venues/kalshi",
+    "connectors/venues/polymarket",
 ]
 
 [workspace.package]

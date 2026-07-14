@@ -1,0 +1,24 @@
+slug = "openbb"
+display_name = "OpenBB"
+pack_version = "0.1.0"
+capabilities = ["markets", "ticks"]
+asset_kinds = ["equity", "option"]
+jurisdictions = { allowed = ["US"], blocked = [] }
+
+# AGPL-3.0 notice: OpenBB is AGPL-3.0 licensed. This pack isolates OpenBB
+# inside a separate gRPC service — no OpenBB import crosses the network
+# boundary (see DECISIONS.md ADR for AGPL isolation).
+
+[endpoints]
+prod = "https://openbb.co"
+
+[rate_limits]
+rest_per_min = 60
+ws_subscriptions = 0
+
+[data_sources]
+markets = { rung = "official_api" }
+ticks = { rung = "official_api" }
+
+[freshness]
+tick_stale_ms = 5000

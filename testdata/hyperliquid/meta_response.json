@@ -1,0 +1,36 @@
+{
+  "universe": [
+    {
+      "name": "BTC",
+      "szDecimals": 5,
+      "maxLeverage": 40,
+      "marginTableId": 56,
+      "onlyIsolated": true
+    },
+    {
+      "name": "ETH",
+      "szDecimals": 4,
+      "maxLeverage": 50,
+      "marginTableId": 57
+    },
+    {
+      "name": "SOL",
+      "szDecimals": 3,
+      "maxLeverage": 30,
+      "marginTableId": 58
+    },
+    {
+      "name": "HYPE",
+      "szDecimals": 4,
+      "maxLeverage": 20,
+      "marginTableId": 59
+    }
+  ],
+  "marginTables": [
+    [56, {"description": "BTC tiers", "marginTiers": [{"lowerBound": "0.0", "maxLeverage": 40}, {"lowerBound": "500000.0", "maxLeverage": 20}]}],
+    [57, {"description": "ETH tiers", "marginTiers": [{"lowerBound": "0.0", "maxLeverage": 50}, {"lowerBound": "250000.0", "maxLeverage": 25}]}],
+    [58, {"description": "SOL tiers", "marginTiers": [{"lowerBound": "0.0", "maxLeverage": 30}]}],
+    [59, {"description": "HYPE tiers", "marginTiers": [{"lowerBound": "0.0", "maxLeverage": 20}]}]
+  ],
+  "collateralToken": 0
+}

@@ -3,6 +3,10 @@ name = "aether-venue-kalshi"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "record-kalshi"
+path = "src/bin/record.rs"
+
 [lints]
 workspace = true
 

@@ -137,6 +137,62 @@ dependencies = [
 ]
 
 [[package]]
+name = "aether-venue-alpaca"
+version = "0.1.0"
+dependencies = [
+ "aether-bus",
+ "aether-core",
+ "aether-proto",
+ "chrono",
+ "futures",
+ "prost",
+ "prost-types",
+ "reqwest 0.12.28",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tokio-tungstenite",
+ "toml 0.8.2",
+ "tonic",
+ "tonic-health",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+ "uuid",
+]
+
+[[package]]
+name = "aether-venue-hyperliquid"
+version = "0.1.0"
+dependencies = [
+ "aether-bus",
+ "aether-core",
+ "aether-proto",
+ "chrono",
+ "futures",
+ "prost",
+ "prost-types",
+ "reqwest 0.12.28",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tokio-tungstenite",
+ "toml 0.8.2",
+ "tonic",
+ "tonic-health",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "aether-venue-kalshi"
 version = "0.1.0"
 dependencies = [
@@ -165,6 +221,34 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "uuid",
+]
+
+[[package]]
+name = "aether-venue-polymarket"
+version = "0.1.0"
+dependencies = [
+ "aether-bus",
+ "aether-core",
+ "aether-proto",
+ "chrono",
+ "futures",
+ "prost",
+ "prost-types",
+ "reqwest 0.12.28",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tokio-tungstenite",
+ "toml 0.8.2",
+ "tonic",
+ "tonic-health",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
 ]
 
 [[package]]

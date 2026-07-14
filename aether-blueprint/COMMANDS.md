@@ -120,6 +120,9 @@ docker compose -f infra/dev/docker-compose.yml up -d --wait   # data stack (ACTI
 cargo run -p aether-gateway                                    # WS gateway     (ACTIVE after EP-004)
 uv run uvicorn server.brain.app:app --reload                   # brain API      (ACTIVE after EP-201)
 uv run uvicorn server.llm_router.app:app --host 127.0.0.1 --port 8001  # LLM router (ACTIVE after EP-202)
+uv run python -m connectors.venues.openbb.src.server                  # OpenBB venue (ACTIVE after EP-303)
+cargo run -p aether-venue-hyperliquid                                # Hyperliquid venue (ACTIVE after EP-303)
+cargo run -p aether-venue-alpaca                                     # Alpaca paper venue (ACTIVE after EP-303)
 pnpm --filter @aether/client tauri dev                         # desktop client (ACTIVE after EP-101)
 ```
 

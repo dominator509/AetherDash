@@ -1,0 +1,38 @@
+[package]
+name = "aether-venue-alpaca"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "record-alpaca"
+path = "src/bin/record.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+aether-core = { path = "../../../crates/aether-core" }
+aether-proto = { path = "../../../crates/aether-proto" }
+aether-bus = { path = "../../../crates/aether-bus" }
+tonic = "0.12"
+tonic-health = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+urlencoding = "2"
+rust_decimal = "1"
+toml = "0.8"
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -1,0 +1,22 @@
+slug = "hyperliquid"
+display_name = "Hyperliquid"
+pack_version = "0.1.0"
+capabilities = ["markets", "ticks", "books"]
+asset_kinds = ["perp", "spot"]
+jurisdictions = { allowed = [], blocked = ["US"] }
+
+[endpoints]
+prod = "https://api.hyperliquid.xyz"
+
+[rate_limits]
+rest_per_min = 120
+ws_subscriptions = 0
+
+[data_sources]
+markets = { rung = "official_api" }
+ticks = { rung = "official_api" }
+books = { rung = "official_api" }
+
+[freshness]
+tick_stale_ms = 5000
+book_stale_ms = 2000

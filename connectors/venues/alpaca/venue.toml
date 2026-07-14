@@ -1,0 +1,21 @@
+slug = "alpaca"
+display_name = "Alpaca"
+pack_version = "0.1.0"
+capabilities = ["markets", "ticks", "orders", "balances"]
+asset_kinds = ["equity"]
+jurisdictions = { allowed = ["US"], blocked = [] }
+
+[endpoints]
+prod = "https://paper-api.alpaca.markets"
+sandbox = "https://paper-api.alpaca.markets"
+
+[rate_limits]
+rest_per_min = 200
+ws_subscriptions = 30
+
+[data_sources]
+markets = { rung = "official_api" }
+ticks = { rung = "official_api" }
+
+[freshness]
+tick_stale_ms = 2000

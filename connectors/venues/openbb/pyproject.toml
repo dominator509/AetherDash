@@ -1,0 +1,31 @@
+[project]
+name = "aether-venue-openbb"
+version = "0.1.0"
+description = "AETHER Terminal — OpenBB venue adapter (equity/options quotes + reference data)"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+dependencies = [
+    "grpcio>=1.60",
+    "grpcio-tools>=1.60",
+    "protobuf>=4.0",
+    "openbb>=4.0",
+    "openbb-yfinance>=1.0",
+    "pydantic>=2.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.5.0",
+]
+
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+# No packages.find config — this pack is an independent gRPC service, not a
+# library. It runs from source via `python -m connectors.venues.openbb.src.server`
+# and its dependencies are resolved by `uv sync`. Tests import through the
+# workspace-root namespace (connectors.venues.openbb.src.*).

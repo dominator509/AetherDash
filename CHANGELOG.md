@@ -16,5 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Feature-gated golden vector generator (`gen-goldens` binary)
   - Deserialize-guarded constructors on all invariant-bearing types
 - EP-301: Kalshi reference venue pack with current RSA-PSS authentication and fixed-point REST/WebSocket normalization, deterministic scrubbed replay fixtures, raw-payload quarantine, demo-only V2 order contract tests, rate-limit/backoff enforcement, health/feed-lag reporting, registry migration, and the reusable venue template
+- EP-302: Read-only Polymarket venue pack with Gamma discovery, current CLOB REST/WebSocket schemas, fixed-point probability normalization, Polygon CTF resolution reads, deterministic scrubbed replay, quarantine, health reporting, and registry migration
 
 [Unreleased]: https://github.com/operator/aetherdash/compare/v0.1.0...HEAD

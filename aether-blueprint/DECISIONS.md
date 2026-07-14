@@ -75,3 +75,11 @@ New decisions append via `.agent/templates/adr-template.md`. Owner "Operator" = 
 - **Alternatives:** Forgejo from day one (rejected: EP-001 shouldn't block on infra procurement).
 - **Consequences:** Operator confirms remote-push policy before first push (A-17); migration is a runner swap because workflows are thin.
 - **Status:** Accepted. **Date:** 2026-07-07. **Owner:** Operator.
+
+---
+## ADR-0010: Isolate OpenBB behind the venue gRPC boundary
+- **Context:** The OpenBB Platform SDK and provider extensions are AGPL-3.0-or-later. AETHER needs its equity and options data without allowing SDK-specific objects or imports to spread across service boundaries.
+- **Decision:** Install OpenBB only in the Python connectors workspace and import it only inside the OpenBB venue service. The service exposes plain canonical protobuf messages over `VenueAdapter`; no OpenBB object crosses that process boundary. The adapter remains AGPL-3.0-or-later and its source is distributed with AETHER.
+- **Alternatives:** Import OpenBB into Brain or other services (rejected: expands coupling and the license surface); call undocumented provider endpoints directly (rejected: bypasses the selected supported integration); omit OpenBB (rejected: loses the EP-303 reference and options source).
+- **Consequences:** The connectors uv environment is larger, AGPL source-availability obligations apply to network deployments of this service, and upgrades require an explicit license review. Process isolation is an architectural boundary, not a claim that it negates AGPL obligations.
+- **Status:** Accepted. **Date:** 2026-07-13. **Owner:** Operator.
