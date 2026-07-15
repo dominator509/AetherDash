@@ -1,0 +1,2 @@
+[env]
+PROTOC = { value = ".venv\\Scripts\\python-grpc-tools-protoc.exe", relative = true }

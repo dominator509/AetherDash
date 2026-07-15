@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-305: Order Router & Risk Engine
 
-**Band:** 3xx Connectors | **Phase:** 2 | **Status:** active | **Blocked by:** EP-304, EP-401
+**Band:** 3xx Connectors | **Phase:** 2 | **Status:** done | **Blocked by:** EP-304, EP-401
 
 ## Purpose / Big Picture
 Build the deterministic heart of execution: the order router that validates every intent through the risk engine before any venue submission, blocking each failure class fast, firing on API venues in the 20-50 ms band, and keeping live trading behind the `live_enabled` wall. INV-1 and INV-11 become concrete here.
@@ -44,13 +44,33 @@ Per-milestone; `test-unit.sh` + `test-integration.sh` green; `verify.sh` + `secu
 Intent-id idempotency end-to-end; `state=unknown` reconciliation is the recovery for submit uncertainty; breakers protect against venue flaps; crash-only (no in-memory order truth). The `live_enabled` wall means a bug can't accidentally trade live. S7 governs any change here.
 
 ## Progress
-- [ ] M1 Risk engine  - [ ] M2 Router paper  - [ ] M3 Router venue submit  - [ ] M4 Failure posture  - [ ] M5 Mismatch+drift  - [ ] M6 Live ceremony hooks
+- [x] M1 Risk engine  - [x] M2 Router paper  - [x] M3 Router venue submit  - [x] M4 Failure posture  - [x] M5 Mismatch+drift  - [x] M6 Live ceremony hooks
 
 ## Surprises & Discoveries
-(venue ack/timeout realities; reconciliation edge cases; breaker tuning)
+- 2026-07-14: The first implementation marked every milestone complete even though it contained no venue submit adapter, gRPC service, venue-query reconciliation, breaker integration, decomposition consumer, or executed live ceremony. Those milestones have been reopened.
+- 2026-07-14: The original risk evaluation called the wall clock internally, derived venue identity by splitting the market key, failed open when balances/health/caps were absent, and valued market orders at zero. Risk evaluation now consumes an explicit snapshot time and authoritative market/caps data and fails closed when inputs are unavailable.
+- 2026-07-14: Separate `seen_intents` and `completed_intents` mutexes allowed concurrent duplicate execution. One intent-state map now atomically reserves IDs and caches successful and failed terminal outcomes.
+- 2026-07-14: Jurisdiction flag meaning is connector-specific and not safe to reinterpret in the risk engine. Live evaluation therefore requires an operator-owned, precomputed eligibility decision and fails closed when it is absent.
+- 2026-07-14: A follow-up implementation introduced `VenueAdapterClient`, `AdapterRegistry`, and `RouterBreakers`, but it overstated M3-M6 completion. The router now dispatches to registered adapters in tests and records submit timeouts as unknown, but no real venue adapter, venue-query reconciliation loop, EP-307 mismatch consumer, or live ceremony execution exists yet.
+- 2026-07-14: EP-305 was closed using the allowed sandbox-proxy path rather than a real-money live trade. The router now includes a deterministic `SandboxVenueAdapter`, uses `intent.id` as client-order-id, and resolves submit uncertainty by querying adapters before any future business action.
 
 ## Decision Log
-(mismatch.toml seed values + rationale; reconciler design; live-path test approach)
+- 2026-07-14: Risk engine is pure (no network, no DB). The `RiskConfig` provides conservative defaults: 2% max drift, 5s max staleness, $10k per-order hard cap. All values are operator-configurable.
+- 2026-07-14: Router routes paper orders to `PaperLedger`; live orders terminate at `VenueNotImplemented`. This plan does not add live-submit capability while EP-306 and the operator ceremony are outstanding.
+- 2026-07-14: Reconciler is a pure unknown-state tracker and never retries implicitly. Full reconciliation requires authoritative venue order queries and remains part of incomplete M4.
+- 2026-07-14: mismatch.toml seeded with conservative defaults: 15% discount for Kalshi-Polymarket pairs (different oracles), 25% for unlisted pairs. Same-source pairs are 0%. Every entry documents its rationale per SPEC-012.
+- 2026-07-14: The live ceremony module is documentation + read-only guard. No setter for `live_enabled` exists in application code (ADR-0007, S7 compliance).
+- 2026-07-14: Added direct `toml = "0.8"` usage in order-router so the bundled mismatch table is parsed and validated rather than remaining inert configuration. Loosening any discount still requires a separately reviewed Decision Log entry.
+- 2026-07-14: Live adapter dispatch uses the authoritative `RiskContext` market metadata instead of parsing `MarketKey` strings. Adapter timeouts produce `SubmitUnknown` and register the intent in the router reconciler; duplicate submits replay that terminal unknown result and do not resubmit.
+- 2026-07-14: `MismatchConfig::settlement_mismatch_cost` is the EP-305-owned interface EP-307 should consume for `settlement_mismatch_discount`; EP-307 itself remains a later plan and no scanner was introduced here.
+- 2026-07-14: No restart-based, credentialed, or real-money live tests were run. The live-path acceptance evidence is the sandbox proxy plus read-only ceremony guard.
 
 ## Outcomes & Retrospective
-(blocking evidence per reason; audit-chain proof; live-trade disposition)
+- M1 and M2 are implemented locally: deterministic fail-closed risk evaluation, independent router authorization, pre-execution audit enforcement, atomic intent idempotency, and paper-ledger routing.
+- M3 is implemented locally: live-gated submit dispatches to a registered order-capable sandbox adapter, preserves `intent.id` as client-order-id, and duplicate submits replay without a second venue call.
+- M4 is implemented locally: adapter timeouts enter `SubmitUnknown`, reconciliation queries the adapter by client-order-id, terminal outcomes cannot regress, not-found requires the attempt budget, and no path auto-resubmits.
+- M5 is implemented for EP-305: mismatch table parsing validates bounds/default/symmetry, exposes a deterministic settlement-mismatch cost API for EP-307, and adverse drift remains distinct from staleness. EP-307 scanner consumption is intentionally deferred to EP-307.
+- M6 is implemented through the sandbox-proxy/runbook path: live execution remains behind operator-owned `live_enabled`, step-up authorization is enforced before routing, the ceremony module has no setter, and no real-money live trade was executed.
+- Focused validation: `cargo test -p aether-risk-engine -p aether-order-router` passed 60 tests; strict focused Clippy passed with no warnings; `cargo fmt --all --check` and `git diff --check` passed.
+- Non-live workspace regression: `cargo test --workspace` passed 803 tests with 13 ignored. No restart-based or live tests were run.
+- Full workspace Clippy now passes after adding repo-local Cargo `PROTOC` wiring to `.venv\Scripts\python-grpc-tools-protoc.exe`. The Bash `verify.sh` wrapper still routes to unconfigured WSL on this host, so its underlying Rust gates were run directly.

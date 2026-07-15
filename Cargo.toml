@@ -13,6 +13,9 @@ members = [
     "connectors/venues/alpaca",
     "connectors/venues/_template",
     "connectors/execution/paper-ledger",
+    "connectors/execution/risk-engine",
+    "connectors/execution/order-router",
+    "connectors/execution/wallet-guardian",
 ]
 # EP-001/101: single crate scaffold. Each EP appends its members.
 # Expected future members:

@@ -1,0 +1,20 @@
+[package]
+name = "aether-order-router"
+version = "0.1.0"
+edition = "2021"
+description = "AETHER Terminal -- order router"
+license = "AGPL-3.0-or-later"
+
+[lints]
+workspace = true
+
+[dependencies]
+aether-bus = { path = "../../../crates/aether-bus" }
+aether-core = { path = "../../../crates/aether-core" }
+aether-risk-engine = { path = "../risk-engine" }
+aether-paper-ledger = { path = "../paper-ledger" }
+aether-authz = { path = "../../../crates/aether-authz" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+rust_decimal = "1"
+toml = "0.8"

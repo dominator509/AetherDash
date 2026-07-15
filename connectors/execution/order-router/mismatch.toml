@@ -1,0 +1,38 @@
+# Settlement mismatch discounts for cross-venue arbitrage.
+# Each entry documents a venue-pair discount factor applied to gross spread.
+# Rationale: different oracles/resolution sources carry settlement risk.
+# Same-source pairs (e.g. Kalshi-Kalshi) are 0.0 by definition.
+# All values are decimal fractions of gross spread (0.0 = no discount, 1.0 = full).
+
+# --- Prediction market pairs ---
+
+[kalshi-polymarket]
+discount = "0.15"
+rationale = "Kalshi uses internal oracle (CFTC-regulated); Polymarket uses UMA oracle. Different resolution sources; moderate discount."
+
+[polymarket-kalshi]
+discount = "0.15"
+rationale = "Symmetric pair — see kalshi-polymarket."
+
+[kalshi-kalshi]
+discount = "0.0"
+rationale = "Same source — no settlement mismatch risk."
+
+[polymarket-polymarket]
+discount = "0.0"
+rationale = "Same source — no settlement mismatch risk."
+
+# --- Traditional market pairs (Phase 2+) ---
+
+[alpaca-hyperliquid]
+discount = "0.0"
+rationale = "Different asset classes (equity vs crypto) — mismatch not applicable."
+
+[hyperliquid-alpaca]
+discount = "0.0"
+rationale = "Symmetric pair — mismatch not applicable."
+
+# --- Default fallback for unlisted pairs ---
+[_default]
+discount = "0.25"
+rationale = "Conservative default for unlisted venue pairs. Higher discount to reflect unknown oracle/settlement divergence."
