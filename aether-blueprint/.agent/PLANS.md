@@ -19,32 +19,32 @@ This file is the single authority on which plans exist, their status, and which 
 | EP-003 | Data & persistence substrate (compose stack, migrations, DDL) | 0xx Foundation | 0 | done | EP-002 |
 | EP-004 | Service contracts & event bus (proto, topics, WS gateway skeleton) | 0xx Foundation | 0 | done | EP-003 |
 | EP-101 | Tauri shell: toggle, keyboard nav, command line, encrypted cache | 1xx Client | 1 | done | EP-004 |
-| EP-102 | Opportunity feed & explain views | 1xx Client | 1 | draft | EP-101, EP-304 |
-| EP-103 | Command room harness (MCP client, slash commands, tier surface) | 1xx Client | 1 | draft | EP-101, EP-202 |
-| EP-104 | Advanced panels: undockable layout, order books / DOM | 1xx Client | 2 | draft | EP-102 |
+| EP-102 | Opportunity feed & explain views | 1xx Client | 1 | done | EP-101, EP-304 |
+| EP-103 | Command room harness (MCP client, slash commands, tier surface) | 1xx Client | 1 | done | EP-101, EP-202 |
+| EP-104 | Advanced panels: undockable layout, order books / DOM | 1xx Client | 2 | done | EP-102 |
 | EP-201 | Brain v1: object model, provenance, recall v1, vault view | 2xx Brain | 1 | done | EP-003 |
 | EP-202 | LLM router, cache-first prompting, local fallback | 2xx Brain | 1 | done | EP-001 |
 | EP-203 | Alert engine & comms (Telegram, Discord, Slack, inline actions) | 2xx Brain | 1 | revise | EP-004 |
 | EP-204 | Agentic inbox (Gmail push, MS Graph, parse/scan/file) | 2xx Brain | 1 | done | EP-201 |
 | EP-205 | Research swarms & decision packets | 2xx Brain | 4 | draft | EP-103, EP-202 |
-| EP-206 | Ingestion fleet, OCR, source-reliability scoring | 2xx Brain | 3 | draft | EP-201 |
-| EP-207 | Tiered recall v2: hybrid fusion, graph traversal, decay, rerank | 2xx Brain | 3 | draft | EP-201 |
+| EP-206 | Ingestion fleet, OCR, source-reliability scoring | 2xx Brain | 3 | active | EP-201 |
+| EP-207 | Tiered recall v2: hybrid fusion, graph traversal, decay, rerank | 2xx Brain | 3 | active | EP-201 |
 | EP-301 | Venue pack: Kalshi (reference implementation + replay fixtures) | 3xx Connectors | 1 | done | EP-004 |
 | EP-302 | Venue pack: Polymarket read-only (CLOB, Gamma, Polygon RPC) | 3xx Connectors | 1 | done | EP-301 |
 | EP-303 | Venue packs: Hyperliquid read, OpenBB foundation, Alpaca paper | 3xx Connectors | 1 | done | EP-301 |
 | EP-304 | Paper trading ledger & fill recording | 3xx Connectors | 1 | done | EP-301 |
 | EP-305 | Order router & risk engine (paper-first, then small live) | 3xx Connectors | 2 | done | EP-304, EP-401 |
-| EP-306 | Wallet Guardian & WalletConnect v2 | 3xx Connectors | 2 | active | EP-401 |
-| EP-307 | Arbitrage scanner & trade simulator (net-edge math) | 3xx Connectors | 2 | draft | EP-302, EP-303, EP-304 |
+| EP-306 | Wallet Guardian & WalletConnect v2 | 3xx Connectors | 2 | done | EP-401 |
+| EP-307 | Arbitrage scanner & trade simulator (net-edge math) | 3xx Connectors | 2 | done | EP-302, EP-303, EP-304 |
 | EP-308 | Comms expansion: Twilio SMS, email, approval flows | 3xx Connectors | 2 | draft | EP-203 |
 | EP-401 | Five-tier permissions, step-up 2FA, hard-deny hooks | 4xx Cross-cutting | 2 | done | EP-004 |
-| EP-402 | Audit chain end-to-end & P&L attribution | 4xx Cross-cutting | 2 | draft | EP-305 |
-| EP-403 | Plugin runtime: signed manifests, sandbox, capability host | 4xx Cross-cutting | 4 | draft | EP-401 |
-| EP-404 | Observability: redaction, Prometheus, health, self-improvement metrics | 4xx Cross-cutting | 2 | draft | EP-004 |
-| EP-405 | Testing hardening: replay harness, lifecycle assertions, regression | 4xx Cross-cutting | 3 | draft | EP-305, EP-307 |
+| EP-402 | Audit chain end-to-end & P&L attribution | 4xx Cross-cutting | 2 | done | EP-305 |
+| EP-403 | Plugin runtime: signed manifests, sandbox, capability host | 4xx Cross-cutting | 4 | done | EP-401 |
+| EP-404 | Observability: redaction, Prometheus, health, self-improvement metrics | 4xx Cross-cutting | 2 | done | EP-004 |
+| EP-405 | Testing hardening: replay harness, lifecycle assertions, regression | 4xx Cross-cutting | 3 | done | EP-305, EP-307 |
 | EP-406 | Code-writing agent, cron jobs, backtesting agent | 4xx Cross-cutting | 4 | draft | EP-403 |
-| EP-407 | Deployment & release engineering (plane hosts, systemd, wiring) | 4xx Cross-cutting | 4 | draft | EP-404 |
-| EP-408 | Production readiness closure | 4xx Cross-cutting | 4 | draft | all above |
+| EP-407 | Deployment & release engineering (plane hosts, systemd, wiring) | 4xx Cross-cutting | 4 | done | EP-404 |
+| EP-408 | Production readiness closure | 4xx Cross-cutting | 4 | done | all above |
 
 ## Minimum-coverage mapping (master prompt EP-000..EP-010)
 | Minimum plan | Covered by |

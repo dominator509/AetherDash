@@ -1,0 +1,52 @@
+# ================================================================
+# AETHER Wallet Guardian
+# Plane 3 — isolated signing policy service (separate process).
+# Exposes propose_transaction() gRPC only.  No export_key, no
+# sign_arbitrary.  Raw keys live ONLY inside the Guardian
+# keystore boundary (OS keychain / enclave / MPC backend).
+# ================================================================
+[Unit]
+Description=AETHER Wallet Guardian (gRPC)
+Documentation=https://github.com/AetherDash/aether
+After=network.target
+# The Guardian must NEVER depend on any AETHER service; it is a
+# standalone signing boundary with no runtime coupling.
+# Key material path is configured via AETHER_GUARDIAN__KEYSTORE_PATH.
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether
+ExecStart=/usr/local/bin/aether-wallet-guardian
+Restart=always
+RestartSec=5
+
+# Security hardening — maximum isolation for the key-holding service
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether
+# Restrict keystore path via mount namespace
+BindReadOnlyPaths=/etc/aether/guardian-keystore:/etc/aether/guardian-keystore
+CapabilityBoundingSet=
+AmbientCapabilities=
+KeyringMode=private
+
+# Resource limits — minimal footprint, stateless
+MemoryMax=256M
+MemoryHigh=192M
+CPUQuota=30%
+TasksMax=64
+LimitNOFILE=8192
+LimitNPROC=64
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target

@@ -7,6 +7,11 @@ members = [
     "crates/aether-proto",
     "client/src-tauri",
     "crates/aether-fillmodel",
+    "crates/aether-decompose",
+    "crates/aether-audit",
+    "crates/aether-observe",
+    "crates/aether-testing",
+    "crates/aether-plugin",
     "connectors/venues/kalshi",
     "connectors/venues/polymarket",
     "connectors/venues/hyperliquid",
@@ -16,6 +21,8 @@ members = [
     "connectors/execution/risk-engine",
     "connectors/execution/order-router",
     "connectors/execution/wallet-guardian",
+    "connectors/execution/scanner",
+    "connectors/execution/simulator",
 ]
 # EP-001/101: single crate scaffold. Each EP appends its members.
 # Expected future members:
@@ -32,6 +39,8 @@ default-members = [
     "crates/aether-authz",
     "crates/aether-gateway",
     "crates/aether-proto",
+    "crates/aether-plugin",
+    "crates/aether-testing",
     "client/src-tauri",
     "connectors/venues/kalshi",
     "connectors/venues/polymarket",

@@ -1,0 +1,26 @@
+{
+  "title": "AETHER Execution Dashboard",
+  "uid": "aether-execution",
+  "panels": [
+    {
+      "title": "Paper Orders (24h)",
+      "targets": [{ "expr": "rate(aether_router_decisions{reason=\"allow\"}[24h])" }],
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 }
+    },
+    {
+      "title": "Denials by Reason",
+      "targets": [{ "expr": "aether_router_decisions", "legendFormat": "{{reason}}" }],
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 }
+    },
+    {
+      "title": "Guardian Proposals by State",
+      "targets": [{ "expr": "aether_guardian_proposals", "legendFormat": "{{state}}" }],
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 }
+    },
+    {
+      "title": "Attribution Divergence",
+      "targets": [{ "expr": "aether_attribution_divergence" }],
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 }
+    }
+  ]
+}

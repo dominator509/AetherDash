@@ -1,0 +1,46 @@
+# ================================================================
+# AETHER Simulator
+# Plane 3 — order simulation/backtest harness.  Runs against the
+# same risk-engine and order-router interfaces as live execution
+# but with AETHER_EXECUTION__LIVE_ENABLED implicitly false.
+# ================================================================
+[Unit]
+Description=AETHER Simulator (Backtest Harness)
+Documentation=https://github.com/AetherDash/aether
+After=network.target aether-risk-engine.service aether-order-router.service
+Wants=aether-risk-engine.service aether-order-router.service
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether
+ExecStart=/usr/local/bin/aether-simulator
+Restart=on-failure
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether /opt/aether/data
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Resource limits — simulation runs can be CPU-intensive
+MemoryMax=1G
+MemoryHigh=768M
+CPUQuota=60%
+TasksMax=128
+LimitNOFILE=16384
+LimitNPROC=128
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target

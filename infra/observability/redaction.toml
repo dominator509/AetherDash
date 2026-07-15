@@ -1,0 +1,26 @@
+# AETHER Terminal redaction configuration.
+# HARD-DENY 5: running without this config fails startup.
+# Add secret-bearing field patterns here — they're applied to ALL log output.
+
+patterns = [
+    # Email addresses
+    "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b",
+    # Private keys (64-char hex, with or without 0x prefix)
+    "\\b0x[a-fA-F0-9]{64}\\b",
+    # API keys (32+ alphanumeric chars)
+    "\\b[a-zA-Z0-9_-]{32,}\\b",
+    # Social Security Numbers
+    "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+    # Credit card numbers (13-19 digits)
+    "\\b\\d{13,19}\\b",
+]
+
+[field_replacements]
+password = "***"
+secret = "***"
+api_key = "***"
+private_key = "***"
+token = "***"
+passphrase = "***"
+authorization = "***"
+cookie = "***"

@@ -1,0 +1,186 @@
+# ================================================================
+# AETHER Terminal — Production Environment Template
+# EP-407
+#
+# Copy to /etc/aether/environment, edit values, then:
+#   chown root:aether /etc/aether/environment
+#   chmod 640 /etc/aether/environment
+#
+# This file is the single source of runtime configuration for
+# all systemd-managed AETHER services.  Every service loads it
+# via EnvironmentFile=/etc/aether/environment.
+#
+# Conventions:
+#   - Prefix AETHER_, sections joined by double underscore (__)
+#   - DATABASE_URL is unprefixed for sqlx compatibility (ADR-0004)
+#   - Variables marked (secret) MUST be replaced with real values
+#   - Variables marked (placeholder) are examples; replace before use
+#   - All endpoint URLs below assume localhost — change if databases
+#     run on separate hosts or inside Docker with host networking.
+#
+# See also: aether-blueprint/ENVIRONMENT.md (authoritative contract)
+# ================================================================
+
+# ═══════════════════════════════════════════════════════════════
+# Core variables
+# ═══════════════════════════════════════════════════════════════
+
+# Postgres — (secret) change password from dev default
+DATABASE_URL=postgres://aether:CHANGE_ME@localhost:5432/aether
+
+# ClickHouse — (secret) change password from dev default
+AETHER_CLICKHOUSE__URL=http://localhost:8123
+AETHER_CLICKHOUSE__DATABASE=aether
+AETHER_CLICKHOUSE__USER=aether
+AETHER_CLICKHOUSE__PASSWORD=CHANGE_ME
+
+# Redis (password recommended for production; leave blank for none)
+AETHER_REDIS__URL=redis://localhost:6379
+
+# Qdrant — gRPC and HTTP API
+AETHER_QDRANT__URL=http://localhost:6333
+
+# Redpanda (Kafka-compatible bus)
+AETHER_KAFKA__BROKERS=localhost:9092
+
+# MinIO (S3-compatible object store) — (secret) both values
+AETHER_MINIO__ENDPOINT=http://localhost:9000
+AETHER_MINIO__ACCESS_KEY=minioadmin
+AETHER_MINIO__SECRET_KEY=minioadmin
+
+# Kuzu graph database (brain host volume)
+AETHER_KUZU__PATH=/opt/aether/data/kuzu
+
+# Environment and logging
+AETHER_ENV=prod
+AETHER_LOG__LEVEL=info
+AETHER_LOG__FORMAT=json
+
+# ═══════════════════════════════════════════════════════════════
+# Service bind addresses
+# ═══════════════════════════════════════════════════════════════
+
+# Gateway (WS+HTTP) — binds 0.0.0.0:8080 for nginx reverse proxy
+AETHER_GATEWAY__BIND=0.0.0.0:8080
+
+# Brain API — loopback only; accessed through gateway
+AETHER_BRAIN__BIND=127.0.0.1:8000
+
+# LLM router — loopback only
+AETHER_LLM__BIND=127.0.0.1:8001
+
+# Alerts service — loopback only
+AETHER_ALERTS__BIND=127.0.0.1:8002
+
+# Inbox webhook receiver — loopback only
+AETHER_INBOX__BIND=127.0.0.1:8003
+
+# Order router gRPC — loopback only
+AETHER_ROUTER__BIND=127.0.0.1:50051
+
+# Risk engine gRPC — loopback only
+AETHER_RISK__BIND=127.0.0.1:50052
+
+# Wallet Guardian gRPC — loopback only
+AETHER_GUARDIAN__BIND=127.0.0.1:50053
+
+# ═══════════════════════════════════════════════════════════════
+# LLM provider API keys — (all secret)
+# ═══════════════════════════════════════════════════════════════
+
+# At least one provider key is required for LLM routing to function.
+# Uncomment and set the ones you use.
+
+# AETHER_LLM__ANTHROPIC_API_KEY=sk-ant-...
+# AETHER_LLM__DEEPSEEK_API_KEY=sk-...
+# AETHER_LLM__XAI_API_KEY=...
+# AETHER_LLM__OPENAI_API_KEY=sk-...
+
+# Local LLM endpoint (e.g. vLLM, Ollama) — not secret
+# AETHER_LLM__LOCAL_ENDPOINT=http://localhost:11434
+
+# ═══════════════════════════════════════════════════════════════
+# Venue credentials — (all secret; uncomment as needed)
+# ═══════════════════════════════════════════════════════════════
+
+# Kalshi prediction markets
+# AETHER_VENUE__KALSHI_KEY_ID=...
+# AETHER_VENUE__KALSHI_PRIVATE_KEY_PATH=/etc/aether/venue-keys/kalshi.pem
+# AETHER_VENUE__KALSHI_BASE_URL=https://external-api.elections.kalshi.com/trade-api/v2
+# AETHER_VENUE__KALSHI_WS_URL=wss://external-api.elections.kalshi.com/trade-api/ws/v2
+
+# Alpaca (equities/crypto paper)
+# AETHER_VENUE__ALPACA_KEY_ID=...
+# AETHER_VENUE__ALPACA_SECRET=...
+# AETHER_VENUE__ALPACA_BASE_URL=https://paper-api.alpaca.markets
+# AETHER_VENUE__ALPACA_DATA_URL=https://data.alpaca.markets
+# AETHER_VENUE__ALPACA_WS_URL=wss://stream.data.alpaca.markets/v2/iex
+
+# Polymarket
+# AETHER_VENUE__POLYMARKET_GAMMA_URL=https://gamma-api.polymarket.com
+# AETHER_VENUE__POLYMARKET_CLOB_URL=https://clob.polymarket.com
+# AETHER_VENUE__POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
+
+# Hyperliquid
+# AETHER_VENUE__HYPERLIQUID_INFO_URL=https://api.hyperliquid.xyz/info
+# AETHER_VENUE__HYPERLIQUID_GRPC_ADDR=127.0.0.1:50056
+# AETHER_VENUE__HYPERLIQUID_HEALTH_PORT=8086
+
+# OpenBB
+# AETHER_VENUE__OPENBB_PROVIDER=yfinance
+# AETHER_VENUE__OPENBB_GRPC_ADDR=127.0.0.1:50058
+# AETHER_VENUE__OPENBB_HEALTH_PORT=8088
+
+# ═══════════════════════════════════════════════════════════════
+# Alerts comms credentials — (all secret; uncomment as needed)
+# ═══════════════════════════════════════════════════════════════
+
+# AETHER_COMMS__TELEGRAM_BOT_TOKEN=...
+# AETHER_COMMS__DISCORD_BOT_TOKEN=...
+# AETHER_COMMS__SLACK_BOT_TOKEN=...
+# AETHER_COMMS__TWILIO_SID=...
+# AETHER_COMMS__TWILIO_TOKEN=...
+# AETHER_COMMS__TWILIO_FROM=+15551234567
+
+# ═══════════════════════════════════════════════════════════════
+# Inbox (email ingestion) credentials — (all secret)
+# ═══════════════════════════════════════════════════════════════
+
+# AETHER_INBOX__GMAIL_AUDIENCE=...
+# AETHER_INBOX__GMAIL_PUSH_SERVICE_ACCOUNT=...
+# AETHER_INBOX__GMAIL_ACCESS_TOKEN=...
+# AETHER_INBOX__GMAIL_START_HISTORY_ID=...
+# AETHER_INBOX__MSGRAPH_CLIENT_STATE=...
+# AETHER_INBOX__MSGRAPH_ACCESS_TOKEN=...
+# AETHER_INBOX__DEDUP_DB=/opt/aether/data/inbox-dedup.sqlite3
+# AETHER_INBOX__QUEUE_DB=/opt/aether/data/inbox-queue.sqlite3
+
+# ═══════════════════════════════════════════════════════════════
+# Wallet Guardian
+# ═══════════════════════════════════════════════════════════════
+
+# Path to the Guardian's encrypted keystore.
+# HARD-DENY: no other component may read this path (SECURITY.md).
+AETHER_GUARDIAN__KEYSTORE_PATH=/etc/aether/guardian-keystore
+
+# ═══════════════════════════════════════════════════════════════
+# Execution safety flags
+# ═══════════════════════════════════════════════════════════════
+
+# Live trading — operator-edited out-of-band only (ADR-0007, HARD-DENY 3).
+# Agents/CI must NEVER set this to true.
+AETHER_EXECUTION__LIVE_ENABLED=false
+
+# Paper trading — enabled by default in production for warm-up
+AETHER_EXECUTION__PAPER=true
+
+# ═══════════════════════════════════════════════════════════════
+# Docker compose variables (used by docker-compose.prod.yml)
+# ═══════════════════════════════════════════════════════════════
+
+# These are sourced by docker compose, not by systemd services.
+# They are defined here so a single environment file serves both.
+AETHER_PG_PASSWORD=CHANGE_ME
+AETHER_CLICKHOUSE_PASSWORD=CHANGE_ME
+AETHER_MINIO_ROOT_USER=minioadmin
+AETHER_MINIO_ROOT_PASSWORD=minioadmin

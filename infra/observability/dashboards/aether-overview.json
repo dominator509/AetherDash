@@ -1,0 +1,46 @@
+{
+  "title": "AETHER Terminal Overview",
+  "uid": "aether-overview",
+  "panels": [
+    {
+      "title": "Feed Lag (ms)",
+      "targets": [{ "expr": "aether_feed_lag_ms" }],
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 }
+    },
+    {
+      "title": "Scan Cycle (ms)",
+      "targets": [{ "expr": "aether_scan_cycle_ms" }],
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 6 }
+    },
+    {
+      "title": "Shed Count",
+      "targets": [{ "expr": "aether_scan_shed_count" }],
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 6 }
+    },
+    {
+      "title": "Router Decisions",
+      "targets": [{ "expr": "aether_router_decisions" }],
+      "gridPos": { "x": 0, "y": 6, "w": 8, "h": 6 }
+    },
+    {
+      "title": "Order Latency (ms)",
+      "targets": [{ "expr": "aether_order_latency_ms" }],
+      "gridPos": { "x": 8, "y": 6, "w": 8, "h": 6 }
+    },
+    {
+      "title": "Open Lifecycles",
+      "targets": [{ "expr": "aether_lifecycle_open" }],
+      "gridPos": { "x": 16, "y": 6, "w": 8, "h": 6 }
+    },
+    {
+      "title": "Guardian Proposals",
+      "targets": [{ "expr": "aether_guardian_proposals" }],
+      "gridPos": { "x": 0, "y": 12, "w": 8, "h": 6 }
+    },
+    {
+      "title": "Audit Chain Verified",
+      "targets": [{ "expr": "aether_audit_chain_verified" }],
+      "gridPos": { "x": 8, "y": 12, "w": 8, "h": 6 }
+    }
+  ]
+}

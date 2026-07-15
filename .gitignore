@@ -15,6 +15,9 @@ data/
 *.log
 .DS_Store
 
+# Backups (EP-408: database backup artifacts)
+data/backups/
+
 # Obsidian dynamic workspace state
 .obsidian/workspace.json
 

@@ -139,7 +139,22 @@ Down-migrations: `cargo sqlx migrate revert --source infra/migrations` (one step
 ```
 scripts/production-readiness-check.sh
 ```
-Runs verify + integration + e2e + security-check + dependency-audit + smoke, then asserts PRODUCTION_READINESS.md checklist file parses with zero unchecked required items. Prints `production readiness: ok`.
+Runs verify.sh -> integration tests -> e2e tests -> security-check.sh -> dependency-audit.sh -> smoke-test.sh -> health-check.sh, then asserts PRODUCTION_READINESS.md checklist file parses with zero unchecked REQUIRED items. Prints `production readiness: ok`.
+
+## Health check (EP-408)
+```
+scripts/health-check.sh
+```
+Curls /healthz and /readyz on every service defined in ENVIRONMENT.md: infrastructure (Postgres pg_isready, ClickHouse ping, Redis PING, Qdrant readyz, MinIO health, Redpanda admin), app services (Gateway :8080, Brain :8000, LLM Router :8001, Alerts :8002, Inbox :8003), gRPC services via grpc-health-probe (Order Router :50051, Risk Engine :50052, Wallet Guardian :50053), and venue adapters (Kalshi :8084, Polymarket :8085, Hyperliquid :8086, Alpaca :8087, OpenBB :8088). Prints `health: ok`. Services not running are `SKIP` (non-fatal unless `FORCE_FAIL=1`).
+
+## Database backup / restore (EP-408, HUMAN supervised)
+```
+scripts/backup.sh                          # nightly backup (Postgres, ClickHouse, Kuzu, Qdrant)
+scripts/restore.sh                         # dry-run list
+scripts/restore.sh --confirm pg <file>     # HUMAN: restore Postgres
+scripts/restore.sh --confirm ch <file>     # HUMAN: restore ClickHouse
+```
+`backup.sh` stores to `BACKUP_DIR` (default `data/backups/`) with per-service retention: Postgres 30d, ClickHouse 14d, Kuzu 14d, Qdrant 7d. `restore.sh` requires `--confirm` (S6 guard) and never runs unattended.
 
 ## Placeholders requiring replacement before lower-tier execution
 - `DATABASE_URL` and all endpoints in ENVIRONMENT.md are dev defaults; production values are operator-provided (STOP S1 if needed and absent).

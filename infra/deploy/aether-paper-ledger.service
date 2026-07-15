@@ -1,0 +1,46 @@
+# ================================================================
+# AETHER Paper Ledger
+# Plane 3 — paper-trading position and P&L tracker.  Maintains
+# a separate Postgres schema from live positions.  Activated
+# only when AETHER_EXECUTION__PAPER=true.
+# ================================================================
+[Unit]
+Description=AETHER Paper Ledger
+Documentation=https://github.com/AetherDash/aether
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether
+ExecStart=/usr/local/bin/aether-paper-ledger
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Resource limits
+MemoryMax=256M
+MemoryHigh=192M
+CPUQuota=30%
+TasksMax=64
+LimitNOFILE=16384
+LimitNPROC=64
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target

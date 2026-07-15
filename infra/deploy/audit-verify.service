@@ -1,0 +1,16 @@
+[Unit]
+Description=AETHER Audit Chain Hourly Verification
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/aether-audit verify --incremental
+User=aether
+Group=aether
+StandardOutput=journal
+StandardError=journal
+Environment=AETHER_ENV=prod
+
+# Restart on failure
+Restart=on-failure
+RestartSec=60

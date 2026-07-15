@@ -1,0 +1,48 @@
+# ================================================================
+# AETHER Gateway (WS+HTTP)
+# Plane 1 entry point — single public face for all WebSocket and
+# HTTP API traffic.  Routes client intents -> order-router gRPC,
+# streams market data back via WS.
+# ================================================================
+[Unit]
+Description=AETHER Gateway (WS+HTTP)
+Documentation=https://github.com/AetherDash/aether
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+Requires=aether-order-router.service
+After=aether-order-router.service
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether
+ExecStart=/usr/local/bin/aether-gateway
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# Resource limits
+MemoryMax=512M
+MemoryHigh=384M
+CPUQuota=100%
+TasksMax=256
+LimitNOFILE=65536
+LimitNPROC=256
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target

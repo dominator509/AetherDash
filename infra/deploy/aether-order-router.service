@@ -1,0 +1,47 @@
+# ================================================================
+# AETHER Order Router
+# Plane 3 — deterministic Rust (Axum/tonic) service that validates
+# and routes orders.  Calls risk-engine for pre-flight checks,
+# dispatches to venue adapters.  Central node on the hot path.
+# ================================================================
+[Unit]
+Description=AETHER Order Router (gRPC)
+Documentation=https://github.com/AetherDash/aether
+After=network.target aether-risk-engine.service redis.service redpanda.service
+Wants=redis.service redpanda.service
+Requires=aether-risk-engine.service
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether
+ExecStart=/usr/local/bin/aether-order-router
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Resource limits — hot-path service, needs headroom
+MemoryMax=1G
+MemoryHigh=768M
+CPUQuota=80%
+TasksMax=256
+LimitNOFILE=65536
+LimitNPROC=256
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target

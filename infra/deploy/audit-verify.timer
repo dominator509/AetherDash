@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly AETHER audit chain verification
+After=network.target
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

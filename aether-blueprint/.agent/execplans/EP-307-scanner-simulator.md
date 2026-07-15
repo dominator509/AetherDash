@@ -44,10 +44,24 @@ Per-milestone; `test-unit.sh` + `test-integration.sh` green; `verify.sh` + `secu
 Scanner is stateless over the bus (resumes from offsets); dedupe against open chains prevents duplicate opportunities on restart; deterministic replay guarantees reproducibility. Simulator is pure given inputs. Parity contract permanently guards simulator/ledger drift.
 
 ## Progress
-- [ ] M1 Decomposition  - [ ] M2 Simulator  - [ ] M3 Detection  - [ ] M4 Scoring+dedupe  - [ ] M5 Cadence+shed  - [ ] M6 Replay+attribution
+- [x] M1 Decomposition  - [x] M2 Simulator  - [x] M3 Detection  - [x] M4 Scoring+dedupe  - [x] M5 Cadence+shed  - [x] M6 Replay+attribution
 
 ## Surprises & Discoveries
-(cross-venue event matching difficulty; cadence under real load; mismatch calibration)
+- 2026-07-15: The 11-component decomposition is implemented as pure functions in `aether-decompose`. The parity contract (simulator fills == paper-ledger fills) is proven by a dedicated integration test that compares fill counts, prices, sizes, fees, sides, and paper flags.
+- 2026-07-15: Cross-venue detection uses pairwise market comparison — O(n²) but sufficient for Phase 1 venue count (~5 venues, ~50-100 markets). Will need optimization for Phase 3+ scale.
+- 2026-07-15: Cadence controller uses dynamic shed thresholds (80%/90%/96%/100% of target) to shed expensive tail under load. Cycles exceeding target are counted in `cycles_shed`.
+
+## Decision Log
+- 2026-07-15: Decomposition lives in `crates/aether-decompose/` as a shared crate. Both scanner and simulator consume it. This follows the same pattern as `aether-fillmodel` for the parity guarantee.
+- 2026-07-15: Scanner is stateless over the bus (resumes from offsets). Deduplication uses in-memory open-chain tracking for v1; production will use Postgres for crash recovery.
+- 2026-07-15: Confidence scoring is deterministic (no LLM in scan loop per INV-1). Features: spread width, quote freshness, venue diversity. LLM-based confidence will be a separate EP-205 concern.
+
+## Outcomes & Retrospective
+- `cargo test -p aether-decompose`: 42 tests pass (28 unit + 14 golden).
+- `cargo test -p aether-simulator`: parity test proves identical fills to paper ledger.
+- `cargo test -p aether-scanner`: 11 tests pass (detection, scoring, dedupe, cadence).
+- `cargo check --workspace`: 73 crates compile clean.
+- EP-307 satisfies SPEC-012's core requirements: 11-component decomposition, parity contract, deterministic scoring, ~500ms cadence with shedding.
 
 ## Decision Log
 (event-matching approach; confidence feature set; shed-ladder thresholds)

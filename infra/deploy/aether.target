@@ -1,0 +1,42 @@
+# ================================================================
+# AETHER Umbrella Target
+#
+# Groups all AETHER services into a single systemd target so
+# the operator can manage the entire stack with:
+#   systemctl start aether.target
+#   systemctl stop aether.target
+#   systemctl status aether.target
+#
+# Dependencies are ordered per ARCHITECTURE.md three-plane model:
+#   1. Data layer (docker-compose.prod.yml — Postgres, Redis, etc.)
+#   2. Connector plane services (risk, router, guardian)
+#   3. Server/brain plane services (brain, llm-router, scanner...)
+#   4. Gateway exposes the aggregated result to clients.
+#
+# The Wants= relationship means the target will start all listed
+# services, but failure of one does not prevent the rest from
+# starting.  Intra-service ordering is defined by each .service
+# unit's After=/Requires= directives.
+# ================================================================
+[Unit]
+Description=AETHER Terminal — All Services
+Documentation=https://github.com/AetherDash/aether
+Requires=network.target
+After=network.target
+
+# Wants links every AETHER service.  Individual ordering and
+# hard dependencies live in the .service units themselves.
+Wants=aether-gateway.service
+Wants=aether-brain.service
+Wants=aether-llm-router.service
+Wants=aether-risk-engine.service
+Wants=aether-order-router.service
+Wants=aether-wallet-guardian.service
+Wants=aether-scanner.service
+Wants=aether-simulator.service
+Wants=aether-paper-ledger.service
+Wants=aether-alerts.service
+Wants=aether-inbox.service
+
+[Install]
+WantedBy=multi-user.target

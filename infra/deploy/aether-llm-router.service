@@ -1,0 +1,45 @@
+# ================================================================
+# AETHER LLM Router
+# Plane 2 — LiteLLM config + cache-first prompt builder + local
+# fallback.  Internal-facing HTTP service, never exposed publicly.
+# ================================================================
+[Unit]
+Description=AETHER LLM Router
+Documentation=https://github.com/AetherDash/aether
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether/server
+ExecStart=/opt/aether/.venv/bin/uv run uvicorn server.llm_router.app:app --host 127.0.0.1 --port 8001 --workers 1 --log-level warning --no-access-log
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Resource limits — LLM serving needs headroom for concurrent requests
+MemoryMax=2G
+MemoryHigh=1.5G
+CPUQuota=80%
+TasksMax=256
+LimitNOFILE=16384
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target

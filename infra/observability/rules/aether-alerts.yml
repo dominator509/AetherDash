@@ -1,0 +1,43 @@
+groups:
+  - name: aether_critical
+    rules:
+      - alert: AetherAuditVerifyFailed
+        expr: aether_audit_chain_verified == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Audit chain verification failed"
+          description: "The audit chain has been tampered with or verification has not run. SEV1."
+
+      - alert: AetherFeedLagHigh
+        expr: aether_feed_lag_ms > 10000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Feed lag exceeds 10 seconds"
+
+      - alert: AetherRouterRejectAll
+        expr: rate(aether_router_decisions{reason="total"}[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Router is rejecting all orders"
+
+      - alert: AetherJobMissed
+        expr: (time() - aether_job_last_success_ts) > 7200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scheduled job has not succeeded in 2 hours"
+
+      - alert: AetherGuardianNoProposals
+        expr: aether_guardian_proposals == 0
+        for: 24h
+        labels:
+          severity: info
+        annotations:
+          summary: "No guardian proposals in 24 hours"

@@ -1,0 +1,47 @@
+# ================================================================
+# AETHER Scanner
+# Plane 2 — bus consumer that subscribes to md.* topics,
+# detects opportunities, scores them, and publishes to
+# opps.detected.  Stateless; restarts cleanly with consumer
+# group rebalance.
+# ================================================================
+[Unit]
+Description=AETHER Opportunity Scanner
+Documentation=https://github.com/AetherDash/aether
+After=network.target redpanda.service clickhouse.service
+Wants=redpanda.service clickhouse.service
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether
+ExecStart=/usr/local/bin/aether-scanner
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Resource limits — compute-light, throughput-bound
+MemoryMax=512M
+MemoryHigh=384M
+CPUQuota=60%
+TasksMax=128
+LimitNOFILE=32768
+LimitNPROC=128
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target

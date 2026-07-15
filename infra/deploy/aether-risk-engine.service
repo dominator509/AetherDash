@@ -1,0 +1,46 @@
+# ================================================================
+# AETHER Risk Engine
+# Plane 3 — deterministic Rust gRPC service that enforces caps,
+# liveness, liquidity, jurisdiction, and price-sanity checks.
+# Called by order-router before every submission.
+# ================================================================
+[Unit]
+Description=AETHER Risk Engine (gRPC)
+Documentation=https://github.com/AetherDash/aether
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether
+ExecStart=/usr/local/bin/aether-risk-engine
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Resource limits — lightweight gRPC, burst-friendly
+MemoryMax=512M
+MemoryHigh=384M
+CPUQuota=50%
+TasksMax=128
+LimitNOFILE=32768
+LimitNPROC=128
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target
