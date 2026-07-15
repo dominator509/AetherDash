@@ -16,6 +16,7 @@ from auth import (
     close_pool,
     init_pool,
 )
+from authz import Verdict, emit_decision, evaluate_tool
 from error_envelope import ErrorCode, new_error_envelope
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -92,22 +93,23 @@ def load_manifest() -> list[dict[str, Any]]:
     return data.get("tools", [])  # type: ignore[no-any-return]
 
 
-def filter_by_tier(
-    tier: int,
-    scopes: dict[str, Any] | None = None,
-) -> list[ToolInfo]:
-    tools = load_manifest()
-    filtered = []
-    for t in tools:
-        if t["tier"] <= tier:
-            # Apply scope filtering if present
-            if scopes:
-                allowed = scopes.get("allowed")
-                if allowed is not None and t["name"] not in allowed:
-                    continue
-            filtered.append(
-                ToolInfo(name=t["name"], tier=t["tier"], description=t["description"])
+def filter_for_session(session: Any) -> list[ToolInfo]:
+    """Filter inventory through the same decision surface used for calls."""
+    filtered: list[ToolInfo] = []
+    for tool in load_manifest():
+        decision = evaluate_tool(session, tool)
+        emit_decision(session, str(tool["name"]), decision)
+        # Confirmation and step-up tools remain visible; the model needs their
+        # schemas to initiate the human-gated flow. Only hard denials disappear.
+        if decision.verdict is Verdict.deny:
+            continue
+        filtered.append(
+            ToolInfo(
+                name=tool["name"],
+                tier=tool["tier"],
+                description=tool["description"],
             )
+        )
     return filtered
 
 
@@ -134,7 +136,7 @@ async def list_tools(authorization: str | None = Header(None)) -> Any:
     except AuthError as e:
         _abort(401, ErrorCode.unauthenticated, str(e))
 
-    tools = filter_by_tier(session.tier, session.scopes)
+    tools = filter_for_session(session)
     return {
         "tier": session.tier,
         "tools": tools,
@@ -158,21 +160,19 @@ async def call_tool(tool_name: str, authorization: str | None = Header(None)) ->
         _abort(404, ErrorCode.not_found, f"Unknown tool: {tool_name}")
     assert tool is not None  # type narrowing after _abort
 
-    if session.tier < tool["tier"]:
+    decision = evaluate_tool(session, tool)
+    emit_decision(session, tool_name, decision)
+    if decision.verdict is Verdict.deny:
         _abort(
             403,
             ErrorCode.permission_denied,
-            f"Tool '{tool_name}' requires tier {tool['tier']}; caller has tier {session.tier}",
+            "Tool is not permitted by the current grant",
         )
-
-    # Check grant scopes
-    scopes = session.scopes or {}
-    allowed = scopes.get("allowed")
-    if allowed is not None and tool_name not in allowed:
+    if decision.verdict in {Verdict.confirm_required, Verdict.step_up_required}:
         _abort(
-            403,
-            ErrorCode.permission_denied,
-            f"Tool '{tool_name}' not in grant scopes",
+            412,
+            ErrorCode.failed_precondition,
+            "Human confirmation or fresh step-up authentication is required",
         )
 
     return {

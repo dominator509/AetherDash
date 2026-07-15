@@ -17,5 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Deserialize-guarded constructors on all invariant-bearing types
 - EP-301: Kalshi reference venue pack with current RSA-PSS authentication and fixed-point REST/WebSocket normalization, deterministic scrubbed replay fixtures, raw-payload quarantine, demo-only V2 order contract tests, rate-limit/backoff enforcement, health/feed-lag reporting, registry migration, and the reusable venue template
 - EP-302: Read-only Polymarket venue pack with Gamma discovery, current CLOB REST/WebSocket schemas, fixed-point probability normalization, Polygon CTF resolution reads, deterministic scrubbed replay, quarantine, health reporting, and registry migration
+- EP-304: Shared deterministic fixed-point fill model and bus-driven paper ledger with pessimistic two-sided depth exhaustion, correct long/short/partial/flip P&L, transactional paper-segregated Postgres writes, lifecycle attribution, quote-driven unrealized P&L, restart idempotency, and a durable `orders.fills` outbox
+- EP-401: Shared five-tier authorization with fail-closed hard-denies, Argon2id local-password primitives, RFC 6238 TOTP and single-use step-up challenges, opaque hashed sessions, immediate grant revocation/scopes, append-only caps activation and lower-of-two enforcement, connection-bound gateway confirmations, and MCP tool enforcement
 
 [Unreleased]: https://github.com/operator/aetherdash/compare/v0.1.0...HEAD

@@ -8,7 +8,7 @@ This file is the single authority on which plans exist, their status, and which 
 `pending` (contents not yet generated) -> `draft` (contents exist, not started) -> `active` (being implemented; max one) -> `done` (Definition of done met, AGENTS.md section 14) -> or `revise` (reopened with a Decision Log reason). Status changes are edits to this table plus the plan's own Progress section.
 
 ## Active plan
-**EP-304** — Paper trading ledger & fill recording
+**EP-305** — Order router & risk engine (paper-first, then small live)
 
 ## Ledger
 | ID | Title | Band | Phase | Status | Blocked by |
@@ -32,12 +32,12 @@ This file is the single authority on which plans exist, their status, and which 
 | EP-301 | Venue pack: Kalshi (reference implementation + replay fixtures) | 3xx Connectors | 1 | done | EP-004 |
 | EP-302 | Venue pack: Polymarket read-only (CLOB, Gamma, Polygon RPC) | 3xx Connectors | 1 | done | EP-301 |
 | EP-303 | Venue packs: Hyperliquid read, OpenBB foundation, Alpaca paper | 3xx Connectors | 1 | done | EP-301 |
-| EP-304 | Paper trading ledger & fill recording | 3xx Connectors | 1 | draft | EP-301 |
-| EP-305 | Order router & risk engine (paper-first, then small live) | 3xx Connectors | 2 | draft | EP-304, EP-401 |
+| EP-304 | Paper trading ledger & fill recording | 3xx Connectors | 1 | done | EP-301 |
+| EP-305 | Order router & risk engine (paper-first, then small live) | 3xx Connectors | 2 | active | EP-304, EP-401 |
 | EP-306 | Wallet Guardian & WalletConnect v2 | 3xx Connectors | 2 | draft | EP-401 |
 | EP-307 | Arbitrage scanner & trade simulator (net-edge math) | 3xx Connectors | 2 | draft | EP-302, EP-303, EP-304 |
 | EP-308 | Comms expansion: Twilio SMS, email, approval flows | 3xx Connectors | 2 | draft | EP-203 |
-| EP-401 | Five-tier permissions, step-up 2FA, hard-deny hooks | 4xx Cross-cutting | 2 | draft | EP-004 |
+| EP-401 | Five-tier permissions, step-up 2FA, hard-deny hooks | 4xx Cross-cutting | 2 | done | EP-004 |
 | EP-402 | Audit chain end-to-end & P&L attribution | 4xx Cross-cutting | 2 | draft | EP-305 |
 | EP-403 | Plugin runtime: signed manifests, sandbox, capability host | 4xx Cross-cutting | 4 | draft | EP-401 |
 | EP-404 | Observability: redaction, Prometheus, health, self-improvement metrics | 4xx Cross-cutting | 2 | draft | EP-004 |

@@ -41,6 +41,7 @@ class Session:
     device_label: str | None = None
     scopes: dict[str, Any] | None = None
     grant_tier: int | None = None
+    grant_id: str | None = None
 
 
 class AuthError(Exception):
@@ -116,10 +117,12 @@ async def authenticate(authorization: str | None) -> Session:
                 origin_kind="human",
                 scopes={},  # empty dict = no scope restriction
                 grant_tier=tier,
+                grant_id=f"dev-{token}",
             )
 
-    # 2. Database lookup — hash token, query by token_hash
-    # TODO(EP-401): upgrade to argon2id
+    # 2. Database lookup — random bearer tokens use a fast SHA-256 lookup hash.
+    # Human passwords use Argon2id; conflating those two credential types would
+    # make bearer-token lookup impractical without improving token entropy.
     token_hash = hashlib.sha256(token.encode()).hexdigest()
 
     pool = _pool
@@ -129,9 +132,15 @@ async def authenticate(authorization: str | None) -> Session:
     try:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT s.id, s.user_id, s.tier, s.origin_kind, s.device_label "
-                "FROM sessions s "
-                "WHERE s.token_hash = $1 AND s.expires_ts > now()",
+                "UPDATE sessions "
+                "SET last_seen_ts = now(), "
+                "    idle_expires_ts = LEAST(expires_ts, now() + INTERVAL '30 days'), "
+                "    updated_ts = now() "
+                "WHERE token_hash = $1 "
+                "  AND expires_ts > now() "
+                "  AND idle_expires_ts > now() "
+                "  AND revoked_ts IS NULL "
+                "RETURNING id, user_id, tier, origin_kind, device_label",
                 token_hash,
             )
             if row is None:
@@ -143,9 +152,10 @@ async def authenticate(authorization: str | None) -> Session:
             # later-expiring grant wins. Expired grants are filtered in SQL so
             # fetchrow() returns the single best grant deterministically.
             grant_row = await conn.fetchrow(
-                "SELECT tier, scopes, expires_ts "
+                "SELECT id, tier, scopes, expires_ts "
                 "FROM permission_grants "
                 "WHERE actor_id = $1 AND actor_kind = $2 "
+                "  AND revoked_ts IS NULL "
                 "  AND (expires_ts IS NULL OR expires_ts > now()) "
                 "ORDER BY tier DESC, expires_ts DESC NULLS FIRST, id ASC",
                 row["user_id"],
@@ -177,6 +187,7 @@ async def authenticate(authorization: str | None) -> Session:
                 device_label=row.get("device_label"),
                 scopes=grant_scopes,
                 grant_tier=grant_tier,
+                grant_id=grant_row["id"],
             )
     except Exception as exc:
         if isinstance(exc, AuthError):

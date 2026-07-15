@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-304: Paper Trading Ledger & Fill Recording
 
-**Band:** 3xx Connectors | **Phase:** 1 | **Status:** draft | **Blocked by:** EP-301
+**Band:** 3xx Connectors | **Phase:** 1 | **Status:** done | **Blocked by:** EP-301
 
 ## Purpose / Big Picture
 Give the whole system a safe place to "trade": a paper ledger that fills intents against live books using the SAME fill model the simulator will use (SPEC-012), recording orders/fills/positions/P&L exactly as live would. This unblocks EP-102 (feed Act), EP-203 (alert Execute), and every Phase-1 end-to-end test - with zero capital risk.
@@ -43,13 +43,25 @@ Per-milestone; `test-unit.sh` + `test-integration.sh` green; `verify.sh` -> `ver
 Intent id idempotency (a re-submitted paper intent fills once); ledger state is in Postgres (crash-safe, reconcilable from `orders.fills`). Fill model is pure. Parity contract guards against future simulator drift.
 
 ## Progress
-- [ ] M1 Fill model  - [ ] M2 Ledger service  - [ ] M3 Positions+P&L  - [ ] M4 Lifecycle+attribution  - [ ] M5 Parity contract
+- [x] M1 Fill model  - [x] M2 Ledger service  - [x] M3 Positions+P&L  - [x] M4 Lifecycle+attribution  - [x] M5 Parity contract
 
 ## Surprises & Discoveries
-(book-walk edge cases; unrealized P&L update cadence)
+- 2026-07-14: The first implementation claimed purity while generating fill IDs and wall-clock timestamps. The corrected model returns the canonical SPEC-001 `Fill`, timestamps it from the input book, and is byte-for-byte deterministic under generated property cases.
+- 2026-07-14: `PassiveAtTouch` mode returns partial fills without error — the caller decides whether partial fill is acceptable. `CrossToDepth` is the default and applies depth-exhaustion extrapolation.
+- 2026-07-14: Audit found sell exhaustion moving prices in the profitable direction, partial closes corrupting average cost, short accumulation using signed-cost math, failed fills leaving ghost orders, and in-memory publication losing durable fills after a crash. Regression coverage now fixes each failure.
+- 2026-07-14: Live Postgres/Redpanda execution was not rerun because the operator explicitly excluded restart-based live testing. The ignored integration test compiles and remains available through `scripts/test-integration.sh`.
 
 ## Decision Log
-(aggressiveness defaults; depth-exhaustion multiplier; risk-in-paper seam)
+- 2026-07-14: Fill model placed in `crates/aether-fillmodel/` as a shared crate. Both paper-ledger (EP-304) and simulator (EP-307) depend on it. Separation guarantees the same fill math everywhere.
+- 2026-07-14: Default fill config: CrossToDepth with a 1.05× pessimism factor (multiply buys, divide sells) and a configurable 10bps fee rate/currency.
+- 2026-07-14: Postgres is the paper ledger source of truth. Intent/order/fill/position writes and a fill outbox commit transactionally; durable fill IDs become stable envelope trace IDs for at-least-once deduplication.
+- 2026-07-14: Positions are tracked in the paper ledger, not a separate service. This keeps the paper trading loop self-contained until the live router (EP-305) integrates position management.
+- 2026-07-14: Opportunity linkage is an explicit service parameter because SPEC-001 `OrderIntent` has no opportunity field. EP-305/307 callers supply it when execution belongs to a lifecycle chain.
 
 ## Outcomes & Retrospective
-(fill-model goldens; parity contract handed to EP-307; attribution evidence)
+- `cargo test -p aether-fillmodel -p aether-paper-ledger`: 34 pass, 1 live Postgres integration test ignored by default.
+- `cargo clippy -p aether-fillmodel -p aether-paper-ledger --all-targets -- -D warnings`: clean.
+- `scripts/verify.sh`: `verify: ok` across Rust, TypeScript, Python, and the desktop release build; optional local tools (`cargo-nextest`, `cargo-audit`, `buf`, `gitleaks`) were absent and reported as optional by preflight.
+- Fill parity is published at `testdata/golden/fillmodel/parity-basic.json`; the ledger-side contract consumes the public `aether_fillmodel::walk` entry point, and EP-307 must consume the same fixture/function.
+- M4 persists accepted -> executed -> closed events and unique attribution rows with component divergence detail. M5 has deterministic property coverage and a reusable parity fixture.
+- Persistence migrations 0030/0031 add unique attribution detail and a transactional paper-fill outbox with paired down migrations.

@@ -91,6 +91,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: auth::Se
     // Receiver from the shared broadcast channel. Cloned on subscribe.
     let mut broadcast_rx = state.broadcast_tx.subscribe();
     let mut subscribed = false;
+    let mut connection_auth = frames::ConnectionAuthState::default();
 
     loop {
         tokio::select! {
@@ -114,7 +115,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: auth::Se
                                     _ => {}
                                 }
 
-                                let response = frames::dispatch(frame, &session);
+                                let response = frames::dispatch_with_state(
+                                    frame,
+                                    &session,
+                                    &mut connection_auth,
+                                );
                                 let json = match serde_json::to_string(&response) {
                                     Ok(j) => j,
                                     Err(e) => {

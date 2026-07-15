@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,9 @@ pub struct SessionInfo {
     pub tier: u8,
     pub origin: OriginInfo,
     pub device_label: Option<String>,
+    pub grant_id: String,
+    pub scopes: HashSet<String>,
+    pub scope_restricted: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -57,38 +60,83 @@ pub async fn validate_token(
             tier: 3, // Stub: tier 3 for test tokens (can access paper)
             origin: OriginInfo { kind: "human".into(), actor_id },
             device_label: None,
+            grant_id: "debug-test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         });
     }
 
     // DB lookup if a pool was provided
     if let Some(pool) = pool {
-        // TODO(EP-401): upgrade to argon2id. SHA-256 is a temporary stand-in
-        // for the EP-004 migration to ensure hashed-token authentication works.
+        // Session tokens are random 256-bit bearer credentials, not human
+        // passwords. SPEC-005 intentionally uses fast SHA-256 lookup hashes at
+        // rest; local account passwords use Argon2id in aether-authz.
         let hash = Sha256::digest(token.as_bytes());
         let token_hash: String = hash.iter().map(|b| format!("{:02x}", b)).collect();
 
-        let row = sqlx::query_as::<_, (String, String, i32, String, Option<String>)>(
-            "SELECT s.id, s.user_id, s.tier, s.origin_kind, s.device_label \
-             FROM sessions s \
-             WHERE s.token_hash = $1 AND s.expires_ts > now()",
+        // The write-through touch enforces 30-day idle expiry and makes session
+        // revocation visible on the next request. The lateral grant lookup has
+        // no cache, so revocation is also immediate (SPEC-005 allows <=5 s).
+        let row = sqlx::query_as::<
+            _,
+            (String, String, i32, String, Option<String>, String, serde_json::Value),
+        >(
+            "WITH valid_session AS ( \
+                 UPDATE sessions \
+                 SET last_seen_ts = now(), \
+                     idle_expires_ts = LEAST(expires_ts, now() + INTERVAL '30 days'), \
+                     updated_ts = now() \
+                 WHERE token_hash = $1 \
+                   AND expires_ts > now() \
+                   AND idle_expires_ts > now() \
+                   AND revoked_ts IS NULL \
+                 RETURNING * \
+             ) \
+             SELECT s.id, s.user_id, LEAST(s.tier, g.tier), s.origin_kind, s.device_label, \
+                    g.id, g.scopes \
+             FROM valid_session s \
+             JOIN LATERAL ( \
+                 SELECT id, tier, scopes \
+                 FROM permission_grants \
+                 WHERE actor_id = s.user_id \
+                   AND actor_kind = s.origin_kind \
+                   AND revoked_ts IS NULL \
+                   AND (expires_ts IS NULL OR expires_ts > now()) \
+                 ORDER BY tier DESC, expires_ts DESC NULLS FIRST, id ASC \
+                 LIMIT 1 \
+             ) g ON true",
         )
         .bind(&token_hash)
         .fetch_optional(pool)
         .await
         .map_err(|e| AuthError::DbError(e.to_string()))?;
 
-        if let Some((session_id, user_id, tier, origin_kind, device_label)) = row {
+        if let Some((session_id, user_id, tier, origin_kind, device_label, grant_id, raw_scopes)) =
+            row
+        {
+            let scope_restricted = raw_scopes.get("allowed").is_some();
+            let scopes = raw_scopes
+                .get("allowed")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect();
             return Ok(SessionInfo {
                 session_id,
                 actor_id: user_id.clone(),
                 tier: tier as u8,
                 origin: OriginInfo { kind: origin_kind, actor_id: user_id },
                 device_label,
+                grant_id,
+                scopes,
+                scope_restricted,
             });
         }
     }
 
-    Err(AuthError::InvalidToken(token.into()))
+    Err(AuthError::InvalidToken)
 }
 
 /// Request body for `POST /auth/validate`.
@@ -133,7 +181,7 @@ pub async fn validate_handler(
 #[derive(Debug)]
 pub enum AuthError {
     MissingToken,
-    InvalidToken(String),
+    InvalidToken,
     SessionNotFound(String),
     DbError(String),
 }
@@ -142,12 +190,7 @@ impl fmt::Display for AuthError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AuthError::MissingToken => write!(f, "missing token"),
-            AuthError::InvalidToken(_token) => {
-                // _token intentionally not disclosed per SPEC-006.
-                // Field is stored for EP-401 logging/debugging.
-                let _ = _token;
-                write!(f, "invalid token")
-            }
+            AuthError::InvalidToken => write!(f, "invalid token"),
             AuthError::SessionNotFound(id) => write!(f, "session not found: {id}"),
             AuthError::DbError(_) => write!(f, "database error"),
         }
@@ -174,6 +217,9 @@ mod tests {
             tier,
             origin: OriginInfo { kind: kind.into(), actor_id: actor_id.into() },
             device_label: None,
+            grant_id: "test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         }
     }
 
@@ -214,7 +260,7 @@ mod tests {
 
     #[tokio::test]
     async fn error_display_does_not_leak_token() {
-        let err = AuthError::InvalidToken("super-secret-token".into());
+        let err = AuthError::InvalidToken;
         let msg = err.to_string();
         assert_eq!(msg, "invalid token");
         assert!(!msg.contains("super-secret"));

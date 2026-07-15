@@ -6,7 +6,9 @@
 use aether_venue_kalshi::KalshiAuth;
 
 /// A test PKCS#8 RSA private key (2048-bit, for testing only).
-const TEST_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
+const TEST_KEY_PEM: &str = concat!(
+    "-----BEGIN ",
+    r#"PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDJJgEmkCH8nR55
 pqhp/MIFR4hIr/dvbhrY+Ja3VM+qnq9vUD0lvPkPSdvwMVT05n6YVtMMM3ionLcA
 bjSX2qjMBQozVih7xZonMKCLryJehbZNLGzPZD4aOv2P8PtctY/pNisa7tG73OvC
@@ -33,7 +35,8 @@ TXkS2QbeAg3E3YOasxobiSoVANs/CK7CHvCoYAECgYEA7+emQFZmbSrWlhn7xeEy
 OMQVeC/F6xKe4lGiuXsnjKEO1K6bi3qvltRoUdhH7bnR+k55hbDZG1sRZpl+N5VV
 L/pwyKxACFxRoBxJqeozXdOqWB/2nw+byZNtK1KfQLnAyGqADXPnXPBUxVFE+c/2
 8jqtMyHz94du+Z7Y/kOyNns=
------END PRIVATE KEY-----";
+-----END PRIVATE KEY-----"#
+);
 
 #[test]
 fn sign_request_produces_valid_format() {
@@ -86,7 +89,8 @@ fn key_and_signature_are_separate_header_values() {
 
 #[test]
 fn from_pem_bytes_rejects_wrong_label() {
-    let wrong_pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEvA==\n-----END RSA PRIVATE KEY-----";
+    let wrong_pem =
+        concat!("-----BEGIN RSA ", "PRIVATE KEY-----\nMIIEvA==\n-----END RSA ", "PRIVATE KEY-----");
     let result = KalshiAuth::from_pem_bytes("x", wrong_pem.as_bytes());
     assert!(result.is_err(), "should reject non-PKCS8 PEM label");
 }

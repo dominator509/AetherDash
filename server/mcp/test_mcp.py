@@ -66,10 +66,22 @@ def test_viewer_cannot_call_tier_2_tool() -> None:
     assert resp.status_code == 403
 
 
-def test_trader_can_call_paper_tool() -> None:
+def test_trader_paper_tool_requires_confirmation() -> None:
     resp = client.post("/tools/orders.submit_paper", headers=_auth("test-trader"))
+    assert resp.status_code == 412
+    assert resp.json()["code"] == "failed_precondition"
+
+
+def test_trader_can_call_read_tool() -> None:
+    resp = client.post("/tools/brain.search", headers=_auth("test-trader"))
     assert resp.status_code == 200
     assert "stub" in resp.json()["result"]
+
+
+def test_admin_live_tool_requires_step_up() -> None:
+    resp = client.post("/tools/orders.submit", headers=_auth("test-admin"))
+    assert resp.status_code == 412
+    assert resp.json()["code"] == "failed_precondition"
 
 
 def test_unknown_tool_404() -> None:

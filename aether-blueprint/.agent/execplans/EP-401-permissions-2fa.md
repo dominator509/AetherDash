@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-401: Five-Tier Permissions, Step-Up 2FA, Hard-Deny Hooks
 
-**Band:** 4xx Cross-cutting | **Phase:** 2 | **Status:** draft | **Blocked by:** EP-004
+**Band:** 4xx Cross-cutting | **Phase:** 2 | **Status:** done | **Blocked by:** EP-004
 
 ## Purpose / Big Picture
 Replace EP-004's gateway auth stub with real enforcement: the five permission tiers evaluated server-side at every enforcement point, step-up 2FA on the irreversible-action list, the caps versioning flow, and the hard-deny hooks that hold at every tier including YOLO. This is what makes SPEC-005 true and unblocks the execution/wallet plans that depend on real permissions.
@@ -44,13 +44,21 @@ Per-milestone; `test-unit.sh` + `test-integration.sh` green; `verify.sh` + `secu
 Enforcement is stateless per request (grants/sessions/caps in Postgres); no permission caching beyond the 5s revocation bound. Auth lockout state is recoverable. The defense-in-depth design means no single component's failure opens execution. S9 governs any change that touches enforcement, hooks, or audit.
 
 ## Progress
-- [ ] M1 authz+tiers  - [ ] M2 Auth+sessions  - [ ] M3 Grants  - [ ] M4 Step-up  - [ ] M5 Caps flow  - [ ] M6 Enforce+stub removal
+- [x] M1 authz+tiers  - [x] M2 Auth+sessions  - [x] M3 Grants  - [x] M4 Step-up  - [x] M5 Caps flow  - [x] M6 Enforce+stub removal
 
 ## Surprises & Discoveries
-(argon2 params on target hardware; TOTP clock-skew; grant-cache invalidation)
+- The EP-004 confirmation handler accepted any client reference and treated mere TOTP presence as success. EP-401 replaced it with connection-bound, expiring, single-use references; untracked/replayed references fail closed. Actual TOTP consumption remains in the verified `aether-authz` challenge flow.
+- Router and Guardian service crates do not exist until EP-305/306. EP-401 therefore supplies independent typed enforcement adapters and gateway-bypass/router-recheck tests without prematurely implementing either downstream service.
+- The sandbox initially blocked Cargo's Argon2 download and the default uv cache. The vetted dependency was fetched through the approved Cargo path; MCP validation uses a writable temporary uv cache. No live services were started or restarted.
 
 ## Decision Log
-(argon2id params; session token format; grant cache TTL)
+- Argon2id parameters are pinned to RFC 9106's second recommended profile: 64 MiB, 3 iterations, 4 lanes, version 1.3, 16-byte random salt, 32-byte output. This is intentionally stronger than OWASP's current minimum and is recorded in ADR-0011.
+- Session and step-up credentials are independent random 256-bit opaque tokens. Only SHA-256 lookup hashes are persisted; password hashing remains Argon2id. Debug formatting redacts plaintext session tokens.
+- Grant/session state is checked per request with no authorization cache. Revocation is visible on the next request, stricter than the SPEC-005 five-second upper bound.
+- TOTP secret bytes never enter Postgres. The migration adds only `totp_secret_ref`; the operator-controlled credential store supplies the secret to the verifier.
+- All step-up challenges are single-use, which is stricter than the minimum requirement that specifically calls this out for Guardian approvals.
 
 ## Outcomes & Retrospective
-(matrix evidence; hard-deny-at-tier-5 proofs; stub removed cleanly)
+- Tier matrix, agent-no-session-inheritance, scope/expiry/revocation, HARD-DENY 3-6 at tier 5, step-up expiry/replay, caps lower-of-two, automation activation denial, four-point independent enforcement, router recheck, and one-audit-record-per-decision are covered by deterministic tests.
+- Gateway authorization now loads the current grant tier/scopes, emits metadata-only audit decisions, and uses single-use connection state for confirmations. MCP inventory and calls use one policy adapter instead of separate listing/call checks.
+- Evidence (2026-07-14): `scripts/verify.sh` -> `verify: ok`; `scripts/security-check.sh` -> `security: ok`; targeted Rust authz/gateway -> 76 passing plus 2 ignored infrastructure tests; MCP -> 17 passing; Kalshi fixture scanner repair -> 164 passing; strict targeted Clippy -> no issues; `git diff --check` clean. Per operator direction, no restart-based/live-infrastructure test was run. `cargo-audit`, `gitleaks`, and `buf` were absent optional tools; the dependency-audit script therefore reported the missing tool rather than a vulnerability result.

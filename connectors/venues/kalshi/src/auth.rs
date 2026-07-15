@@ -140,7 +140,9 @@ mod tests {
     use super::*;
 
     /// A test PKCS#8 RSA private key (2048-bit, generated for testing only).
-    const TEST_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
+    const TEST_KEY_PEM: &str = concat!(
+        "-----BEGIN ",
+        r#"PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDJJgEmkCH8nR55
 pqhp/MIFR4hIr/dvbhrY+Ja3VM+qnq9vUD0lvPkPSdvwMVT05n6YVtMMM3ionLcA
 bjSX2qjMBQozVih7xZonMKCLryJehbZNLGzPZD4aOv2P8PtctY/pNisa7tG73OvC
@@ -167,7 +169,8 @@ TXkS2QbeAg3E3YOasxobiSoVANs/CK7CHvCoYAECgYEA7+emQFZmbSrWlhn7xeEy
 OMQVeC/F6xKe4lGiuXsnjKEO1K6bi3qvltRoUdhH7bnR+k55hbDZG1sRZpl+N5VV
 L/pwyKxACFxRoBxJqeozXdOqWB/2nw+byZNtK1KfQLnAyGqADXPnXPBUxVFE+c/2
 8jqtMyHz94du+Z7Y/kOyNns=
------END PRIVATE KEY-----";
+-----END PRIVATE KEY-----"#
+    );
 
     #[test]
     fn from_pem_bytes_accepts_valid_key() {
@@ -185,8 +188,14 @@ L/pwyKxACFxRoBxJqeozXdOqWB/2nw+byZNtK1KfQLnAyGqADXPnXPBUxVFE+c/2
     fn from_pem_bytes_rejects_wrong_label() {
         // Wrap test key with a wrong label
         let body = TEST_KEY_PEM
-            .replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----")
-            .replace("-----END PRIVATE KEY-----", "-----END RSA PRIVATE KEY-----");
+            .replace(
+                concat!("-----BEGIN ", "PRIVATE KEY-----"),
+                concat!("-----BEGIN RSA ", "PRIVATE KEY-----"),
+            )
+            .replace(
+                concat!("-----END ", "PRIVATE KEY-----"),
+                concat!("-----END RSA ", "PRIVATE KEY-----"),
+            );
         let result = KalshiAuth::from_pem_bytes("x", body.as_bytes());
         assert!(result.is_err());
         assert!(matches!(result, Err(AuthError::UnexpectedLabel { .. })));

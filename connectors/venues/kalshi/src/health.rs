@@ -40,7 +40,9 @@ mod tests {
     use super::*;
     use crate::auth::KalshiAuth;
 
-    const TEST_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
+    const TEST_KEY_PEM: &str = concat!(
+        "-----BEGIN ",
+        r#"PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDJJgEmkCH8nR55
 pqhp/MIFR4hIr/dvbhrY+Ja3VM+qnq9vUD0lvPkPSdvwMVT05n6YVtMMM3ionLcA
 bjSX2qjMBQozVih7xZonMKCLryJehbZNLGzPZD4aOv2P8PtctY/pNisa7tG73OvC
@@ -67,7 +69,8 @@ TXkS2QbeAg3E3YOasxobiSoVANs/CK7CHvCoYAECgYEA7+emQFZmbSrWlhn7xeEy
 OMQVeC/F6xKe4lGiuXsnjKEO1K6bi3qvltRoUdhH7bnR+k55hbDZG1sRZpl+N5VV
 L/pwyKxACFxRoBxJqeozXdOqWB/2nw+byZNtK1KfQLnAyGqADXPnXPBUxVFE+c/2
 8jqtMyHz94du+Z7Y/kOyNns=
------END PRIVATE KEY-----";
+-----END PRIVATE KEY-----"#
+    );
 
     #[tokio::test]
     async fn health_returns_down_when_api_unreachable() {

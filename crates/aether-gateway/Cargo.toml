@@ -10,6 +10,7 @@ license = "AGPL-3.0-or-later"
 workspace = true
 
 [dependencies]
+aether-authz = { path = "../aether-authz" }
 aether-core = { path = "../aether-core" }
 axum = { version = "0.7", features = ["ws"] }
 rust_decimal = { version = "1", features = ["serde"] }

@@ -1,10 +1,38 @@
 use crate::auth;
+use aether_authz::{
+    enforce_at, Action, Actor, ActorKind, AuditRecord, AuditSink, EnforcementPoint,
+    EvaluationContext, Grant, Tier, Verdict,
+};
 use aether_core::{
     MarketKey, OrderIntent, OrderType, Origin, OriginKind, Side, SizeUnit, TimeInForce, Ulid,
     UtcTime,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+#[cfg(test)]
+use std::collections::HashSet;
+
+const CONFIRMATION_VALIDITY_SECS: u64 = 5 * 60;
+
+#[derive(Debug, Clone)]
+struct PendingConfirmation {
+    actor_id: String,
+    action: Action,
+    expires_at: u64,
+}
+
+/// Connection-local confirmation state. References are never valid in a
+/// different authenticated connection and are consumed exactly once.
+#[derive(Debug, Default)]
+pub struct ConnectionAuthState {
+    pending: HashMap<String, PendingConfirmation>,
+}
 
 // ── Client-submitted order intent body (canonical shape, minus origin) ──
 
@@ -215,12 +243,122 @@ fn parse_session_actor(session: &auth::SessionInfo) -> Result<Ulid, String> {
         .map_err(|_| "authenticated session has no valid actor ULID".to_string())
 }
 
-/// Dispatch a client frame to its server-frame response.
-/// Stub: all channels accepted, commands echoed (real dispatch in EP-201/EP-305).
+struct GatewayAuditSink;
+
+impl AuditSink for GatewayAuditSink {
+    type Error = Infallible;
+
+    fn emit(&self, record: &AuditRecord) -> Result<(), Self::Error> {
+        tracing::info!(
+            target: "audit.events",
+            actor_id = %record.actor_id,
+            actor_kind = ?record.actor_kind,
+            action = %record.action.scope(),
+            grant_id = record.grant_id.as_deref().unwrap_or("none"),
+            verdict = ?record.verdict,
+            deciding_rule = record.deciding_rule,
+            enforcement_point = ?record.enforcement_point,
+            "authorization decision"
+        );
+        Ok(())
+    }
+}
+
+fn authorize(
+    session: &auth::SessionInfo,
+    action: Action,
+    confirmed: bool,
+    step_up: bool,
+) -> aether_authz::Decision {
+    let actor_kind = match session.origin.kind.as_str() {
+        "human" => ActorKind::Human,
+        "agent" => ActorKind::Agent,
+        "automation" => ActorKind::Automation,
+        _ => {
+            return aether_authz::Decision {
+                verdict: Verdict::Deny,
+                deciding_rule: "actor.unknown_kind",
+                effective_tier: None,
+                grant_id: None,
+            };
+        }
+    };
+    let tier = match Tier::try_from(session.tier) {
+        Ok(value) => value,
+        Err(_) => {
+            return aether_authz::Decision {
+                verdict: Verdict::Deny,
+                deciding_rule: "tier.invalid",
+                effective_tier: None,
+                grant_id: None,
+            };
+        }
+    };
+    let actor = Actor { id: session.actor_id.clone(), kind: actor_kind };
+    // validate_token already resolves the live DB grant and stores the lower
+    // effective tier in SessionInfo. This request-local value is never cached.
+    let grant = Grant {
+        id: session.grant_id.clone(),
+        actor_id: session.actor_id.clone(),
+        actor_kind,
+        tier,
+        scopes: session.scopes.clone(),
+        scope_restricted: session.scope_restricted,
+        expires_at: None,
+        revoked_at: None,
+    };
+    let now = unix_now();
+    let mut context = EvaluationContext::new(now, Some(&grant));
+    context.session_tier = (actor_kind == ActorKind::Human).then_some(tier);
+    context.confirmed = confirmed;
+    context.step_up_satisfied = step_up;
+    enforce_at(EnforcementPoint::Gateway, &actor, action, context, &GatewayAuditSink)
+        .map_or_else(|never| match never {}, |audited| audited.decision)
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |duration| duration.as_secs())
+}
+
+fn permission_error(
+    id: Option<String>,
+    trace_id: Option<String>,
+    decision: &aether_authz::Decision,
+) -> ServerFrame {
+    let (code, message) = match decision.verdict {
+        Verdict::StepUpRequired => {
+            (aether_core::ErrorCode::FailedPrecondition, "fresh step-up authentication is required")
+        }
+        _ => (aether_core::ErrorCode::PermissionDenied, "permission denied"),
+    };
+    ServerFrame::Error {
+        id,
+        trace_id,
+        body: aether_core::ErrorEnvelope::new(code, message, Ulid::new())
+            .with_details(format!("rule={}", decision.deciding_rule)),
+    }
+}
+
+/// Convenience dispatch for isolated frames and unit tests. Stateful WebSocket
+/// connections must use [`dispatch_with_state`] so confirmations can be bound
+/// to the connection that issued them.
 pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame {
+    dispatch_with_state(frame, session, &mut ConnectionAuthState::default())
+}
+
+/// Dispatch a client frame with connection-scoped, single-use confirmation state.
+pub fn dispatch_with_state(
+    frame: ClientFrame,
+    session: &auth::SessionInfo,
+    auth_state: &mut ConnectionAuthState,
+) -> ServerFrame {
     match frame {
         ClientFrame::Subscribe { id, trace_id, channels } => {
             let trace_id = make_trace_id(&id, &trace_id);
+            let decision = authorize(session, Action::Subscribe, false, false);
+            if decision.verdict != Verdict::Allow {
+                return permission_error(id, trace_id, &decision);
+            }
             ServerFrame::CommandResult {
                 id,
                 trace_id,
@@ -234,6 +372,10 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
         }
         ClientFrame::Unsubscribe { id, trace_id } => {
             let trace_id = make_trace_id(&id, &trace_id);
+            let decision = authorize(session, Action::Subscribe, false, false);
+            if decision.verdict != Verdict::Allow {
+                return permission_error(id, trace_id, &decision);
+            }
             ServerFrame::CommandResult {
                 id,
                 trace_id,
@@ -246,9 +388,13 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
         }
         ClientFrame::Command { id, trace_id, text, room_context } => {
             let trace_id = make_trace_id(&id, &trace_id);
+            let decision = authorize(session, Action::Query, false, false);
+            if decision.verdict != Verdict::Allow {
+                return permission_error(id, trace_id, &decision);
+            }
             let mut body = serde_json::json!({
                 "echo": text,
-                "note": "MCP stub — command echo only",
+                "status": "authorized_command_echo",
                 "actor_id": session.actor_id,
                 "origin_kind": session.origin.kind,
             });
@@ -342,17 +488,24 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 }
             };
 
-            // Phase 6: live-order authorization boundary.
-            // Until EP-401 implements live_enabled, caps, tier, and confirmation
-            // enforcement, live orders (paper=false) must return failed_precondition.
-            // A textual warning is not an authorization boundary.
+            // Phase 6: authorization. The order router will independently repeat
+            // this check in EP-305; gateway approval is never sufficient alone.
+            let action =
+                if validated.paper { Action::SubmitPaperOrder } else { Action::SubmitLiveOrder };
+            let decision = authorize(session, action, false, false);
+            if matches!(decision.verdict, Verdict::Deny | Verdict::StepUpRequired) {
+                return permission_error(id, trace_id, &decision);
+            }
+
+            // ADR-0007 remains an out-of-band gate. EP-401 cannot and does not
+            // flip it; live intents fail closed until EP-305 reads that gate.
             if !validated.paper {
                 return ServerFrame::Error {
                     id,
                     trace_id,
                     body: aether_core::ErrorEnvelope::new(
                         aether_core::ErrorCode::FailedPrecondition,
-                        "live orders are not yet enabled (EP-401 pending)",
+                        "live order routing is disabled until the EP-305 execution gate",
                         Ulid::new(),
                     ),
                 };
@@ -392,26 +545,82 @@ pub fn dispatch(frame: ClientFrame, session: &auth::SessionInfo) -> ServerFrame 
                 id = intent.id,
             );
 
-            ServerFrame::ConfirmRequired {
-                id,
-                trace_id,
-                ref_id: uuid::Uuid::new_v4().to_string(),
-                action_summary,
-                tier_reason: format!("EP-401: tier {} paper trade — allow-with-note", session.tier),
-                actor_id: intent.origin.actor_id.to_string(),
-                origin_kind: session.origin.kind.clone(),
+            match decision.verdict {
+                Verdict::ConfirmRequired => ServerFrame::ConfirmRequired {
+                    id,
+                    trace_id,
+                    ref_id: {
+                        let reference = uuid::Uuid::new_v4().to_string();
+                        auth_state.pending.insert(
+                            reference.clone(),
+                            PendingConfirmation {
+                                actor_id: session.actor_id.clone(),
+                                action,
+                                expires_at: unix_now().saturating_add(CONFIRMATION_VALIDITY_SECS),
+                            },
+                        );
+                        reference
+                    },
+                    action_summary,
+                    tier_reason: format!(
+                        "tier {} requires confirmation for this mutation",
+                        session.tier
+                    ),
+                    actor_id: intent.origin.actor_id.to_string(),
+                    origin_kind: session.origin.kind.clone(),
+                },
+                Verdict::Allow => ServerFrame::CommandResult {
+                    id,
+                    trace_id,
+                    body: serde_json::json!({
+                        "status": "authorized",
+                        "action": action.scope(),
+                        "actor_id": intent.origin.actor_id.to_string(),
+                        "origin_kind": session.origin.kind,
+                    }),
+                },
+                Verdict::Deny | Verdict::StepUpRequired => {
+                    permission_error(id, trace_id, &decision)
+                }
             }
         }
         ClientFrame::Confirm { id, trace_id, ref_id, totp } => {
             let trace_id = make_trace_id(&id, &trace_id);
-            let totp_note = totp.as_ref().map(|_| "totp-provided").unwrap_or("totp-missing");
+            // Never interpret mere TOTP presence as successful step-up. TOTP is
+            // consumed only by aether-authz's verified challenge flow.
+            let _ = totp;
+            let Some(pending) = auth_state.pending.remove(&ref_id) else {
+                return ServerFrame::Error {
+                    id,
+                    trace_id,
+                    body: aether_core::ErrorEnvelope::new(
+                        aether_core::ErrorCode::FailedPrecondition,
+                        "confirmation reference is not active",
+                        Ulid::new(),
+                    ),
+                };
+            };
+            if pending.actor_id != session.actor_id || unix_now() >= pending.expires_at {
+                return ServerFrame::Error {
+                    id,
+                    trace_id,
+                    body: aether_core::ErrorEnvelope::new(
+                        aether_core::ErrorCode::FailedPrecondition,
+                        "confirmation reference is stale or belongs to another actor",
+                        Ulid::new(),
+                    ),
+                };
+            }
+            let decision = authorize(session, pending.action, true, false);
+            if decision.verdict != Verdict::Allow {
+                return permission_error(id, trace_id, &decision);
+            }
             ServerFrame::CommandResult {
                 id,
                 trace_id,
                 body: serde_json::json!({
-                    "status": "confirmed",
-                    "ref_id": ref_id,
-                    "note": format!("stub — order not actually executed ({totp_note})"),
+                    "status": "authorization_confirmed",
+                    "action": pending.action.scope(),
                     "actor_id": session.actor_id,
                     "origin_kind": session.origin.kind,
                 }),
@@ -452,6 +661,9 @@ mod tests {
             tier: 3,
             origin: auth::OriginInfo { kind: "human".into(), actor_id: ACTOR_ALICE.into() },
             device_label: None,
+            grant_id: "test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         }
     }
 
@@ -522,23 +734,63 @@ mod tests {
     }
 
     #[test]
-    fn confirm_returns_command_result() {
+    fn untracked_confirmation_reference_fails_closed() {
         let conf = r#"{"type":"confirm","ref_id":"abc","totp":"123456"}"#;
         let frame: ClientFrame = serde_json::from_str(conf).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
-        assert!(json.contains("command_result"));
-        assert!(json.contains("confirmed"));
-        assert!(json.contains("totp-provided"));
+        assert!(json.contains("\"error\""));
+        assert!(json.contains("failed_precondition"));
+        assert!(!json.contains("confirmed"));
     }
 
     #[test]
-    fn confirm_without_totp_notes_missing() {
+    fn confirmation_without_totp_fails_closed_without_echoing_credential_state() {
         let conf = r#"{"type":"confirm","ref_id":"abc"}"#;
         let frame: ClientFrame = serde_json::from_str(conf).unwrap();
         let response = dispatch(frame, &test_session());
         let json = serde_json::to_string(&response).unwrap();
-        assert!(json.contains("totp-missing"));
+        assert!(json.contains("failed_precondition"));
+        assert!(!json.contains("totp"));
+    }
+
+    #[test]
+    fn issued_confirmation_is_connection_bound_and_single_use() {
+        let session = test_session();
+        let mut state = ConnectionAuthState::default();
+        let order: ClientFrame = serde_json::from_str(&make_intent(VALID_INTENT_BODY)).unwrap();
+        let reference = match dispatch_with_state(order, &session, &mut state) {
+            ServerFrame::ConfirmRequired { ref_id, .. } => ref_id,
+            other => panic!(
+                "expected confirmation challenge, got {}",
+                serde_json::to_string(&other).unwrap()
+            ),
+        };
+
+        let confirm: ClientFrame =
+            serde_json::from_str(&format!(r#"{{"type":"confirm","ref_id":"{reference}"}}"#))
+                .unwrap();
+        let accepted = dispatch_with_state(confirm, &session, &mut state);
+        let accepted_json = serde_json::to_string(&accepted).unwrap();
+        assert!(accepted_json.contains("authorization_confirmed"));
+
+        let replay: ClientFrame =
+            serde_json::from_str(&format!(r#"{{"type":"confirm","ref_id":"{reference}"}}"#))
+                .unwrap();
+        let replayed = dispatch_with_state(replay, &session, &mut state);
+        assert!(serde_json::to_string(&replayed).unwrap().contains("failed_precondition"));
+    }
+
+    #[test]
+    fn gateway_enforces_grant_scope_before_issuing_confirmation() {
+        let mut session = test_session();
+        session.scope_restricted = true;
+        session.scopes.insert("data.query".into());
+        let order: ClientFrame = serde_json::from_str(&make_intent(VALID_INTENT_BODY)).unwrap();
+        let denied = dispatch(order, &session);
+        let json = serde_json::to_string(&denied).unwrap();
+        assert!(json.contains("permission_denied"));
+        assert!(json.contains("grant.scope_denied"));
     }
 
     #[test]
@@ -592,7 +844,7 @@ mod tests {
             (r#"{"type":"unsubscribe","id":"u1"}"#, "command_result"),
             (r#"{"type":"command","text":"hi"}"#, "command_result"),
             (oi.as_str(), "confirm_required"),
-            (r#"{"type":"confirm","ref_id":"r1"}"#, "command_result"),
+            (r#"{"type":"confirm","ref_id":"r1"}"#, "error"),
             (r#"{"type":"ping"}"#, "pong"),
         ];
         for (json, expected_type) in &cases {
@@ -611,9 +863,12 @@ mod tests {
         let session = auth::SessionInfo {
             session_id: "test-session".into(),
             actor_id: ACTOR_BOB.into(),
-            tier: 1,
+            tier: 5,
             origin: auth::OriginInfo { kind: "automation".into(), actor_id: ACTOR_BOB.into() },
             device_label: None,
+            grant_id: "test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -678,6 +933,9 @@ mod tests {
             tier: 4,
             origin: auth::OriginInfo { kind: "agent".into(), actor_id: ACTOR_SYSTEM.into() },
             device_label: None,
+            grant_id: "test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         };
         let body = intent_body(
             r#""market":"mkt:kalshi:BTC-75","side":"sell","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"50000.00","extra_field":"ignored""#,
@@ -720,7 +978,9 @@ mod tests {
         );
         let oi = make_intent(&body);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
-        let response = dispatch(frame, &test_session());
+        let mut session = test_session();
+        session.tier = 4;
+        let response = dispatch(frame, &session);
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"error\""), "live order must return error before EP-401: {json}");
         assert!(json.contains("failed_precondition"), "must use failed_precondition, got: {json}");
@@ -740,6 +1000,9 @@ mod tests {
             tier: 3,
             origin: auth::OriginInfo { kind: "human".into(), actor_id: ACTOR_BOB.into() },
             device_label: None,
+            grant_id: "test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -759,6 +1022,9 @@ mod tests {
             tier: 3,
             origin: auth::OriginInfo { kind: "human".into(), actor_id: "not-a-valid-ulid".into() },
             device_label: None,
+            grant_id: "test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();
@@ -945,9 +1211,12 @@ mod tests {
         let session = auth::SessionInfo {
             session_id: "test-session".into(),
             actor_id: ACTOR_ALICE.into(),
-            tier: 2,
+            tier: 3,
             origin: auth::OriginInfo { kind: "human".into(), actor_id: ACTOR_ALICE.into() },
             device_label: None,
+            grant_id: "test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         };
         let body = intent_body(
             r#""market":"mkt:kalshi:BTC-75","side":"buy","order_type":"limit","size":"0.01","size_unit":"contracts","tif":"gtc","limit_price":"65000.00","origin_kind":"attacker","actor_id":"evil""#,
@@ -1038,6 +1307,9 @@ mod tests {
             tier: 3,
             origin: auth::OriginInfo { kind: "superuser".into(), actor_id: ACTOR_ALICE.into() },
             device_label: None,
+            grant_id: "test-grant".into(),
+            scopes: HashSet::new(),
+            scope_restricted: false,
         };
         let oi = make_intent(VALID_INTENT_BODY);
         let frame: ClientFrame = serde_json::from_str(&oi).unwrap();

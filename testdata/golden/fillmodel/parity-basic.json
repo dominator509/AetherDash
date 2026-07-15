@@ -1,0 +1,14 @@
+{
+  "name": "cross_two_ask_levels",
+  "bids": [{ "price": "0.99", "size": "100" }],
+  "asks": [
+    { "price": "1.01", "size": "50" },
+    { "price": "1.02", "size": "50" }
+  ],
+  "side": "buy",
+  "size": "60",
+  "expected": [
+    { "price": "1.01", "size": "50" },
+    { "price": "1.02", "size": "10" }
+  ]
+}

@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-305: Order Router & Risk Engine
 
-**Band:** 3xx Connectors | **Phase:** 2 | **Status:** draft | **Blocked by:** EP-304, EP-401
+**Band:** 3xx Connectors | **Phase:** 2 | **Status:** active | **Blocked by:** EP-304, EP-401
 
 ## Purpose / Big Picture
 Build the deterministic heart of execution: the order router that validates every intent through the risk engine before any venue submission, blocking each failure class fast, firing on API venues in the 20-50 ms band, and keeping live trading behind the `live_enabled` wall. INV-1 and INV-11 become concrete here.

@@ -1,0 +1,20 @@
+[package]
+name = "aether-fillmodel"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+description = "AETHER Terminal — shared book-walk fill model (deterministic, Decimal-only)"
+license = "AGPL-3.0-or-later"
+
+[lints]
+workspace = true
+
+[dependencies]
+aether-core = { path = "../aether-core" }
+rust_decimal = { version = "1", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
