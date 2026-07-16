@@ -45,6 +45,16 @@ Preconditions: Phase 2 exit criteria met on paper; caps configured and verified 
 4. Verify: fill recorded, audit entry chained, P&L attribution row exists, alert confirmation received.
 5. Decide: keep enabled (log it) or revert the flag (log it). Either way the ceremony record links the audit entry IDs.
 
+## WalletConnect testnet proof ceremony (HUMAN; EP-306 M6)
+Preconditions: WalletConnect project created by the operator, testnet-capable operator wallet ready, no mainnet funds involved, and the four proof variables in ENVIRONMENT.md supplied from an operator-controlled env file or shell. Agents may prepare the command and inspect non-secret output; the operator controls the wallet approval.
+1. Set `AETHER_GUARDIAN__WC_PROJECT_ID`, `AETHER_GUARDIAN__WC_RELAY_URL`, `AETHER_GUARDIAN__WC_OPERATOR_ACCOUNT`, and `AETHER_GUARDIAN__WC_TESTNET_CHAIN_ID`.
+2. Run `scripts/walletconnect-live-readiness.sh`.
+3. Scan/open the emitted `pairing_uri` in the operator wallet on the configured testnet.
+4. Verify the wallet shows the expected `eth_sendTransaction` request, destination, value, and chain id; reject if anything differs.
+5. Approve externally in the wallet, then record in the ops log: command timestamp, chain id, pairing topic, request id, wallet approval/tx hash if produced, and confirmation that Guardian policy state was `auto_approved` or human-approved before the WC request was built.
+6. Copy `aether-blueprint/examples/walletconnect-live-evidence.example.json`, fill it with the real non-secret evidence, and run `scripts/walletconnect-live-evidence-check.sh <evidence.json>`.
+7. EP-306 M6 may be marked complete only when both sides are present: the command output plus an evidence JSON file that passes `walletconnect-live-evidence-check.sh`. A repo-side packet without wallet-side approval is readiness evidence, not completion.
+
 ## Incident basics
 Severity: SEV1 = money or keys at risk (freeze first: stop `aether-order-router` and `aether-wallet-guardian`, then diagnose); SEV2 = trading path degraded (stale feeds, router rejects-all); SEV3 = everything else. Runbooks per `runbook-template.md` are required for: key exposure, venue credential leak, poisoned ingest (SECURITY.md), feed outage, database disk-full, audit-chain verify failure. Runbook set must exist before Phase 2 exit.
 

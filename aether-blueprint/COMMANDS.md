@@ -63,6 +63,15 @@ Brings up the dev stack (`docker compose -f infra/dev/docker-compose.yml up -d -
 - Python: `uv run pytest -m integration -q`
 Prints `integration: ok`. Requires Docker (A-06); missing Docker is `MISSING TOOL`, exit 2.
 
+## WalletConnect live readiness proof (EP-306, HUMAN/operator supplied)
+```
+scripts/walletconnect-live-readiness.sh
+scripts/walletconnect-live-evidence-check.sh <evidence.json>
+```
+Runs the ignored Wallet Guardian WalletConnect readiness harness after validating the operator supplied `AETHER_GUARDIAN__WC_PROJECT_ID`, `AETHER_GUARDIAN__WC_RELAY_URL`, `AETHER_GUARDIAN__WC_OPERATOR_ACCOUNT`, and `AETHER_GUARDIAN__WC_TESTNET_CHAIN_ID`. This command emits the policy-approved pairing/request packet for the operator-wallet testnet leg. Missing env is `MISSING`/exit 2; a pass is evidence for the repo-side packet only, not proof that the external wallet signed unless the operator records the wallet-side approval in OPERATIONS.md.
+
+`walletconnect-live-evidence-check.sh` validates the operator-recorded evidence file after wallet approval. Use `aether-blueprint/examples/walletconnect-live-evidence.example.json` as the copy template. M6 is not complete until this checker passes on the real operator evidence file.
+
 ## E2E tests
 ```
 scripts/test-e2e.sh

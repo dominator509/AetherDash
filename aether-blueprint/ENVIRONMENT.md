@@ -94,6 +94,16 @@ Only the gateway and webhook receivers may ever bind non-loopback in prod; every
 | AETHER_INBOX__QUEUE_DB | inbox durable notification/cursor SQLite path (not secret; default data/inbox-queue.sqlite3) |
 | AETHER_GUARDIAN__KEYSTORE_PATH | wallet-guardian only; HARD-DENY on any other reader |
 
+## Wallet Guardian live WalletConnect proof inputs
+These are operator-supplied only for EP-306's live WalletConnect readiness proof. They are not dev defaults and are not required for unit tests. Use `scripts/walletconnect-live-readiness.sh` after the operator has created a WalletConnect project and opened a testnet-capable wallet session.
+
+| Variable | Purpose |
+|---|---|
+| AETHER_GUARDIAN__WC_PROJECT_ID | WalletConnect project id for the live relay/testnet proof. Treat as operator-controlled config; do not print the value in logs. |
+| AETHER_GUARDIAN__WC_RELAY_URL | WalletConnect relay WebSocket URL (`wss://...` or `ws://...`) used by the proof. |
+| AETHER_GUARDIAN__WC_OPERATOR_ACCOUNT | Operator wallet address expected to approve the testnet request. |
+| AETHER_GUARDIAN__WC_TESTNET_CHAIN_ID | Testnet EVM chain id used by the WalletConnect readiness proof. |
+
 ## Execution safety flags
 | Variable | Rule |
 |---|---|

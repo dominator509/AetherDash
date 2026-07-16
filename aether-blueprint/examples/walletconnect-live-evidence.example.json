@@ -1,0 +1,14 @@
+{
+  "command_timestamp_utc": "2026-07-15T00:00:00Z",
+  "chain_id": 11155111,
+  "relay_url": "wss://relay.walletconnect.com",
+  "operator_account": "0x1234567890123456789012345678901234567890",
+  "pairing_topic": "0123456789abcdef0123456789abcdef",
+  "pairing_uri": "wc:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@2?relay-protocol=irn&symKey=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef&topic=0123456789abcdef0123456789abcdef",
+  "request_id": 1,
+  "request_method": "eth_sendTransaction",
+  "guardian_policy_state": "auto_approved",
+  "wallet_approved": true,
+  "wallet_approval_artifact": "wallet-confirmation:replace-with-operator-wallet-confirmation-or-testnet-tx-hash",
+  "operator_recorded_by": "operator-name"
+}
