@@ -79,7 +79,7 @@ fn wc_live_pairing_packet_is_policy_approved_and_operator_ready() {
     let request = service.build_walletconnect_request(&proposal.id, &client).unwrap();
 
     let operator_packet = serde_json::json!({
-        "project_id": project_id,
+        "project_id": "<set>",
         "relay_url": relay_url,
         "operator_account": operator_account.to_lowercase(),
         "chain_id": chain_id,
