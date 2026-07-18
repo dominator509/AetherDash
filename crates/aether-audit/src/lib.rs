@@ -2,13 +2,13 @@
 //! Every significant action is recorded as a hash-linked chain event.
 //! No update or delete API exists by construction.
 
-pub mod chain;
-pub mod verifier;
 pub mod anchor;
-pub mod emission;
 pub mod attribution;
+pub mod chain;
+pub mod emission;
+pub mod verifier;
 
-pub use chain::{AuditChain, AuditEvent, AuditError, Hash};
-pub use verifier::{ChainVerifier, VerificationResult, VerifyError};
-pub use anchor::{AnchorStore, Anchor};
+pub use anchor::{Anchor, AnchorStore};
+pub use chain::{AuditChain, AuditError, AuditEvent, Hash};
 pub use emission::ActionClass;
+pub use verifier::{ChainVerifier, VerificationResult, VerifyError};

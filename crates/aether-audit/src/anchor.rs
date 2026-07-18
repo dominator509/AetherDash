@@ -1,7 +1,7 @@
 //! Periodic anchors for fast incremental verification.
 
-use serde::{Deserialize, Serialize};
 use aether_core::time::UtcTime;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 /// A chain anchor — a checkpoint for fast verification.

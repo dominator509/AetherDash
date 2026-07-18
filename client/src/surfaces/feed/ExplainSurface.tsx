@@ -1,9 +1,9 @@
 // ExplainSurface: drill-down view for a single opportunity.
 // Layout: Summary header -> EdgeDecomposition table -> Evidence section -> Raw JSON.
 
-import { Opportunity } from '../../types/opportunity';
-import { EdgeTable } from '../../components/edge-table';
-import { StalenessChip } from '../../components/staleness-chip';
+import { Opportunity } from "../../types/opportunity";
+import { EdgeTable } from "../../components/edge-table";
+import { StalenessChip } from "../../components/staleness-chip";
 
 export interface ExplainSurfaceProps {
   /** The opportunity being explained. */
@@ -45,7 +45,7 @@ export function ExplainSurface({
         <div className="flex items-center justify-between mb-2">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              {venueLabels ? `${venueLabels.a} → ${venueLabels.b}` : 'Opportunity Detail'}
+              {venueLabels ? `${venueLabels.a} → ${venueLabels.b}` : "Opportunity Detail"}
             </h2>
             <p className="text-sm text-gray-500">
               {opportunity.kind} &middot; ID: {opportunity.id}
@@ -62,26 +62,20 @@ export function ExplainSurface({
 
         <div className="flex items-center gap-6 mt-4">
           <div>
-            <div className="text-3xl font-bold text-blue-700">
-              +{(netEdge * 100).toFixed(2)}%
-            </div>
+            <div className="text-3xl font-bold text-blue-700">+{(netEdge * 100).toFixed(2)}%</div>
             <div className="text-xs text-gray-500">Net Edge</div>
           </div>
           <div>
-            <div className="text-xl font-semibold text-gray-700">
-              {(conf * 100).toFixed(0)}%
-            </div>
+            <div className="text-xl font-semibold text-gray-700">{(conf * 100).toFixed(0)}%</div>
             <div className="text-xs text-gray-500">Confidence</div>
           </div>
           <div>
-            <div className="text-xl font-semibold text-gray-700">
-              {opportunity.gross_edge}
-            </div>
+            <div className="text-xl font-semibold text-gray-700">{opportunity.gross_edge}</div>
             <div className="text-xs text-gray-500">Gross Edge</div>
           </div>
           <div>
             <div className="text-sm font-mono text-gray-600">
-              {opportunity.legs.length} leg{opportunity.legs.length !== 1 ? 's' : ''}
+              {opportunity.legs.length} leg{opportunity.legs.length !== 1 ? "s" : ""}
             </div>
             <div className="text-xs text-gray-500">Legs</div>
           </div>
@@ -107,16 +101,20 @@ export function ExplainSurface({
           {opportunity.explain_ref ? (
             <>
               <EvidenceRow label="Brain Object ID" value={opportunity.explain_ref.object_id} />
-              <EvidenceRow label="Provenance Hash" value={opportunity.explain_ref.provenance_hash} mono />
+              <EvidenceRow
+                label="Provenance Hash"
+                value={opportunity.explain_ref.provenance_hash}
+                mono
+              />
             </>
           ) : (
             <p className="text-sm text-gray-400 italic">No explain reference available.</p>
           )}
-          <EvidenceRow label="Trace ID" value={opportunity.trace_id ?? 'N/A'} mono />
+          <EvidenceRow label="Trace ID" value={opportunity.trace_id ?? "N/A"} mono />
           <EvidenceRow label="Detected At" value={formatTimestamp(opportunity.detected_ts)} />
           <EvidenceRow
             label="Expires At"
-            value={opportunity.expires_ts ? formatTimestamp(opportunity.expires_ts) : 'Never'}
+            value={opportunity.expires_ts ? formatTimestamp(opportunity.expires_ts) : "Never"}
           />
           <EvidenceRow label="State" value={opportunity.state} />
         </div>
@@ -124,9 +122,7 @@ export function ExplainSurface({
 
       {/* Leg details */}
       <section>
-        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-2">
-          Legs
-        </h3>
+        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-2">Legs</h3>
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full border-collapse text-sm">
             <thead>
@@ -144,16 +140,18 @@ export function ExplainSurface({
                   <td className="py-2 px-3">
                     <span
                       className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                        leg.side === 'buy'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                        leg.side === "buy"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
                       }`}
                     >
                       {leg.side}
                     </span>
                   </td>
-                  <td className="py-2 px-3 font-mono text-gray-700">{leg.target_price ?? 'Market'}</td>
-                  <td className="py-2 px-3 font-mono text-gray-700">{leg.size_hint ?? 'N/A'}</td>
+                  <td className="py-2 px-3 font-mono text-gray-700">
+                    {leg.target_price ?? "Market"}
+                  </td>
+                  <td className="py-2 px-3 font-mono text-gray-700">{leg.size_hint ?? "N/A"}</td>
                 </tr>
               ))}
             </tbody>
@@ -188,7 +186,7 @@ function EvidenceRow({
   return (
     <div className="flex items-center justify-between">
       <span className="text-xs text-gray-500">{label}</span>
-      <span className={`text-sm ${mono ? 'font-mono text-gray-700' : 'text-gray-800'}`}>
+      <span className={`text-sm ${mono ? "font-mono text-gray-700" : "text-gray-800"}`}>
         {value}
       </span>
     </div>

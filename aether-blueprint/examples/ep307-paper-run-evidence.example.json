@@ -1,0 +1,9 @@
+{
+  "window_hours": 24,
+  "opportunities": 144,
+  "hourly_buckets": 24,
+  "open_chains": 0,
+  "missing_attribution": 0,
+  "executed_chains": 72,
+  "passed": true
+}

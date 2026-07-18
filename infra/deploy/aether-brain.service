@@ -14,7 +14,7 @@ Type=simple
 User=aether
 Group=aether
 WorkingDirectory=/opt/aether/server
-ExecStart=/opt/aether/.venv/bin/uv run uvicorn server.brain.app:app --host 127.0.0.1 --port 8000 --workers 2 --log-level warning --no-access-log
+ExecStart=/opt/aether/.venv/bin/python -m uvicorn server.brain.app:app --host 127.0.0.1 --port 8000 --workers 1 --log-level warning --no-access-log
 Restart=always
 RestartSec=10
 

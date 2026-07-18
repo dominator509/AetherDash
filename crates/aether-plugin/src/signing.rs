@@ -85,8 +85,8 @@ pub fn verify_manifest(
         .map_err(|_| SigningError::InvalidPublicKey)?
         .try_into()
         .map_err(|_| SigningError::InvalidPublicKey)?;
-    let vk = VerifyingKey::from_bytes(&pub_key_bytes)
-        .map_err(|_| SigningError::InvalidPublicKey)?;
+    let vk =
+        VerifyingKey::from_bytes(&pub_key_bytes).map_err(|_| SigningError::InvalidPublicKey)?;
     vk.verify(&json_bytes, &sig).map_err(|_| SigningError::VerificationFailed)
 }
 
@@ -121,11 +121,14 @@ mod tests {
 
     fn test_manifest() -> PluginManifest {
         PluginManifest {
-            name: "signed-plugin".into(), version: "0.1.0".into(),
-            description: "test".into(), author: "aether".into(),
+            name: "signed-plugin".into(),
+            version: "0.1.0".into(),
+            description: "test".into(),
+            author: "aether".into(),
             kind: PluginKind::Strategy,
             capabilities: vec![Capability::ReadMarkets, Capability::SubmitAlerts],
-            wasm_hash: "a".repeat(64), entry_point: "run".into(),
+            wasm_hash: "a".repeat(64),
+            entry_point: "run".into(),
             permissions: vec!["read".into()],
             config_schema: HashMap::new(),
         }

@@ -4,8 +4,20 @@
 
 use aether_core::ids::MarketKey;
 use aether_core::market::Market;
+use aether_core::market::MarketStatus;
+use aether_core::time::UtcTime;
 use rust_decimal::Decimal;
 use std::collections::HashMap;
+use std::collections::HashSet;
+
+/// A top-of-book snapshot with the receive time required for the scanner's
+/// cheap freshness gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MarketQuote {
+    pub bid: Decimal,
+    pub ask: Decimal,
+    pub ts: UtcTime,
+}
 
 /// A detected arbitrage opportunity (before scoring).
 #[derive(Debug, Clone)]
@@ -49,19 +61,74 @@ impl Detector {
     /// (or vice versa) creates a synthetic spread.
     pub fn detect(
         &self,
-        quotes: &HashMap<MarketKey, (Decimal, Decimal)>, // market -> (bid, ask)
+        quotes: &HashMap<MarketKey, MarketQuote>,
         markets: &HashMap<MarketKey, Market>,
+        now: UtcTime,
     ) -> Vec<DetectedOpportunity> {
-        let mut opportunities = Vec::new();
-        let market_list: Vec<_> = markets.values().collect();
+        self.detect_bounded(quotes, markets, now, usize::MAX).0
+    }
 
-        for i in 0..market_list.len() {
+    /// Detect opportunities while evaluating at most `max_pairs` market pairs.
+    /// Returns the opportunities and the exact number of pairs evaluated.
+    pub fn detect_bounded(
+        &self,
+        quotes: &HashMap<MarketKey, MarketQuote>,
+        markets: &HashMap<MarketKey, Market>,
+        now: UtcTime,
+        max_pairs: usize,
+    ) -> (Vec<DetectedOpportunity>, usize) {
+        self.detect_bounded_inner(quotes, markets, now, max_pairs, None)
+    }
+
+    /// Re-evaluate only pairs touched by changed market-data keys.
+    pub fn detect_changed_bounded(
+        &self,
+        quotes: &HashMap<MarketKey, MarketQuote>,
+        markets: &HashMap<MarketKey, Market>,
+        changed: &HashSet<MarketKey>,
+        now: UtcTime,
+        max_pairs: usize,
+    ) -> (Vec<DetectedOpportunity>, usize) {
+        self.detect_bounded_inner(quotes, markets, now, max_pairs, Some(changed))
+    }
+
+    fn detect_bounded_inner(
+        &self,
+        quotes: &HashMap<MarketKey, MarketQuote>,
+        markets: &HashMap<MarketKey, Market>,
+        now: UtcTime,
+        max_pairs: usize,
+        changed: Option<&HashSet<MarketKey>>,
+    ) -> (Vec<DetectedOpportunity>, usize) {
+        let mut opportunities = Vec::new();
+        let mut market_list: Vec<_> = markets.values().collect();
+        market_list.sort_by(|left, right| left.key.as_str().cmp(right.key.as_str()));
+        let mut pairs_evaluated = 0;
+
+        'pairs: for i in 0..market_list.len() {
             for j in (i + 1)..market_list.len() {
                 let mkt_a = &market_list[i];
                 let mkt_b = &market_list[j];
 
-                // Only compare same asset class
-                if std::mem::discriminant(&mkt_a.kind) != std::mem::discriminant(&mkt_b.kind) {
+                if changed
+                    .is_some_and(|keys| !keys.contains(&mkt_a.key) && !keys.contains(&mkt_b.key))
+                {
+                    continue;
+                }
+                if pairs_evaluated >= max_pairs {
+                    break 'pairs;
+                }
+                pairs_evaluated += 1;
+
+                // Cheap filters first: an arbitrage needs distinct venues,
+                // live markets, the same instrument kind, and a defensible
+                // canonical event match.
+                if mkt_a.venue == mkt_b.venue
+                    || mkt_a.status != MarketStatus::Open
+                    || mkt_b.status != MarketStatus::Open
+                    || mkt_a.kind != mkt_b.kind
+                    || canonical_event_key(mkt_a) != canonical_event_key(mkt_b)
+                {
                     continue;
                 }
 
@@ -70,45 +137,78 @@ impl Detector {
                 if quote_a.is_none() || quote_b.is_none() {
                     continue;
                 }
-                let (_, ask_a) = quote_a.unwrap();
-                let (bid_b, _) = quote_b.unwrap();
+                let (Some(quote_a), Some(quote_b)) = (quote_a, quote_b) else {
+                    continue;
+                };
+                if quote_is_stale(quote_a, now, self.config.max_quote_age_ms)
+                    || quote_is_stale(quote_b, now, self.config.max_quote_age_ms)
+                {
+                    continue;
+                }
+                let ask_a = quote_a.ask;
+                let bid_b = quote_b.bid;
 
                 // Buy on A (at ask), sell on B (at bid) -- if profitable
-                if *ask_a > Decimal::ZERO && *bid_b > Decimal::ZERO && *bid_b > *ask_a {
+                if ask_a > Decimal::ZERO && bid_b > Decimal::ZERO && bid_b > ask_a {
                     let spread = bid_b - ask_a;
                     let gross = spread / ask_a; // percentage spread
                     if gross >= self.config.min_gross_spread {
                         opportunities.push(DetectedOpportunity {
                             buy_leg: mkt_a.key.clone(),
                             sell_leg: mkt_b.key.clone(),
-                            buy_price: *ask_a,
-                            sell_price: *bid_b,
+                            buy_price: ask_a,
+                            sell_price: bid_b,
                             gross_spread: gross,
-                            category: format!("{:?}-{:?}", mkt_a.kind, mkt_b.kind),
+                            category: canonical_event_key(mkt_a),
                         });
                     }
                 }
                 // Also check reverse: buy B, sell A
-                let (_, ask_b) = quote_b.unwrap();
-                let (bid_a, _) = quote_a.unwrap();
-                if *ask_b > Decimal::ZERO && *bid_a > Decimal::ZERO && *bid_a > *ask_b {
+                let ask_b = quote_b.ask;
+                let bid_a = quote_a.bid;
+                if ask_b > Decimal::ZERO && bid_a > Decimal::ZERO && bid_a > ask_b {
                     let spread = bid_a - ask_b;
                     let gross = spread / ask_b;
                     if gross >= self.config.min_gross_spread {
                         opportunities.push(DetectedOpportunity {
                             buy_leg: mkt_b.key.clone(),
                             sell_leg: mkt_a.key.clone(),
-                            buy_price: *ask_b,
-                            sell_price: *bid_a,
+                            buy_price: ask_b,
+                            sell_price: bid_a,
                             gross_spread: gross,
-                            category: format!("{:?}-{:?}", mkt_b.kind, mkt_a.kind),
+                            category: canonical_event_key(mkt_b),
                         });
                     }
                 }
             }
         }
-        opportunities
+        (opportunities, pairs_evaluated)
     }
+}
+
+fn quote_is_stale(quote: &MarketQuote, now: UtcTime, max_age_ms: i64) -> bool {
+    max_age_ms < 0 || now.unix_millis().saturating_sub(quote.ts.unix_millis()) > max_age_ms
+}
+
+fn canonical_event_key(market: &Market) -> String {
+    for source in [&market.meta, &market.venue_ref] {
+        if let Some(value) =
+            source.as_value().get("canonical_event_id").and_then(serde_json::Value::as_str)
+        {
+            let normalized = value.trim().to_ascii_lowercase();
+            if !normalized.is_empty() {
+                return format!("id:{normalized}");
+            }
+        }
+    }
+
+    let normalized_title: String = market
+        .title
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect();
+    format!("title:{normalized_title}")
 }
 
 #[cfg(test)]
@@ -124,19 +224,24 @@ mod tests {
         let mut quotes = HashMap::new();
         let mut markets = HashMap::new();
 
-        let mk1 =
-            MarketKey::new(&VenueId::new("kalshi").unwrap(), "btc-yes").unwrap();
-        let mk2 =
-            MarketKey::new(&VenueId::new("polymarket").unwrap(), "btc-yes").unwrap();
+        let mk1 = MarketKey::new(&VenueId::new("kalshi").unwrap(), "btc-yes").unwrap();
+        let mk2 = MarketKey::new(&VenueId::new("polymarket").unwrap(), "btc-yes").unwrap();
 
-        quotes.insert(mk1.clone(), (Decimal::new(60, 2), Decimal::new(62, 2)));
-        quotes.insert(mk2.clone(), (Decimal::new(67, 2), Decimal::new(68, 2)));
+        let now = UtcTime::from_unix_millis(1_000_000).unwrap();
+        quotes.insert(
+            mk1.clone(),
+            MarketQuote { bid: Decimal::new(60, 2), ask: Decimal::new(62, 2), ts: now },
+        );
+        quotes.insert(
+            mk2.clone(),
+            MarketQuote { bid: Decimal::new(67, 2), ask: Decimal::new(68, 2), ts: now },
+        );
 
         let m1 = Market {
             key: mk1,
             venue: VenueId::new("kalshi").unwrap(),
             kind: InstrumentKind::BinaryContract,
-            title: "A".into(),
+            title: "BTC above 100k".into(),
             description_ref: "".into(),
             status: MarketStatus::Open,
             close_ts: None,
@@ -150,7 +255,7 @@ mod tests {
             key: mk2,
             venue: VenueId::new("polymarket").unwrap(),
             kind: InstrumentKind::BinaryContract,
-            title: "B".into(),
+            title: "BTC above $100k?".into(),
             description_ref: "".into(),
             status: MarketStatus::Open,
             close_ts: None,
@@ -163,7 +268,7 @@ mod tests {
         markets.insert(m1.key.clone(), m1);
         markets.insert(m2.key.clone(), m2);
 
-        let opps = detector.detect(&quotes, &markets);
+        let opps = detector.detect(&quotes, &markets, now);
         // Buy Kalshi at 0.62, sell Polymarket at 0.67 = 0.05 spread / 0.62 = ~8%
         assert!(!opps.is_empty());
         assert!(opps[0].gross_spread >= Decimal::new(8, 2));
@@ -174,17 +279,22 @@ mod tests {
         let detector = Detector::new(DetectorConfig::default());
         let mut quotes = HashMap::new();
         let mut markets = HashMap::new();
-        let mk1 =
-            MarketKey::new(&VenueId::new("kalshi").unwrap(), "close").unwrap();
-        let mk2 =
-            MarketKey::new(&VenueId::new("polymarket").unwrap(), "close").unwrap();
-        quotes.insert(mk1.clone(), (Decimal::new(60, 2), Decimal::new(61, 2)));
-        quotes.insert(mk2.clone(), (Decimal::new(61, 2), Decimal::new(62, 2)));
-        let m = Market {
+        let mk1 = MarketKey::new(&VenueId::new("kalshi").unwrap(), "close").unwrap();
+        let mk2 = MarketKey::new(&VenueId::new("polymarket").unwrap(), "close").unwrap();
+        let now = UtcTime::from_unix_millis(1_000_000).unwrap();
+        quotes.insert(
+            mk1.clone(),
+            MarketQuote { bid: Decimal::new(60, 2), ask: Decimal::new(61, 2), ts: now },
+        );
+        quotes.insert(
+            mk2.clone(),
+            MarketQuote { bid: Decimal::new(61, 2), ask: Decimal::new(62, 2), ts: now },
+        );
+        let m1 = Market {
             key: mk1.clone(),
             venue: VenueId::new("kalshi").unwrap(),
             kind: InstrumentKind::BinaryContract,
-            title: "".into(),
+            title: "same event".into(),
             description_ref: "".into(),
             status: MarketStatus::Open,
             close_ts: None,
@@ -194,9 +304,51 @@ mod tests {
             venue_ref: JsonObject::default(),
             meta: JsonObject::default(),
         };
-        markets.insert(mk1, m.clone());
-        markets.insert(mk2, m);
-        let opps = detector.detect(&quotes, &markets);
+        let m2 =
+            Market { key: mk2.clone(), venue: VenueId::new("polymarket").unwrap(), ..m1.clone() };
+        markets.insert(mk1, m1);
+        markets.insert(mk2, m2);
+        let opps = detector.detect(&quotes, &markets, now);
         assert!(opps.is_empty());
+    }
+
+    #[test]
+    fn rejects_different_events_and_stale_quotes() {
+        let now = UtcTime::from_unix_millis(10_000).unwrap();
+        let stale = UtcTime::from_unix_millis(1_000).unwrap();
+        let mk1 = MarketKey::new(&VenueId::new("kalshi").unwrap(), "a").unwrap();
+        let mk2 = MarketKey::new(&VenueId::new("polymarket").unwrap(), "b").unwrap();
+        let make_market = |key: MarketKey, venue: &str, title: &str| Market {
+            key,
+            venue: VenueId::new(venue).unwrap(),
+            kind: InstrumentKind::BinaryContract,
+            title: title.into(),
+            description_ref: String::new(),
+            status: MarketStatus::Open,
+            close_ts: None,
+            resolve_ts: None,
+            outcome: None,
+            jurisdiction_flags: vec![],
+            venue_ref: JsonObject::default(),
+            meta: JsonObject::default(),
+        };
+        let mut markets = HashMap::new();
+        markets.insert(mk1.clone(), make_market(mk1.clone(), "kalshi", "event a"));
+        markets.insert(mk2.clone(), make_market(mk2.clone(), "polymarket", "event b"));
+        let mut quotes = HashMap::new();
+        quotes.insert(
+            mk1.clone(),
+            MarketQuote { bid: Decimal::new(50, 2), ask: Decimal::new(51, 2), ts: now },
+        );
+        quotes.insert(
+            mk2.clone(),
+            MarketQuote { bid: Decimal::new(70, 2), ask: Decimal::new(71, 2), ts: now },
+        );
+        let detector = Detector::new(DetectorConfig::default());
+        assert!(detector.detect(&quotes, &markets, now).is_empty());
+
+        markets.get_mut(&mk2).unwrap().title = "event a".into();
+        quotes.get_mut(&mk2).unwrap().ts = stale;
+        assert!(detector.detect(&quotes, &markets, now).is_empty());
     }
 }

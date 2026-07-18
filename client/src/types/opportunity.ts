@@ -6,7 +6,7 @@ export type MarketKey = string;
 
 /** The 11-component edge decomposition per SPEC-012. */
 export interface EdgeDecomposition {
-  gross_spread: string;       // Decimal string
+  gross_spread: string; // Decimal string
   fees: string;
   slippage_est: string;
   funding_cost: string;
@@ -20,17 +20,18 @@ export interface EdgeDecomposition {
 }
 
 /** Opportunity lifecycle states. */
-export type LifecycleState = 'detected' | 'scored' | 'surfaced' | 'accepted' | 'executed' | 'closed' | 'ignored' | 'expired';
+export type LifecycleState =
+  "detected" | "scored" | "surfaced" | "accepted" | "executed" | "closed" | "ignored" | "expired";
 
 /** A detected arbitrage opportunity. */
 export interface Opportunity {
-  id: string;                 // ULID
-  kind: 'arbitrage' | 'value' | 'catalyst' | 'hedge';
+  id: string; // ULID
+  kind: "arbitrage" | "value" | "catalyst" | "hedge";
   legs: OpportunityLeg[];
   gross_edge: string;
   edge: EdgeDecomposition;
-  confidence: string;         // Decimal 0..1
-  detected_ts: string;        // RFC3339
+  confidence: string; // Decimal 0..1
+  detected_ts: string; // RFC3339
   expires_ts: string | null;
   state: LifecycleState;
   explain_ref: BrainRef | null;
@@ -40,7 +41,7 @@ export interface Opportunity {
 /** A single leg of an opportunity. */
 export interface OpportunityLeg {
   market: MarketKey;
-  side: 'buy' | 'sell';
+  side: "buy" | "sell";
   target_price: string | null;
   size_hint: string | null;
 }

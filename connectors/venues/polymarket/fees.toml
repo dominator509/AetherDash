@@ -1,0 +1,6 @@
+# Conservative upper-category fallback; the CLOB market fee-rate endpoint is
+# authoritative for a specific token and should override this in live routing.
+model = "probability_curve"
+taker_rate = "0.07"
+source = "https://docs.polymarket.com/trading/fees"
+verified_utc = "2026-07-17"

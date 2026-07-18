@@ -112,12 +112,18 @@ def _missing_key_error(provider: str) -> dict[str, Any]:
     return result
 
 
-def _cache_key(purpose: str, model_policy: str, messages: list[dict[str, str]]) -> str:
+def _cache_key(
+    purpose: str,
+    model_policy: str,
+    messages: list[dict[str, str]],
+    max_tokens: int | None = None,
+) -> str:
     """Hash the complete routing identity without ambiguous concatenation."""
     payload = {
         "purpose": purpose,
         "model_policy": model_policy,
         "messages": messages,
+        "max_tokens": max_tokens,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -127,6 +133,7 @@ async def complete(
     purpose: str,
     messages: list[dict[str, str]],
     model_policy: str = "default",
+    max_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Route a completion request through LiteLLM.
 
@@ -144,7 +151,7 @@ async def complete(
     trace_id = uuid4().hex
 
     # --- Build cache key (SHA-256 of message content) -----------------------
-    cache_key = _cache_key(purpose, model_policy, messages)
+    cache_key = _cache_key(purpose, model_policy, messages, max_tokens)
 
     # --- Check prompt cache first -------------------------------------------
     cached = await get_cached_response(cache_key)
@@ -209,10 +216,10 @@ async def complete(
 
     start = time.monotonic()
     try:
-        response = await litellm.acompletion(
-            model=litellm_model,
-            messages=messages,
-        )
+        call_options: dict[str, Any] = {"model": litellm_model, "messages": messages}
+        if max_tokens is not None:
+            call_options["max_tokens"] = max_tokens
+        response = await litellm.acompletion(**call_options)
     except Exception as exc:
         latency_ms = (time.monotonic() - start) * 1000
         logger.error(

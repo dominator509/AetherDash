@@ -19,18 +19,33 @@ Typical usage::
     })
 """
 
+import asyncio
 import logging
+import math
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from typing import Any
-
-from server.brain.pipeline.embed import generate_embedding
 
 logger = logging.getLogger(__name__)
 
 # ── Constants ───────────────────────────────────────────────────────────────
 
 _RRF_CONSTANT = 60
+_GRAPH_RRF_WEIGHT = 0.15
+_DECAY_HALF_LIFE_HOURS: dict[str, float | None] = {
+    "news": 72.0,
+    "filing": None,
+    "market_description": None,
+    "email": None,
+    "note": None,
+    "event": 168.0,
+    "report": 720.0,
+    "transcript": 720.0,
+    "document": 2160.0,
+    "screenshot": 168.0,
+}
 
 # ── Domain types ────────────────────────────────────────────────────────────
 
@@ -44,6 +59,19 @@ class ScoredRef:
     score: float  # RRF fusion score
     qdrant_rank: int | None = None
     fts_rank: int | None = None
+    graph_rank: int | None = None
+    decay_weight: float | None = None
+    reliability_weight: float | None = None
+    recall_path: str = "v1"
+    rerank_status: str | None = None
+    rerank_score: float | None = None
+
+
+@dataclass(frozen=True)
+class RecallMetadata:
+    kind: str
+    ingested_ts: datetime
+    source_reliability: float = 0.5
 
 
 # ── Qdrant search ──────────────────────────────────────────────────────────
@@ -90,6 +118,8 @@ async def _qdrant_search(
         return []
 
     try:
+        from server.brain.pipeline.embed import generate_embedding  # noqa: PLC0415
+
         client = _get_qdrant_client()
         query_vector = await generate_embedding(query)
 
@@ -318,6 +348,119 @@ def _rrf_fuse(
     return fused[:k]
 
 
+def _rrf_fuse_with_graph(
+    qdrant_results: list[dict[str, Any]],
+    fts_results: list[dict[str, Any]],
+    graph_results: list[dict[str, Any]],
+    k: int,
+) -> list[ScoredRef]:
+    """Fuse v1 rankings plus deterministic one-hop graph candidates."""
+    fused = _rrf_fuse(
+        qdrant_results,
+        fts_results,
+        len(
+            {
+                result["object_id"]
+                for result in [*qdrant_results, *fts_results, *graph_results]
+            }
+        ),
+    )
+    by_id = {ref.object_id: ref for ref in fused}
+    graph_rank = {
+        result["object_id"]: rank for rank, result in enumerate(graph_results, start=1)
+    }
+    provenance = {
+        result["object_id"]: result.get("provenance_hash", "")
+        for result in graph_results
+    }
+    for object_id, rank in graph_rank.items():
+        ref = by_id.get(object_id)
+        if ref is None:
+            ref = ScoredRef(
+                object_id=object_id,
+                provenance_hash=provenance.get(object_id, ""),
+                score=0.0,
+            )
+            by_id[object_id] = ref
+        ref.score += _GRAPH_RRF_WEIGHT / (rank + _RRF_CONSTANT)
+        ref.graph_rank = rank
+    ranked = sorted(by_id.values(), key=lambda ref: (-ref.score, ref.object_id))
+    return ranked[:k]
+
+
+def _decay_weight(kind: str, ingested_ts: datetime, now: datetime) -> float:
+    half_life = _DECAY_HALF_LIFE_HOURS.get(kind, 720.0)
+    if half_life is None:
+        return 1.0
+    age_hours = max(0.0, (now - ingested_ts).total_seconds() / 3600.0)
+    return math.pow(2.0, -age_hours / half_life)
+
+
+def _apply_decay_and_reliability(
+    refs: list[ScoredRef],
+    metadata: dict[str, RecallMetadata],
+    *,
+    now: datetime | None = None,
+) -> list[ScoredRef]:
+    """Apply monotone age decay and bounded source-reliability weighting."""
+    resolved_now = now or datetime.now(UTC)
+    for ref in refs:
+        item = metadata.get(ref.object_id)
+        if item is None:
+            decay = 1.0
+            reliability = 0.5
+        else:
+            reliability = min(1.0, max(0.0, item.source_reliability))
+            ingested_ts = item.ingested_ts
+            if ingested_ts.tzinfo is None:
+                ingested_ts = ingested_ts.replace(tzinfo=UTC)
+            decay = _decay_weight(item.kind, ingested_ts, resolved_now)
+        reliability_weight = 0.5 + reliability
+        ref.score *= decay * reliability_weight
+        ref.decay_weight = decay
+        ref.reliability_weight = reliability_weight
+    refs.sort(key=lambda ref: (-ref.score, ref.object_id))
+    return refs
+
+
+async def _fetch_recall_metadata(object_ids: list[str]) -> dict[str, RecallMetadata]:
+    if not object_ids:
+        return {}
+    from server.brain import store as brain_store  # noqa: PLC0415
+    from server.brain.graph import source_reliabilities  # noqa: PLC0415
+    from server.brain.pipeline.link import _init_kuzu  # noqa: PLC0415
+
+    pool = await brain_store.get_pool()
+    async with pool.acquire() as connection:
+        rows = await connection.fetch(
+            "SELECT id,kind,ingested_ts,source FROM brain_objects "
+            "WHERE id = ANY($1::text[])",
+            list(dict.fromkeys(object_ids)),
+        )
+    sources = [str(row["source"]) for row in rows]
+    try:
+        kuzu_connection = _init_kuzu()
+        reliability = (
+            source_reliabilities(kuzu_connection, sources)
+            if kuzu_connection is not None
+            else {}
+        )
+    except Exception as exc:
+        logger.warning(
+            "Source reliability lookup failed (%s) — using neutral weights",
+            type(exc).__name__,
+        )
+        reliability = {}
+    return {
+        str(row["id"]): RecallMetadata(
+            kind=str(row["kind"]),
+            ingested_ts=row["ingested_ts"],
+            source_reliability=reliability.get(str(row["source"]), 0.5),
+        )
+        for row in rows
+    }
+
+
 # ── Filter Qdrant results via Postgres ─────────────────────────────────────
 
 
@@ -422,7 +565,7 @@ async def _filter_qdrant_results(
 # ── Main entry point ───────────────────────────────────────────────────────
 
 
-async def recall(
+async def recall_v1(
     query: str,
     k: int = 24,
     filters: dict | None = None,
@@ -481,3 +624,148 @@ async def recall(
             ref.provenance_hash = provenance_map.get(ref.object_id, "")
 
     return fused
+
+
+async def _fetch_recall_documents(object_ids: list[str]) -> dict[str, str]:
+    if not object_ids:
+        return {}
+    from server.brain import store as brain_store  # noqa: PLC0415
+
+    pool = await brain_store.get_pool()
+    async with pool.acquire() as connection:
+        rows = await connection.fetch(
+            "SELECT id,COALESCE(summary,kind) AS document FROM brain_objects "
+            "WHERE id = ANY($1::text[])",
+            list(dict.fromkeys(object_ids)),
+        )
+    return {str(row["id"]): str(row["document"]) for row in rows}
+
+
+async def _enhance_v2(
+    query: str,
+    v1_refs: list[ScoredRef],
+    filters: dict[str, Any],
+    *,
+    k: int,
+) -> list[ScoredRef]:
+    from server.brain.graph import expand_connection  # noqa: PLC0415
+    from server.brain.pipeline.link import _init_kuzu  # noqa: PLC0415
+
+    candidate_k = max(k, 24)
+    seed_ids = [ref.object_id for ref in v1_refs]
+    try:
+        kuzu_connection = _init_kuzu()
+        graph_candidates = (
+            expand_connection(kuzu_connection, seed_ids, limit=candidate_k)
+            if kuzu_connection is not None
+            else []
+        )
+    except Exception as exc:
+        logger.warning(
+            "Graph expansion failed (%s) — continuing without graph neighbors",
+            type(exc).__name__,
+        )
+        graph_candidates = []
+
+    graph_raw = [
+        {"object_id": candidate.object_id, "shared_edges": candidate.shared_edges}
+        for candidate in graph_candidates
+    ]
+    graph_results, graph_provenance = await _filter_qdrant_results(graph_raw, filters)
+    for result in graph_results:
+        result["provenance_hash"] = graph_provenance.get(result["object_id"], "")
+
+    qdrant_results = [
+        {"object_id": ref.object_id, "score": ref.score}
+        for ref in sorted(
+            (ref for ref in v1_refs if ref.qdrant_rank is not None),
+            key=lambda ref: ref.qdrant_rank or 0,
+        )
+    ]
+    fts_results = [
+        {
+            "object_id": ref.object_id,
+            "provenance_hash": ref.provenance_hash,
+            "score": ref.score,
+        }
+        for ref in sorted(
+            (ref for ref in v1_refs if ref.fts_rank is not None),
+            key=lambda ref: ref.fts_rank or 0,
+        )
+    ]
+    enhanced = _rrf_fuse_with_graph(
+        qdrant_results, fts_results, graph_results, candidate_k
+    )
+    metadata = await _fetch_recall_metadata([ref.object_id for ref in enhanced])
+    enhanced = _apply_decay_and_reliability(enhanced, metadata)[:k]
+    for ref in enhanced:
+        ref.recall_path = "v2"
+
+    if os.environ.get("AETHER_BRAIN__RECALL_RERANK", "0") != "1":
+        for ref in enhanced:
+            ref.rerank_status = "disabled"
+        return enhanced
+
+    from server.brain.rerank import (  # noqa: PLC0415
+        RouterCrossEncoder,
+        rerank_with_budget,
+    )
+
+    documents = await _fetch_recall_documents([ref.object_id for ref in enhanced])
+    rerank_timeout_ms = min(
+        25.0,
+        float(os.environ.get("AETHER_BRAIN__RECALL_RERANK_TIMEOUT_MS", "25")),
+    )
+    outcome = await rerank_with_budget(
+        query,
+        enhanced,
+        documents,
+        RouterCrossEncoder(),
+        top_m=min(12, len(enhanced)),
+        timeout_ms=rerank_timeout_ms,
+    )
+    for ref in outcome.refs:
+        ref.rerank_status = outcome.reason
+    return outcome.refs
+
+
+async def recall(
+    query: str,
+    k: int = 24,
+    filters: dict | None = None,
+) -> list[ScoredRef]:
+    """Recall v2 by default, with an outer budget breaker to v1 results."""
+    started = time.perf_counter()
+    candidate_k = max(k, 24)
+    v1_refs = await recall_v1(query, candidate_k, filters)
+    if os.environ.get("AETHER_BRAIN__RECALL_V2", "1") != "1" or not v1_refs:
+        return v1_refs[:k]
+
+    budget_ms = min(
+        100.0, max(1.0, float(os.environ.get("AETHER_BRAIN__RECALL_BUDGET_MS", "100")))
+    )
+    remaining_s = budget_ms / 1_000 - (time.perf_counter() - started) - 0.030
+    if remaining_s <= 0:
+        fallback = [replace(ref) for ref in v1_refs[:k]]
+        for ref in fallback:
+            ref.recall_path = "v1_budget_fallback"
+        return fallback
+    fallback = [replace(ref) for ref in v1_refs[:k]]
+    try:
+        return await asyncio.wait_for(
+            _enhance_v2(query, v1_refs, filters or {}, k=k), timeout=remaining_s
+        )
+    except TimeoutError:
+        # asyncpg completes protocol cancellation on a follow-up loop turn.
+        # This stays inside the 30 ms reserve and avoids leaking cleanup tasks.
+        await asyncio.sleep(0.020)
+        for ref in fallback:
+            ref.recall_path = "v1_budget_fallback"
+        return fallback
+    except Exception as exc:
+        logger.warning(
+            "Recall v2 failed (%s) — returning v1 fallback", type(exc).__name__
+        )
+        for ref in fallback:
+            ref.recall_path = "v1_error_fallback"
+        return fallback

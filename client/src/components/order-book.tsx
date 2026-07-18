@@ -79,9 +79,7 @@ export function OrderBook({
 
   // Max total for depth-bar scaling
   const maxTotal = useMemo(() => {
-    const allTotals = [...displayBids, ...displayAsks].map((l) =>
-      parseFloat(l.total),
-    );
+    const allTotals = [...displayBids, ...displayAsks].map((l) => parseFloat(l.total));
     return Math.max(...allTotals, 1);
   }, [displayBids, displayAsks]);
 
@@ -145,9 +143,7 @@ export function OrderBook({
                 <span className="w-1/3 text-right z-10">
                   {parseFloat(level.size).toFixed(precision)}
                 </span>
-                <span className="w-1/3 text-right text-gray-400 z-10">
-                  {level.total}
-                </span>
+                <span className="w-1/3 text-right text-gray-400 z-10">{level.total}</span>
               </div>
             ))}
           </div>
@@ -172,9 +168,7 @@ export function OrderBook({
                 <span className="w-1/3 text-right z-10">
                   {parseFloat(level.size).toFixed(precision)}
                 </span>
-                <span className="w-1/3 text-right text-gray-400 z-10">
-                  {level.total}
-                </span>
+                <span className="w-1/3 text-right text-gray-400 z-10">{level.total}</span>
               </div>
             ))}
           </div>
@@ -183,9 +177,7 @@ export function OrderBook({
 
       {/* Timestamp footer */}
       <div className="px-2 py-1 text-gray-400 text-right border-t border-gray-200 text-[10px]">
-        {data.lastUpdate > 0
-          ? new Date(data.lastUpdate).toLocaleTimeString()
-          : "No data"}
+        {data.lastUpdate > 0 ? new Date(data.lastUpdate).toLocaleTimeString() : "No data"}
       </div>
     </div>
   );

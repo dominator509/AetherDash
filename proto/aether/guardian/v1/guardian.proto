@@ -16,12 +16,21 @@ message TxSpec {
   string value = 2;
   string data = 3;
   string chain_id = 4;
+  uint64 gas_limit = 5;
+  string max_fee_per_gas = 6;
+  string max_priority_fee_per_gas = 7;
+  string custody_mode = 8;
+  string asset_id = 9;
+  // Caller-declared precision. The Guardian must match this against its
+  // append-only reference-asset record before deriving policy-limit exposure.
+  uint32 asset_decimals = 10;
 }
 
 message Proposal {
   string id = 1;
   ProposalStatus status = 2;
   string policy_trace = 3;
+  string proposal_hash = 4;
 }
 
 message ProposalRequest {
@@ -36,6 +45,8 @@ message ApproveProposalRequest {
 message Approval {
   string totp = 1;
   string ts = 2;
+  string reference = 3;
+  string expected_proposal_hash = 4;
 }
 
 enum ProposalStatus {
@@ -43,4 +54,9 @@ enum ProposalStatus {
   PROPOSAL_STATUS_PENDING = 1;
   PROPOSAL_STATUS_AUTO_APPROVED = 2;
   PROPOSAL_STATUS_DENIED = 3;
+  PROPOSAL_STATUS_APPROVED = 4;
+  PROPOSAL_STATUS_EXPIRED = 5;
+  PROPOSAL_STATUS_BROADCAST = 6;
+  PROPOSAL_STATUS_CONFIRMED = 7;
+  PROPOSAL_STATUS_FAILED = 8;
 }

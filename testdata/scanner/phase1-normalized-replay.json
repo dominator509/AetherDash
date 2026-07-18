@@ -1,0 +1,32 @@
+{
+  "now": "2026-07-17T12:00:00.000Z",
+  "trace_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "evidence_object_id": "01ARZ3NDEKTSV4RRFFQ69G5FB0",
+  "event_id": "btc-100k-2026",
+  "markets": [
+    {
+      "key": "mkt:kalshi:BTC-100K",
+      "venue": "kalshi",
+      "bid": "0.39",
+      "ask": "0.40",
+      "bid_size": "10",
+      "ask_size": "10"
+    },
+    {
+      "key": "mkt:polymarket:BTC-100K",
+      "venue": "polymarket",
+      "bid": "0.80",
+      "ask": "0.81",
+      "bid_size": "10",
+      "ask_size": "10"
+    },
+    {
+      "key": "mkt:hyperliquid:BTC-100K",
+      "venue": "hyperliquid",
+      "bid": "0.60",
+      "ask": "0.61",
+      "bid_size": "10",
+      "ask_size": "10"
+    }
+  ]
+}

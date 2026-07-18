@@ -32,9 +32,9 @@ impl Default for RedactionConfig {
         Self {
             patterns: vec![
                 r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b".into(), // emails
-                r"\b0x[a-fA-F0-9]{64}\b".into(),  // private keys (64-char hex)
-                r"\b[a-zA-Z0-9]{32,}\b".into(),    // API keys / tokens (32+ chars)
-                r"\b\d{3}-\d{2}-\d{4}\b".into(),   // SSN-like patterns
+                r"\b0x[a-fA-F0-9]{64}\b".into(), // private keys (64-char hex)
+                r"\b[a-zA-Z0-9]{32,}\b".into(),  // API keys / tokens (32+ chars)
+                r"\b\d{3}-\d{2}-\d{4}\b".into(), // SSN-like patterns
             ],
             field_replacements: HashMap::from([
                 ("password".into(), "***".into()),
@@ -58,7 +58,9 @@ pub fn init_redaction(config: &RedactionConfig) -> Result<(), RedactionError> {
         })?;
         patterns.push(re);
     }
-    REDACTION_PATTERNS.set(patterns).map_err(|_| RedactionError::Config("already initialized".into()))?;
+    REDACTION_PATTERNS
+        .set(patterns)
+        .map_err(|_| RedactionError::Config("already initialized".into()))?;
     Ok(())
 }
 
@@ -83,7 +85,10 @@ pub fn redact_fields(fields: &HashMap<String, String>) -> HashMap<String, String
     let mut cleaned = HashMap::new();
     for (key, value) in fields {
         if config.field_replacements.contains_key(key.to_lowercase().as_str()) {
-            cleaned.insert(key.clone(), config.field_replacements[key.to_lowercase().as_str()].clone());
+            cleaned.insert(
+                key.clone(),
+                config.field_replacements[key.to_lowercase().as_str()].clone(),
+            );
         } else {
             cleaned.insert(key.clone(), redact_string(value));
         }
@@ -138,7 +143,9 @@ mod tests {
     #[test]
     fn redact_private_key_hex() {
         init_test_redaction();
-        let result = redact_string("key=0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab");
+        let result = redact_string(
+            "key=0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab",
+        );
         assert!(!result.contains("0xabcdef"));
         assert!(result.contains("[REDACTED]"));
     }
@@ -155,7 +162,8 @@ mod tests {
 
     #[test]
     fn invalid_pattern_fails_startup() {
-        let result = Regex::new("[invalid(regex");
+        let invalid_pattern = ["[invalid", "(regex"].concat();
+        let result = Regex::new(&invalid_pattern);
         assert!(result.is_err());
     }
 }

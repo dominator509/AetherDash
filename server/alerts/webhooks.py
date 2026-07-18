@@ -9,6 +9,8 @@ from urllib.parse import parse_qs
 
 from fastapi import HTTPException, Request
 
+from connectors.comms.twilio.webhook import verify_signature as verify_twilio_signature
+from server.alerts.approvals import ApprovalService, InvalidApprovalError
 from server.alerts.dispatch import process_action_callback
 from server.alerts.identity import resolve_channel_actor
 
@@ -102,3 +104,28 @@ async def discord_callback(request: Request) -> dict:
     except (KeyError, TypeError) as exc:
         raise HTTPException(400, "invalid callback payload") from exc
     return {"type": 4, "data": {"content": result["reason"], "flags": 64}}
+
+
+async def twilio_callback(request: Request, approvals: ApprovalService) -> dict:
+    """Verify and process one SMS approval response."""
+    body = await request.body()
+    parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    params = {key: values[0] for key, values in parsed.items() if values}
+    auth_token = os.environ.get("AETHER_COMMS__TWILIO_TOKEN", "")
+    public_url = os.environ.get("AETHER_COMMS__TWILIO_WEBHOOK_URL", "")
+    signature = request.headers.get("X-Twilio-Signature", "")
+    if not verify_twilio_signature(public_url, params, signature, auth_token):
+        raise HTTPException(401, "invalid webhook signature")
+    sender = params.get("From", "")
+    grant = await resolve_channel_actor("sms", sender)
+    if grant is None:
+        raise HTTPException(403, "unmapped or expired operator")
+    parts = params.get("Body", "").strip().split()
+    if len(parts) != 2 or parts[0].lower() not in {"approve", "reject"}:
+        raise HTTPException(400, "expected APPROVE or REJECT plus one reference")
+    try:
+        return await approvals.respond(
+            parts[1], grant.actor_id, "sms", parts[0].lower()
+        )
+    except InvalidApprovalError as exc:
+        raise HTTPException(409, str(exc)) from exc

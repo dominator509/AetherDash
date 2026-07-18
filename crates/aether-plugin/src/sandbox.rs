@@ -20,7 +20,7 @@ impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
             max_memory_bytes: 64 * 1024 * 1024, // 64 MB
-            max_execution_time_ms: 5000,         // 5 seconds
+            max_execution_time_ms: 5000,        // 5 seconds
             allowed_capabilities: vec![],
             network_allowlist: vec![],
             env_vars: vec![],
@@ -32,10 +32,7 @@ impl SandboxConfig {
     /// Derive a sandbox configuration from a plugin manifest, granting
     /// only the capabilities the manifest declares.
     pub fn from_manifest(manifest: &PluginManifest) -> Self {
-        Self {
-            allowed_capabilities: manifest.capabilities.clone(),
-            ..Default::default()
-        }
+        Self { allowed_capabilities: manifest.capabilities.clone(), ..Default::default() }
     }
 
     /// Check whether a capability has been granted by this sandbox config.

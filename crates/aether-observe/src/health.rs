@@ -40,7 +40,9 @@ impl HealthChecker for HttpHealthChecker {
             Err(_) => HealthStatus::Down,
         }
     }
-    fn name(&self) -> &str { &self.name }
+    fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 /// Readiness tracker with dependency checks.
@@ -67,13 +69,13 @@ impl ReadyChecker {
 
     /// Check all dependencies. Returns true if all are Ok.
     pub fn is_ready(&self) -> bool {
-        let mut last = self.last_check.lock().unwrap();
+        let mut last = self.last_check.lock().unwrap_or_else(|error| error.into_inner());
         if last.elapsed() < self.check_interval {
-            let results = self.last_results.lock().unwrap();
+            let results = self.last_results.lock().unwrap_or_else(|error| error.into_inner());
             return results.values().all(|s| *s == HealthStatus::Ok);
         }
         *last = Instant::now();
-        let mut results = self.last_results.lock().unwrap();
+        let mut results = self.last_results.lock().unwrap_or_else(|error| error.into_inner());
         results.clear();
         for checker in &self.checkers {
             let status = checker.check();
@@ -84,19 +86,29 @@ impl ReadyChecker {
 
     /// Get the health status for Prometheus export.
     pub fn health_metric(&self) -> f64 {
-        if self.is_ready() { 1.0 } else { 0.0 }
+        if self.is_ready() {
+            1.0
+        } else {
+            0.0
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
-    struct MockChecker { name: String, status: HealthStatus }
+    struct MockChecker {
+        name: String,
+        status: HealthStatus,
+    }
     impl HealthChecker for MockChecker {
-        fn check(&self) -> HealthStatus { self.status.clone() }
-        fn name(&self) -> &str { &self.name }
+        fn check(&self) -> HealthStatus {
+            self.status.clone()
+        }
+        fn name(&self) -> &str {
+            &self.name
+        }
     }
 
     #[test]

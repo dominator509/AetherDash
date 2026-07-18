@@ -8,6 +8,10 @@
 
 use std::net::SocketAddr;
 
+use aether_bus::consumer::{KafkaConsumer, MessageConsumer};
+use aether_bus::producer::{BreakerProducer, KafkaProducer};
+use aether_bus::topics::Topic;
+use aether_core::opportunity::Opportunity;
 use aether_gateway::{auth, AppState};
 
 #[tokio::main]
@@ -19,6 +23,15 @@ async fn main() {
         .unwrap_or_else(|_| "postgres://aether:aether@localhost:5432/aether".into());
     let pool = auth::init_db_pool(&database_url);
     let state = AppState::new(pool);
+
+    if std::env::var("AETHER_GATEWAY_BUS_ENABLED").as_deref() == Ok("1") {
+        let feed_state = state.clone();
+        tokio::spawn(async move {
+            if let Err(error) = consume_opportunities(feed_state).await {
+                tracing::error!(%error, "gateway opportunity consumer stopped");
+            }
+        });
+    }
 
     let app = aether_gateway::build_router(state);
 
@@ -35,5 +48,26 @@ async fn main() {
     };
     if let Err(e) = axum::serve(listener, app).await {
         tracing::error!("axum serve exited with error: {e}");
+    }
+}
+
+type ProductionConsumer = KafkaConsumer<BreakerProducer<KafkaProducer>>;
+
+async fn consume_opportunities(
+    state: AppState,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let consumer: ProductionConsumer = KafkaConsumer::from_env("gateway-opportunities")?;
+    loop {
+        let envelopes = consumer.consume::<Opportunity>(&[Topic::OPPS_DETECTED]).await?;
+        for envelope in envelopes {
+            aether_gateway::feed::surface_opportunity(
+                &state.pool,
+                &state.broadcast_tx,
+                &envelope.payload,
+            )
+            .await?;
+        }
+        consumer.ack()?;
+        consumer.commit_sync()?;
     }
 }

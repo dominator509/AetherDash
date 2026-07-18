@@ -36,7 +36,9 @@ Wants=aether-scanner.service
 Wants=aether-simulator.service
 Wants=aether-paper-ledger.service
 Wants=aether-alerts.service
+Wants=aether-actions.service
 Wants=aether-inbox.service
+Wants=aether-ingest.service
 
 [Install]
 WantedBy=multi-user.target

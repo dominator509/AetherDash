@@ -1,7 +1,7 @@
 //! Chain verifier: incremental (from latest anchor) and full (from genesis).
 
-use crate::chain::{AuditChain, AuditError};
 use crate::anchor::AnchorStore;
+use crate::chain::{AuditChain, AuditError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -57,7 +57,10 @@ impl ChainVerifier {
             let curr = &chain.events()[i];
             let prev = &chain.events()[i - 1];
             if curr.seq != prev.seq + 1 {
-                return Err(VerifyError::Chain(AuditError::SeqGap { expected: prev.seq + 1, got: curr.seq }));
+                return Err(VerifyError::Chain(AuditError::SeqGap {
+                    expected: prev.seq + 1,
+                    got: curr.seq,
+                }));
             }
             if curr.prev_hash != prev.hash {
                 return Err(VerifyError::Chain(AuditError::HashBroken { seq: curr.seq }));

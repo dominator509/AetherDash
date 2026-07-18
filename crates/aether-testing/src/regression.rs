@@ -114,23 +114,14 @@ impl RegressionSuite {
             HashMap::new()
         };
 
-        Ok(Self {
-            suite_name,
-            version,
-            golden_dir,
-            cases,
-        })
+        Ok(Self { suite_name, version, golden_dir, cases })
     }
 
     /// Register a new regression case with outputs.
     ///
     /// Computes the fingerprint and stores the case in memory.
     /// Does **not** write to disk until `persist_golden()` is called.
-    pub fn add_case(
-        &mut self,
-        name: impl Into<String>,
-        outputs: Vec<serde_json::Value>,
-    ) {
+    pub fn add_case(&mut self, name: impl Into<String>, outputs: Vec<serde_json::Value>) {
         let name = name.into();
         let outputs_bytes: Vec<u8> = outputs
             .iter()
@@ -213,10 +204,7 @@ impl RegressionSuite {
                 }
                 for (i, (g, a)) in golden.outputs.iter().zip(case.outputs.iter()).enumerate() {
                     if g != a {
-                        diffs.push(format!(
-                            "output[{}] differs: golden={} actual={}",
-                            i, g, a
-                        ));
+                        diffs.push(format!("output[{}] differs: golden={} actual={}", i, g, a));
                     }
                 }
             }
@@ -269,9 +257,7 @@ impl RegressionSuite {
     ) -> Result<HashMap<String, RegressionCase>, RegressionError> {
         let manifest_path = suite_path.join("_manifest.json");
         if !manifest_path.exists() {
-            return Err(RegressionError::ManifestNotFound(
-                manifest_path.display().to_string(),
-            ));
+            return Err(RegressionError::ManifestNotFound(manifest_path.display().to_string()));
         }
         let bytes = fs::read(&manifest_path)?;
         let manifest: Manifest = serde_json::from_slice(&bytes)?;
@@ -290,7 +276,7 @@ impl RegressionSuite {
         }
 
         let mut cases = HashMap::new();
-        for (name, _expected_fp) in &manifest.cases {
+        for name in manifest.cases.keys() {
             let file_path = suite_path.join(format!("{name}.golden.json"));
             if !file_path.exists() {
                 return Err(RegressionError::GoldenNotFound(name.to_string()));
@@ -310,11 +296,7 @@ impl RegressionSuite {
 fn hex_sha256(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<String>()
+    hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect::<String>()
 }
 
 // ---------------------------------------------------------------------------
@@ -349,9 +331,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut suite = RegressionSuite::new("cmp", "1.0.0", dir.path()).unwrap();
 
-        let outputs = make_outputs(&[
-            serde_json::json!({"order": "abc", "status": "filled"}),
-        ]);
+        let outputs = make_outputs(&[serde_json::json!({"order": "abc", "status": "filled"})]);
         suite.add_case("match", outputs.clone());
         suite.persist_golden().unwrap();
 
@@ -386,9 +366,7 @@ mod tests {
 
     #[test]
     fn fingerprint_is_deterministic() {
-        let outputs = make_outputs(&[
-            serde_json::json!({"a": 1, "b": 2}),
-        ]);
+        let outputs = make_outputs(&[serde_json::json!({"a": 1, "b": 2})]);
 
         let fp1 = RegressionSuite::fingerprint(&outputs);
         let fp2 = RegressionSuite::fingerprint(&outputs);

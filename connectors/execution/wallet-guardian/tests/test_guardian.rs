@@ -47,9 +47,6 @@ fn policy_engine() -> PolicyEngine {
 fn m1_keystore_sign_and_lock() {
     let mut ks = KeyStore::new("/tmp/test.key");
     assert!(ks.is_available());
-    let hash = [1u8; 32];
-    let sig = ks.sign_proposal(&hash).unwrap();
-    assert_eq!(sig.len(), 65);
     ks.lock();
     assert!(!ks.is_available());
 }

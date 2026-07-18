@@ -43,6 +43,7 @@ async def complete(
     rag_chunks: list[str] | None = None,
     base_url: str | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
+    max_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Call the LLM Router's ``/complete`` endpoint.
 
@@ -76,6 +77,7 @@ async def complete(
                     "dynamic_inputs": dynamic_inputs,
                     "rag_chunks": rag_chunks or [],
                     "model_policy": model_policy,
+                    "max_tokens": max_tokens,
                 },
             )
             resp.raise_for_status()

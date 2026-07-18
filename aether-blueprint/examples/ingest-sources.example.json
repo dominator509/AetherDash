@@ -1,0 +1,19 @@
+[
+  {
+    "source": "manual:operator-review",
+    "rung": 6,
+    "adapter": "manual_review",
+    "interval_seconds": 30,
+    "batch_size": 25,
+    "enabled": true
+  },
+  {
+    "source": "rss:replace-with-approved-source",
+    "rung": 3,
+    "adapter": "rss_or_sitemap",
+    "endpoint": "https://operator.example/feed.xml",
+    "interval_seconds": 300,
+    "batch_size": 25,
+    "enabled": false
+  }
+]

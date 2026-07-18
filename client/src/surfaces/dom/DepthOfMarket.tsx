@@ -65,11 +65,7 @@ function generateMockLevel(
   };
 }
 
-function buildMockOrderBook(
-  basePrice: number,
-  levels: number,
-  precision: number,
-): OrderBookData {
+function buildMockOrderBook(basePrice: number, levels: number, precision: number): OrderBookData {
   const bids = [];
   const asks = [];
 
@@ -81,13 +77,9 @@ function buildMockOrderBook(
   }
 
   // Best bid is first in array (highest bid)
-  bids.sort(
-    (a, b) => parseFloat(b.price) - parseFloat(a.price),
-  );
+  bids.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
   // Best ask is first in array (lowest ask)
-  asks.sort(
-    (a, b) => parseFloat(a.price) - parseFloat(b.price),
-  );
+  asks.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
 
   const bestBid = parseFloat(bids[0]?.price ?? "0");
   const bestAsk = parseFloat(asks[0]?.price ?? "0");
@@ -96,13 +88,8 @@ function buildMockOrderBook(
     market: "demo",
     bids,
     asks,
-    spread: bestBid > 0 && bestAsk > 0
-      ? (bestAsk - bestBid).toFixed(precision)
-      : "0",
-    midPrice:
-      bestBid > 0 && bestAsk > 0
-        ? ((bestBid + bestAsk) / 2).toFixed(precision)
-        : null,
+    spread: bestBid > 0 && bestAsk > 0 ? (bestAsk - bestBid).toFixed(precision) : "0",
+    midPrice: bestBid > 0 && bestAsk > 0 ? ((bestBid + bestAsk) / 2).toFixed(precision) : null,
     lastUpdate: Date.now(),
     depth: levels,
   };
@@ -156,7 +143,11 @@ export function DepthOfMarket({
       return;
     }
 
-    const basePrice = selectedMarket.includes("BTC") ? 65420 : selectedMarket.includes("ETH") ? 3420 : 100.5;
+    const basePrice = selectedMarket.includes("BTC")
+      ? 65420
+      : selectedMarket.includes("ETH")
+        ? 3420
+        : 100.5;
     const updateMock = () => {
       setInternalData(buildMockOrderBook(basePrice, maxLevels, precision));
     };
@@ -208,12 +199,9 @@ export function DepthOfMarket({
   );
 
   // Handle depth change
-  const handleDepthChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setMaxLevels(parseInt(e.target.value, 10));
-    },
-    [],
-  );
+  const handleDepthChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setMaxLevels(parseInt(e.target.value, 10));
+  }, []);
 
   // Force manual refresh
   const handleRefresh = useCallback(() => {
@@ -224,12 +212,15 @@ export function DepthOfMarket({
       return;
     }
     // Otherwise regenerate mock data
-    const basePrice = selectedMarket.includes("BTC") ? 65420 : selectedMarket.includes("ETH") ? 3420 : 100.5;
+    const basePrice = selectedMarket.includes("BTC")
+      ? 65420
+      : selectedMarket.includes("ETH")
+        ? 3420
+        : 100.5;
     setInternalData(buildMockOrderBook(basePrice, maxLevels, precision));
   }, [selectedMarket, externalData, onMarketChange, maxLevels, precision]);
 
-  const selectedMarketLabel =
-    markets.find((m) => m.id === selectedMarket)?.label ?? selectedMarket;
+  const selectedMarketLabel = markets.find((m) => m.id === selectedMarket)?.label ?? selectedMarket;
 
   return (
     <div className="flex flex-col h-full bg-white" data-surface="depth-of-market">
@@ -298,9 +289,7 @@ export function DepthOfMarket({
         {/* Auto-refresh toggle */}
         <button
           className={`text-[10px] px-1.5 py-0.5 rounded ${
-            autoRefresh
-              ? "bg-blue-100 text-blue-700"
-              : "bg-gray-200 text-gray-500"
+            autoRefresh ? "bg-blue-100 text-blue-700" : "bg-gray-200 text-gray-500"
           }`}
           onClick={() => setAutoRefresh((p) => !p)}
           aria-label="Toggle auto-refresh"
@@ -323,11 +312,7 @@ export function DepthOfMarket({
       {/* Order book */}
       <div className="flex-1 overflow-hidden">
         {displayData ? (
-          <OrderBook
-            data={displayData}
-            maxLevels={maxLevels}
-            precision={precision}
-          />
+          <OrderBook data={displayData} maxLevels={maxLevels} precision={precision} />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-400 text-xs">
             Select a market to view depth
@@ -340,9 +325,7 @@ export function DepthOfMarket({
         <span>{selectedMarketLabel}</span>
         <span>
           {displayData?.depth ?? 0} levels &middot;{" "}
-          {displayData?.lastUpdate
-            ? new Date(displayData.lastUpdate).toLocaleTimeString()
-            : "---"}
+          {displayData?.lastUpdate ? new Date(displayData.lastUpdate).toLocaleTimeString() : "---"}
         </span>
       </div>
     </div>

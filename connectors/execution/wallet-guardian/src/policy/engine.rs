@@ -12,8 +12,8 @@ use rust_decimal::Decimal;
 /// Configuration for the policy engine.
 #[derive(Debug, Clone)]
 pub struct PolicyConfig {
-    /// Maximum transaction value (in ETH) before routing to human approval.
-    pub max_auto_approve_value: Decimal,
+    /// Maximum simulated USD delta before routing to human approval.
+    pub max_auto_approve_usd: Decimal,
     /// Maximum gas price (in gwei) before requiring step-up.
     pub max_gas_price_gwei: u64,
     /// Chain IDs where transactions are allowed.
@@ -25,7 +25,7 @@ pub struct PolicyConfig {
 impl Default for PolicyConfig {
     fn default() -> Self {
         Self {
-            max_auto_approve_value: Decimal::new(1, 1), // 0.1 ETH
+            max_auto_approve_usd: Decimal::new(1, 1), // $0.10 fail-safe default
             max_gas_price_gwei: 100,
             allowed_chains: vec![1, 137, 42161], // mainnet, polygon, arbitrum
             per_tx_max_usd: Decimal::new(100_000, 2),
@@ -105,7 +105,7 @@ impl PolicyEngine {
         });
 
         // Step 1: allowlist
-        if !self.allowlist.is_allowed(&tx.to) {
+        if !self.allowlist.is_allowed_transaction(tx) {
             trace.push(PolicyStep {
                 rule: "allowlist".into(),
                 result: "deny".into(),
@@ -163,10 +163,10 @@ impl PolicyEngine {
         trace.push(limit_step);
 
         // Step 4: routing (withdrawal always human)
-        if is_withdrawal
-            || simulation.value_delta_usd > self.config.max_auto_approve_value
-            || actor_tier < 4
-        {
+        let requires_human = is_withdrawal
+            || simulation.value_delta_usd > self.config.max_auto_approve_usd
+            || actor_tier < 4;
+        if requires_human {
             trace.push(PolicyStep {
                 rule: "approval_routing".into(),
                 result: "pending_human".into(),
@@ -177,21 +177,43 @@ impl PolicyEngine {
                 } else {
                     format!(
                         "value {} exceeds auto-approve threshold {}",
-                        simulation.value_delta_usd, self.config.max_auto_approve_value
+                        simulation.value_delta_usd, self.config.max_auto_approve_usd
                     )
                 },
             });
-            return PolicyResult { allowed: true, requires_human: true, trace };
+        } else {
+            trace.push(PolicyStep {
+                rule: "approval_routing".into(),
+                result: "auto_approved".into(),
+                detail: "within auto-approval limits".into(),
+            });
         }
-        trace.push(PolicyStep {
-            rule: "approval_routing".into(),
-            result: "auto_approved".into(),
-            detail: "within auto-approval limits".into(),
-        });
 
         // Step 5: gas sanity check
-        let max_fee: u128 =
-            u128::from_str_radix(tx.max_fee_per_gas.trim_start_matches("0x"), 16).unwrap_or(0);
+        let Some(max_fee) = parse_hex_quantity(&tx.max_fee_per_gas) else {
+            trace.push(PolicyStep {
+                rule: "gas".into(),
+                result: "deny".into(),
+                detail: "max fee is not a canonical hexadecimal quantity".into(),
+            });
+            return PolicyResult { allowed: false, requires_human: false, trace };
+        };
+        let Some(priority_fee) = parse_hex_quantity(&tx.max_priority_fee_per_gas) else {
+            trace.push(PolicyStep {
+                rule: "gas".into(),
+                result: "deny".into(),
+                detail: "priority fee is not a canonical hexadecimal quantity".into(),
+            });
+            return PolicyResult { allowed: false, requires_human: false, trace };
+        };
+        if priority_fee > max_fee {
+            trace.push(PolicyStep {
+                rule: "gas".into(),
+                result: "deny".into(),
+                detail: "priority fee exceeds max fee".into(),
+            });
+            return PolicyResult { allowed: false, requires_human: false, trace };
+        }
         let max_fee_gwei = max_fee / 1_000_000_000;
         if max_fee_gwei > self.config.max_gas_price_gwei as u128 {
             trace.push(PolicyStep {
@@ -210,12 +232,23 @@ impl PolicyEngine {
             detail: "gas price within limits".into(),
         });
 
-        PolicyResult { allowed: true, requires_human: false, trace }
+        PolicyResult { allowed: true, requires_human, trace }
     }
 }
 
 fn tx_has_value(tx: &TxSpec) -> bool {
-    u128::from_str_radix(tx.value.trim_start_matches("0x"), 16).is_ok_and(|value| value > 0)
+    parse_hex_quantity(&tx.value).is_some_and(|value| value > 0)
+}
+
+fn parse_hex_quantity(value: &str) -> Option<u128> {
+    let digits = value.strip_prefix("0x")?;
+    if digits.is_empty()
+        || (digits.len() > 1 && digits.starts_with('0'))
+        || !digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return None;
+    }
+    u128::from_str_radix(digits, 16).ok()
 }
 
 #[cfg(test)]
@@ -288,7 +321,7 @@ mod tests {
             ..PolicyEngine::new(PolicyConfig {
                 per_tx_max_usd: Decimal::new(100, 0),
                 daily_max_usd: Decimal::new(1_000, 0),
-                max_auto_approve_value: Decimal::new(1_000, 0),
+                max_auto_approve_usd: Decimal::new(1_000, 0),
                 ..PolicyConfig::default()
             })
         };
@@ -301,5 +334,53 @@ mod tests {
         let result = engine.evaluate_with_simulation(&make_tx(), simulation, false, 5);
         assert!(!result.allowed);
         assert!(result.trace.iter().any(|s| s.rule == "limits" && s.result == "deny"));
+    }
+
+    #[test]
+    fn human_routing_does_not_bypass_gas_cap() {
+        let engine = PolicyEngine {
+            allowlist: AllowList::new()
+                .with_allowed_destinations(vec!["0x1234567890123456789012345678901234567890"]),
+            ..PolicyEngine::new(PolicyConfig::default())
+        };
+        let mut tx = make_tx();
+        tx.value = "0x1".into();
+        tx.max_fee_per_gas = "0x178411b200".into(); // 101 gwei
+        let result = engine.evaluate(&tx, Decimal::new(1, 2), true, 5);
+        assert!(!result.allowed);
+        assert!(result.trace.iter().any(|step| step.rule == "gas" && step.result == "deny"));
+    }
+
+    #[test]
+    fn malformed_fee_fails_closed_instead_of_becoming_zero() {
+        let engine = PolicyEngine {
+            allowlist: AllowList::new()
+                .with_allowed_destinations(vec!["0x1234567890123456789012345678901234567890"]),
+            ..PolicyEngine::new(PolicyConfig::default())
+        };
+        let mut tx = make_tx();
+        tx.max_fee_per_gas = "not-hex".into();
+        let result = engine.evaluate(&tx, Decimal::ZERO, false, 5);
+        assert!(!result.allowed);
+        assert!(result.trace.iter().any(|step| {
+            step.rule == "gas" && step.result == "deny" && step.detail.contains("not a canonical")
+        }));
+    }
+
+    #[test]
+    fn priority_fee_above_max_fee_is_denied() {
+        let engine = PolicyEngine {
+            allowlist: AllowList::new()
+                .with_allowed_destinations(vec!["0x1234567890123456789012345678901234567890"]),
+            ..PolicyEngine::new(PolicyConfig::default())
+        };
+        let mut tx = make_tx();
+        tx.max_fee_per_gas = "0x1".into();
+        tx.max_priority_fee_per_gas = "0x2".into();
+        let result = engine.evaluate(&tx, Decimal::ZERO, false, 5);
+        assert!(!result.allowed);
+        assert!(result.trace.iter().any(|step| {
+            step.rule == "gas" && step.result == "deny" && step.detail.contains("exceeds")
+        }));
     }
 }

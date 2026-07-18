@@ -42,7 +42,7 @@ class TestTier1:
             operator_id="op-1",
             operator_tier=1,
         )
-        assert result["status"] == "ignored"
+        assert result["status"] == "authorized"
         assert result["requires_confirm"] is False
 
 
@@ -58,7 +58,7 @@ class TestTier2:
             operator_id="op-2",
             operator_tier=2,
         )
-        assert result["status"] == "simulated"
+        assert result["status"] == "authorized"
         assert result["requires_confirm"] is False
 
     @pytest.mark.asyncio
@@ -70,7 +70,7 @@ class TestTier2:
             operator_id="op-2",
             operator_tier=2,
         )
-        assert result["status"] == "ignored"
+        assert result["status"] == "authorized"
 
     @pytest.mark.asyncio
     async def test_tier_2_cannot_execute(self) -> None:
@@ -97,7 +97,7 @@ class TestTier3:
             operator_id="op-3",
             operator_tier=3,
         )
-        assert result["status"] == "simulated"
+        assert result["status"] == "authorized"
 
     @pytest.mark.asyncio
     async def test_tier_3_can_ignore(self) -> None:
@@ -108,7 +108,7 @@ class TestTier3:
             operator_id="op-3",
             operator_tier=3,
         )
-        assert result["status"] == "ignored"
+        assert result["status"] == "authorized"
 
     @pytest.mark.asyncio
     async def test_tier_3_can_execute_requires_confirm(self) -> None:
@@ -135,7 +135,7 @@ class TestTier4:
             operator_id="op-4",
             operator_tier=4,
         )
-        assert result["status"] == "simulated"
+        assert result["status"] == "authorized"
 
     @pytest.mark.asyncio
     async def test_tier_4_execute_requires_confirm(self) -> None:
@@ -162,7 +162,7 @@ class TestTier5:
             operator_id="op-5",
             operator_tier=5,
         )
-        assert result["status"] == "simulated"
+        assert result["status"] == "authorized"
 
     @pytest.mark.asyncio
     async def test_tier_5_execute_auto_confirm(self) -> None:
@@ -173,7 +173,7 @@ class TestTier5:
             operator_id="op-5",
             operator_tier=5,
         )
-        assert result["status"] == "auto_confirmed"
+        assert result["status"] == "authorized"
         assert result["requires_confirm"] is False
 
     @pytest.mark.asyncio
@@ -185,7 +185,7 @@ class TestTier5:
             operator_id="op-5",
             operator_tier=5,
         )
-        assert result["status"] == "ignored"
+        assert result["status"] == "authorized"
 
 
 class TestValidation:
@@ -248,4 +248,4 @@ class TestValidation:
             operator_id="op-3",
             operator_tier=3,
         )
-        assert result["status"] == "simulated"
+        assert result["status"] == "authorized"

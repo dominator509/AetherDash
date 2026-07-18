@@ -22,17 +22,9 @@ from server.brain.pipeline import clean, embed, extract, index, link, summarize
 
 logger = logging.getLogger(__name__)
 
-# Pipeline stage order and their corresponding ladder rungs
+# Pipeline stage order. Compliance ladder rungs describe the source transport,
+# not these processing stages; intake records the source rung exactly once.
 _STAGE_ORDER = ["intake", "clean", "summarize", "extract", "link", "embed", "index"]
-_LADDER_RUNG: dict[str, int] = {
-    "intake": 1,
-    "clean": 2,
-    "summarize": 3,
-    "extract": 4,
-    "link": 5,
-    "embed": 6,
-    "index": 7,
-}
 
 
 async def _set_stage(obj_id: str, stage: str, parked_reason: str | None = None) -> None:
@@ -118,9 +110,6 @@ async def run_pipeline(object_id: str) -> None:
                 raw_bytes = brain_storage.get_raw(obj.raw_ref)
                 cleaned_text, clean_ref = await clean.run(raw_bytes, source)
                 await brain_store.update_object(object_id, clean_ref=clean_ref)
-                await brain_store.emit_ingest_event(
-                    object_id, source, 2, len(cleaned_text.encode())
-                )
                 logger.debug("pipeline[2/7 clean]: done for %s", object_id)
                 obj.clean_ref = clean_ref
             else:
@@ -150,9 +139,6 @@ async def run_pipeline(object_id: str) -> None:
             if obj.summary is None:
                 summary_text = await summarize.run(cleaned_text or "")
                 await brain_store.update_object(object_id, summary=summary_text)
-                await brain_store.emit_ingest_event(
-                    object_id, source, 3, len(summary_text.encode())
-                )
                 logger.debug("pipeline[3/7 summarize]: done for %s", object_id)
                 obj.summary = summary_text
             else:
@@ -177,12 +163,6 @@ async def run_pipeline(object_id: str) -> None:
                 entities = extract_result.get("entities", [])
                 # Write empty marker: entities=[] means "ran and found nothing"
                 await brain_store.update_object(object_id, entities=entities)
-                await brain_store.emit_ingest_event(
-                    object_id,
-                    source,
-                    4,
-                    len(cleaned_text or ""),
-                )
                 logger.debug("pipeline[4/7 extract]: done for %s", object_id)
             else:
                 entities = existing_entities_list
@@ -207,12 +187,6 @@ async def run_pipeline(object_id: str) -> None:
                 updates["linked_events"] = linked_events_result
                 updates["market_keys"] = market_keys_result
                 await brain_store.update_object(object_id, **updates)
-                await brain_store.emit_ingest_event(
-                    object_id,
-                    source,
-                    5,
-                    len(linked_events_result) + len(market_keys_result),
-                )
                 linked_events = linked_events_result
                 market_keys = market_keys_result
                 logger.debug("pipeline[5/7 link]: done for %s", object_id)
@@ -231,12 +205,6 @@ async def run_pipeline(object_id: str) -> None:
     if _STAGE_ORDER.index("embed") >= _STAGE_ORDER.index(resume_from):
         try:
             chunk_count = await embed.run(cleaned_text or "", object_id, source)
-            await brain_store.emit_ingest_event(
-                object_id,
-                source,
-                6,
-                len(cleaned_text or ""),
-            )
             logger.debug(
                 "pipeline[6/7 embed]: done for %s (%d chunks)", object_id, chunk_count
             )

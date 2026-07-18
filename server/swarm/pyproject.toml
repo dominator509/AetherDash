@@ -1,0 +1,22 @@
+[project]
+name = "aether-swarm"
+version = "0.1.0"
+description = "AETHER bounded research swarms and cited decision packets"
+requires-python = ">=3.11"
+dependencies = [
+    "aether-brain",
+    "aether-llm-router",
+    "pydantic>=2.10",
+]
+
+[tool.uv.sources]
+aether-brain = { workspace = true }
+aether-llm-router = { workspace = true }
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["server.swarm", "server.swarm.*"]

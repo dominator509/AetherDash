@@ -6,7 +6,7 @@ with migrations 0015 and 0020 applied.
 
 import pytest
 
-from server.brain import service, storage
+from server.brain import service, storage, store
 from server.brain.models import (
     BrainRef,
     ObjectDraft,
@@ -107,13 +107,31 @@ async def test_provenance_hash_deterministic_across_calls(clean_brain_objects) -
 
 @skip_integration
 async def test_ingest_event_emitted(clean_brain_objects) -> None:
-    """ingest_events row emitted with rung=1 (intake) — best-effort check."""
+    """Every stored object gets one durable event with its exact source rung."""
     draft = ObjectDraft(
         kind="email",
         content="Test email content for ingest event verification.",
         source="inbox://user@example.com",
     )
 
-    ref = await service.store_draft(draft)
+    ref = await service.store_draft(draft, ladder_rung=3)
     assert ref is not None
-    assert len(ref.id) == 26
+    pool = await store.get_pool()
+    row = await pool.fetchrow(
+        """
+        SELECT source, ladder_rung, bytes, status, trace_id
+        FROM ingest_source_events WHERE object_id=$1
+        """,
+        ref.id,
+    )
+    assert row is not None
+    assert row["source"] == "inbox://user@example.com"
+    assert row["ladder_rung"] == 3
+    assert row["bytes"] == len(draft.content.encode())
+    assert row["status"] == "ingested"
+    assert len(row["trace_id"]) == 26
+
+    count = await pool.fetchval(
+        "SELECT count(*) FROM ingest_source_events WHERE object_id=$1", ref.id
+    )
+    assert count == 1

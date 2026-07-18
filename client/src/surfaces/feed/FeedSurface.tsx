@@ -1,18 +1,18 @@
 // Simple card feed surface (SPEC-004 Surface 1).
 // Renders feed items as cards with actions: Explain, Simulate, Act, Ignore.
 
-import { useMemo } from 'react';
-import { FeedItem } from '../../types/opportunity';
-import { getOrderedItems } from '../../state/feed';
-import { StalenessChip } from '../../components/staleness-chip';
-import { useFeedState } from './useFeedState';
+import { useMemo } from "react";
+import { FeedItem } from "../../types/opportunity";
+import { getOrderedItems } from "../../state/feed";
+import { StalenessChip } from "../../components/staleness-chip";
+import { useFeedState } from "./useFeedState";
 
 export interface FeedSurfaceProps {
   /** Whether to show the advanced table (Surface 2) instead of cards (Surface 1). */
-  mode?: 'simple' | 'advanced';
+  mode?: "simple" | "advanced";
 }
 
-export function FeedSurface({ mode = 'simple' }: FeedSurfaceProps) {
+export function FeedSurface({ mode = "simple" }: FeedSurfaceProps) {
   const { state, actions } = useFeedState();
   const items = useMemo(() => getOrderedItems(state), [state]);
 
@@ -29,12 +29,14 @@ export function FeedSurface({ mode = 'simple' }: FeedSurfaceProps) {
     return (
       <div className="p-8 text-center text-gray-400">
         <p>No opportunities detected.</p>
-        <p className="text-sm">Opportunities will appear here when the scanner detects cross-venue edges.</p>
+        <p className="text-sm">
+          Opportunities will appear here when the scanner detects cross-venue edges.
+        </p>
       </div>
     );
   }
 
-  if (mode === 'advanced') {
+  if (mode === "advanced") {
     return (
       <div className="p-4">
         <table className="w-full border-collapse">
@@ -50,7 +52,7 @@ export function FeedSurface({ mode = 'simple' }: FeedSurfaceProps) {
             </tr>
           </thead>
           <tbody>
-            {items.map(item => (
+            {items.map((item) => (
               <AdvancedRow
                 key={item.opportunity.id}
                 item={item}
@@ -66,7 +68,7 @@ export function FeedSurface({ mode = 'simple' }: FeedSurfaceProps) {
 
   return (
     <div className="space-y-3 p-4">
-      {items.map(item => (
+      {items.map((item) => (
         <OpportunityCard
           key={item.opportunity.id}
           item={item}
@@ -95,19 +97,31 @@ function AdvancedRow({
   return (
     <tr className="border-b border-gray-100 hover:bg-gray-50">
       <td className="py-2 px-3 font-medium text-gray-900">{hints.asset_label}</td>
-      <td className="py-2 px-3 text-gray-600">{hints.venue_a} &rarr; {hints.venue_b}</td>
+      <td className="py-2 px-3 text-gray-600">
+        {hints.venue_a} &rarr; {hints.venue_b}
+      </td>
       <td className="py-2 px-3 font-mono text-blue-700">+{(netEdge * 100).toFixed(2)}%</td>
       <td className="py-2 px-3 text-gray-600">{(confidence * 100).toFixed(0)}%</td>
       <td className="py-2 px-3">
-        <StalenessChip quoteAgeMs={hints.quote_age_ms} tickStaleMs={hints.tick_stale_ms} size="sm" />
+        <StalenessChip
+          quoteAgeMs={hints.quote_age_ms}
+          tickStaleMs={hints.tick_stale_ms}
+          size="sm"
+        />
       </td>
       <td className="py-2 px-3 text-xs text-gray-500">{opportunity.kind}</td>
       <td className="py-2 px-3">
         <div className="flex gap-1">
-          <button onClick={onExplain} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded">
+          <button
+            onClick={onExplain}
+            className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+          >
             Explain
           </button>
-          <button onClick={onAct} className="px-2 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded">
+          <button
+            onClick={onAct}
+            className="px-2 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded"
+          >
             Act
           </button>
         </div>
@@ -138,28 +152,37 @@ function OpportunityCard({
           {hints.asset_label}: {hints.venue_a} → {hints.venue_b}
         </h3>
         <div className="flex items-center gap-2">
-          <StalenessChip quoteAgeMs={hints.quote_age_ms} tickStaleMs={hints.tick_stale_ms} size="sm" />
+          <StalenessChip
+            quoteAgeMs={hints.quote_age_ms}
+            tickStaleMs={hints.tick_stale_ms}
+            size="sm"
+          />
           <span className="text-xs text-gray-500">{opportunity.kind}</span>
         </div>
       </div>
 
       <div className="flex items-center gap-4 mb-3">
-        <div className="text-2xl font-bold text-blue-700">
-          +{(netEdge * 100).toFixed(2)}%
-        </div>
-        <div className="text-sm text-gray-500">
-          confidence: {(confidence * 100).toFixed(0)}%
-        </div>
+        <div className="text-2xl font-bold text-blue-700">+{(netEdge * 100).toFixed(2)}%</div>
+        <div className="text-sm text-gray-500">confidence: {(confidence * 100).toFixed(0)}%</div>
       </div>
 
       <div className="flex gap-2">
-        <button onClick={onExplain} className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">
+        <button
+          onClick={onExplain}
+          className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+        >
           Explain
         </button>
-        <button onClick={onAct} className="px-3 py-1 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded">
+        <button
+          onClick={onAct}
+          className="px-3 py-1 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded"
+        >
           Act
         </button>
-        <button onClick={onIgnore} className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700 rounded">
+        <button
+          onClick={onIgnore}
+          className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700 rounded"
+        >
           Ignore
         </button>
       </div>
@@ -168,4 +191,4 @@ function OpportunityCard({
 }
 
 // Re-export from state module for caller convenience
-export { createFeedState } from '../../state/feed';
+export { createFeedState } from "../../state/feed";

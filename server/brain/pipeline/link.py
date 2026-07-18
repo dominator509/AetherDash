@@ -28,6 +28,8 @@ _AETHER_QDRANT_URL = os.environ.get("AETHER_QDRANT__URL", "http://localhost:6333
 # ── Kuzu graph ──────────────────────────────────────────────────────────
 
 _KUZU_AVAILABLE: bool = False
+_KUZU_DATABASE: object | None = None
+_KUZU_CONNECTION: object | None = None
 try:
     import kuzu  # noqa: F401
 
@@ -46,17 +48,20 @@ def _init_kuzu() -> object | None:
     Raises:
         Exception: If Kuzu is installed but initialisation fails (fail-closed).
     """
+    global _KUZU_DATABASE, _KUZU_CONNECTION  # noqa: PLW0603
     if not _KUZU_AVAILABLE:
         return None
+    if _KUZU_CONNECTION is not None:
+        return _KUZU_CONNECTION
     # Create parent dir so Kuzu can create its database subdirectory
     kuzu_path = _AETHER_KUZU__PATH
     pathlib.Path(kuzu_path).parent.mkdir(parents=True, exist_ok=True)
     # Fail-closed: if Kuzu is installed but init fails, let the exception
     # propagate so the runner can park the object.
-    db = kuzu.Database(kuzu_path)
-    conn = kuzu.Connection(db)
+    _KUZU_DATABASE = kuzu.Database(kuzu_path)
+    _KUZU_CONNECTION = kuzu.Connection(_KUZU_DATABASE)
     logger.debug("link: Kuzu database opened at %s", kuzu_path)
-    return conn
+    return _KUZU_CONNECTION
 
 
 def _ensure_kuzu_schema(conn: object) -> None:
@@ -86,7 +91,8 @@ def _ensure_kuzu_schema(conn: object) -> None:
     )
     conn.execute(
         "CREATE NODE TABLE IF NOT EXISTS Source ("
-        "  id STRING, uri STRING, "
+        "  id STRING, uri STRING, reliability DOUBLE DEFAULT 0.5, "
+        "  evidence_count INT64 DEFAULT 0, reliability_updated_ts TIMESTAMP, "
         "  PRIMARY KEY (id)"
         ")"
     )

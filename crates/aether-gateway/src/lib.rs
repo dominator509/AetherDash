@@ -21,6 +21,7 @@ use sqlx::PgPool;
 use tokio::sync::broadcast;
 
 pub mod auth;
+pub mod feed;
 pub mod frames;
 pub mod health;
 
@@ -30,7 +31,7 @@ pub struct AppState {
     pub pool: PgPool,
     /// Broadcast channel for server-pushed messages.
     /// Subscribe/unsubscribe manage per-client receivers.
-    /// TODO(EP-101): actual feed population — currently infrastructure only.
+    /// Populated from durable `opps.detected` events by the gateway binary.
     pub broadcast_tx: broadcast::Sender<String>,
 }
 

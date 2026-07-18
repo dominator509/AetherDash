@@ -54,6 +54,7 @@ mod tests {
             value: "".into(),
             data: "".into(),
             chain_id: "".into(),
+            ..Default::default()
         };
         // Risk service
         // Risk uses only core types (OrderIntent, RiskVerdict) — no custom messages

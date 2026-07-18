@@ -29,24 +29,16 @@ impl PluginRegistry {
     ) -> Result<(), RegistryError> {
         manifest.validate()?;
         let name = manifest.name.clone();
-        self.plugins.insert(
-            name.clone(),
-            PluginEntry {
-                manifest,
-                enabled: false,
-                signature_valid,
-            },
-        );
+        self.plugins
+            .insert(name.clone(), PluginEntry { manifest, enabled: false, signature_valid });
         Ok(())
     }
 
     /// Enable a previously registered plugin. The plugin must have a valid
     /// signature before it can be enabled.
     pub fn enable(&mut self, name: &str) -> Result<(), RegistryError> {
-        let entry = self
-            .plugins
-            .get_mut(name)
-            .ok_or_else(|| RegistryError::NotFound(name.into()))?;
+        let entry =
+            self.plugins.get_mut(name).ok_or_else(|| RegistryError::NotFound(name.into()))?;
         if !entry.signature_valid {
             return Err(RegistryError::SignatureInvalid);
         }
@@ -56,10 +48,8 @@ impl PluginRegistry {
 
     /// Disable a running plugin without removing it from the registry.
     pub fn disable(&mut self, name: &str) -> Result<(), RegistryError> {
-        let entry = self
-            .plugins
-            .get_mut(name)
-            .ok_or_else(|| RegistryError::NotFound(name.into()))?;
+        let entry =
+            self.plugins.get_mut(name).ok_or_else(|| RegistryError::NotFound(name.into()))?;
         entry.enabled = false;
         Ok(())
     }
@@ -71,18 +61,12 @@ impl PluginRegistry {
 
     /// Return all plugins matching a given kind.
     pub fn list_by_kind(&self, kind: &PluginKind) -> Vec<&PluginEntry> {
-        self.plugins
-            .values()
-            .filter(|e| e.manifest.kind == *kind)
-            .collect()
+        self.plugins.values().filter(|e| e.manifest.kind == *kind).collect()
     }
 
     /// Return all currently enabled plugins.
     pub fn list_enabled(&self) -> Vec<&PluginEntry> {
-        self.plugins
-            .values()
-            .filter(|e| e.enabled)
-            .collect()
+        self.plugins.values().filter(|e| e.enabled).collect()
     }
 }
 

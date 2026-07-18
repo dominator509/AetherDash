@@ -512,11 +512,6 @@ async fn transition_opportunity(
     to: &'static str,
     detail: serde_json::Value,
 ) -> Result<(), PersistenceError> {
-    sqlx::query("UPDATE opportunities SET state=$2,updated_ts=now() WHERE id=$1")
-        .bind(id.to_string())
-        .bind(to)
-        .execute(&mut **tx)
-        .await?;
     sqlx::query(
         "INSERT INTO opportunity_events (id,opportunity_id,from_state,to_state,actor,detail) \
          VALUES ($1,$2,$3,$4,'paper-ledger',$5)",

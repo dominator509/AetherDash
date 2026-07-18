@@ -1,0 +1,6 @@
+{
+  "fed-policy": {"fed-decision":3,"fed-minutes":3,"cpi-release":2,"jobs-report":1,"tech-earnings":0},
+  "prediction-resolution": {"resolution-rules":3,"court-docket":3,"market-price":1,"unrelated-election":0},
+  "crypto-liquidity": {"basis-analysis":3,"funding-snapshot":3,"orderbook-depth":2,"token-unlock":1},
+  "earnings-surprise": {"earnings-call":3,"guidance-cut":3,"analyst-preview":1,"macro-calendar":0}
+}

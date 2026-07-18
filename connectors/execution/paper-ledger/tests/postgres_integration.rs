@@ -34,8 +34,8 @@ async fn paper_rows_lifecycle_and_attribution_are_transactional_and_segregated()
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO markets (key,venue,kind,title,status,venue_ref,meta) \
-         VALUES ($1,$2,'spot','EP-304 paper market','open','{}','{}')",
+        "INSERT INTO markets (key,venue,kind,title,description_ref,status,venue_ref,meta) \
+         VALUES ($1,$2,'spot','EP-304 paper market','','open','{}','{}')",
     )
     .bind(market.as_str())
     .bind(&venue_slug)

@@ -8,11 +8,15 @@
 pub mod cadence;
 pub mod dedupe;
 pub mod detect;
+pub mod lifecycle;
+pub mod runtime;
 pub mod scan;
 pub mod score;
 
-pub use cadence::CadenceController;
-pub use dedupe::Deduplicator;
-pub use detect::{DetectedOpportunity, Detector, DetectorConfig};
-pub use scan::{ScanConfig, ScanError, ScanOutcome, Scanner};
-pub use score::{ScoredOpportunity, Scorer};
+pub use cadence::{CadenceController, SCAN_CYCLE_METRIC};
+pub use dedupe::{Deduplicator, OpenChain};
+pub use detect::{DetectedOpportunity, Detector, DetectorConfig, MarketQuote};
+pub use lifecycle::{LifecycleError, LifecycleStore, PersistDisposition};
+pub use runtime::{RuntimeCycleReport, RuntimeError, ScannerRuntime};
+pub use scan::{DurablePublishReport, ScanConfig, ScanError, ScanOutcome, Scanner};
+pub use score::{EvidenceSignal, EvidenceSnapshot, ScoredOpportunity, Scorer};

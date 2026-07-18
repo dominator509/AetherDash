@@ -65,6 +65,8 @@ def _iso_to_dt(iso_str: str | None) -> datetime | None:
 async def insert_object(
     obj: BrainObject,
     on_conflict_do_nothing: bool = False,
+    intake_bytes: int = 0,
+    trace_id: str | None = None,
 ) -> str | None:
     """Insert a BrainObject into the ``brain_objects`` table.
 
@@ -80,14 +82,13 @@ async def insert_object(
     """
     pool = await get_pool()
     conflict_clause = ""
-    returning_clause = ""
+    returning_clause = " RETURNING id"
     if on_conflict_do_nothing:
         # Do not name the new content index here: a targetless conflict clause
         # remains compatible while migration 0023 rolls out and handles both
         # the provenance and source/content unique constraints afterwards.
         conflict_clause = " ON CONFLICT DO NOTHING"
-        returning_clause = " RETURNING id"
-    async with pool.acquire() as conn:
+    async with pool.acquire() as conn, conn.transaction():
         row = await conn.fetchrow(
             f"""
             INSERT INTO brain_objects (
@@ -97,7 +98,7 @@ async def insert_object(
                 author_or_publisher, published_ts, ingested_ts,
                 url_or_ref, raw_sha256, entities, linked_events,
                 market_keys, confidence,
-                current_stage, parked_reason
+                current_stage, parked_reason, ladder_rung
             ) VALUES (
                 $1, $2, $3, $4, $5,
                 $6, $7, $8,
@@ -105,7 +106,7 @@ async def insert_object(
                 $13, $14, $15,
                 $16, $17, $18::jsonb, $19::jsonb,
                 $20::jsonb, $21,
-                $22, $23
+                $22, $23, $24
             )
             {conflict_clause}
             {returning_clause}
@@ -133,10 +134,27 @@ async def insert_object(
             str(obj.confidence) if obj.confidence is not None else None,
             obj.current_stage,
             obj.parked_reason,
+            obj.ladder_rung,
         )
-        if on_conflict_do_nothing:
-            return row["id"] if row else None
-    return obj.id
+        if row is None:
+            return None
+        if trace_id is not None:
+            import ulid  # noqa: PLC0415
+
+            await conn.execute(
+                """
+                INSERT INTO ingest_source_events
+                    (id, object_id, source, ladder_rung, bytes, status, trace_id)
+                VALUES ($1,$2,$3,$4,$5,'ingested',$6)
+                """,
+                str(ulid.new()),
+                obj.id,
+                obj.source,
+                obj.ladder_rung,
+                max(0, intake_bytes),
+                trace_id,
+            )
+    return row["id"]
 
 
 async def get_object(obj_id: str) -> BrainObject | None:
@@ -153,6 +171,7 @@ async def get_object(obj_id: str) -> BrainObject | None:
                 url_or_ref, entities, linked_events,
                 market_keys, confidence,
                 current_stage, parked_reason
+                , ladder_rung
             FROM brain_objects
             WHERE id = $1
             """,
@@ -250,6 +269,7 @@ async def list_objects(
             url_or_ref, entities, linked_events,
             market_keys, confidence,
             current_stage, parked_reason
+            , ladder_rung
         FROM brain_objects
         {where}
         ORDER BY ingested_ts DESC
@@ -377,6 +397,7 @@ def _row_to_object(row: asyncpg.Record) -> BrainObject:
         tier=Tier(row.get("tier", "warm")),
         current_stage=row.get("current_stage", "intake"),
         parked_reason=row.get("parked_reason"),
+        ladder_rung=int(row.get("ladder_rung", 6)),
     )
 
 

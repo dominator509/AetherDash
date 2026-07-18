@@ -22,12 +22,30 @@ pub struct TraceContext {
 
 impl TraceContext {
     pub fn new() -> Self {
-        Self { trace_id: new_trace_id(), span_id: format!("span-{}", Uuid::new_v4().to_string().chars().take(8).collect::<String>()) }
+        Self {
+            trace_id: new_trace_id(),
+            span_id: format!(
+                "span-{}",
+                Uuid::new_v4().to_string().chars().take(8).collect::<String>()
+            ),
+        }
     }
 
     /// Create a child span with the same trace_id.
     pub fn child(&self) -> Self {
-        Self { trace_id: self.trace_id.clone(), span_id: format!("span-{}", Uuid::new_v4().to_string().chars().take(8).collect::<String>()) }
+        Self {
+            trace_id: self.trace_id.clone(),
+            span_id: format!(
+                "span-{}",
+                Uuid::new_v4().to_string().chars().take(8).collect::<String>()
+            ),
+        }
+    }
+}
+
+impl Default for TraceContext {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

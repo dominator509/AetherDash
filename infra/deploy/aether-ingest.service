@@ -1,0 +1,46 @@
+# ================================================================
+# AETHER Ingestion Fleet
+# Plane 2 — compliance-ladder source polling, OCR reprocessing,
+# durable source audit, and source reliability evidence.
+# ================================================================
+[Unit]
+Description=AETHER Ingestion Fleet
+Documentation=https://github.com/AetherDash/aether
+After=network.target postgresql.service minio.service
+Wants=postgresql.service minio.service
+
+[Service]
+Type=simple
+User=aether
+Group=aether
+WorkingDirectory=/opt/aether
+ExecStart=/opt/aether/.venv/bin/python -m uvicorn server.ingest.app:app --host 127.0.0.1 --port 8005 --workers 1 --log-level warning --no-access-log
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/aether /opt/aether/data
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# OCR model/runtime plus bounded ingestion workers need more headroom than
+# a small API-only process. One uvicorn worker owns the singleton scheduler.
+MemoryMax=1536M
+MemoryHigh=1280M
+CPUQuota=100%
+TasksMax=512
+LimitNOFILE=32768
+
+EnvironmentFile=/etc/aether/environment
+Environment=AETHER_ENV=prod
+Environment=AETHER_LOG__FORMAT=json
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=aether.target

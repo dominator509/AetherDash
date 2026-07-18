@@ -8,4 +8,6 @@ pub mod sensitivity;
 pub mod simulator;
 
 pub use sensitivity::SensitivityTable;
-pub use simulator::{Simulation, SimulationConfig, SimulationInput, Simulator};
+pub use simulator::{
+    walk_leg, Simulation, SimulationConfig, SimulationError, SimulationInput, Simulator,
+};

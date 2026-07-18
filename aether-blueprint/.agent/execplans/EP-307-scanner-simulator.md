@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-307: Arbitrage Scanner & Trade Simulator
 
-**Band:** 3xx Connectors | **Phase:** 2 | **Status:** draft | **Blocked by:** EP-302, EP-303, EP-304
+**Band:** 3xx Connectors | **Phase:** 2 | **Status:** revise | **Blocked by:** EP-302, EP-303, EP-304
 
 ## Purpose / Big Picture
 Turn normalized multi-venue data into scored opportunities and honest simulations: the ~500 ms cadence scanner that detects cross-venue edges and the simulator that computes the full 11-component net-edge decomposition - sharing the paper ledger's fill model so predictions and paper fills never diverge (SPEC-012).
@@ -44,27 +44,30 @@ Per-milestone; `test-unit.sh` + `test-integration.sh` green; `verify.sh` + `secu
 Scanner is stateless over the bus (resumes from offsets); dedupe against open chains prevents duplicate opportunities on restart; deterministic replay guarantees reproducibility. Simulator is pure given inputs. Parity contract permanently guards simulator/ledger drift.
 
 ## Progress
-- [x] M1 Decomposition  - [x] M2 Simulator  - [x] M3 Detection  - [x] M4 Scoring+dedupe  - [x] M5 Cadence+shed  - [x] M6 Replay+attribution
+- [x] M1 Decomposition  - [x] M2 Simulator API  - [x] M3 Detection  - [x] M4 Lifecycle  - [x] M5 Metric+performance evidence  - [x] M6 Replay+attribution evidence
 
 ## Surprises & Discoveries
 - 2026-07-15: The 11-component decomposition is implemented as pure functions in `aether-decompose`. The parity contract (simulator fills == paper-ledger fills) is proven by a dedicated integration test that compares fill counts, prices, sizes, fees, sides, and paper flags.
 - 2026-07-15: Cross-venue detection uses pairwise market comparison — O(n²) but sufficient for Phase 1 venue count (~5 venues, ~50-100 markets). Will need optimization for Phase 3+ scale.
 - 2026-07-15: Cadence controller uses dynamic shed thresholds (80%/90%/96%/100% of target) to shed expensive tail under load. Cycles exceeding target are counted in `cycles_shed`.
+- 2026-07-17 audit: the original scanner entrypoint was still a zero-result stub, event detection compared unrelated same-kind markets, mismatch.toml was never loaded, fill errors were converted into empty fills, and `net_edge` was clamped in conflict with the canonical sum law. These code defects are repaired with regression coverage.
+- 2026-07-17 audit: plan completion was not supported by its own acceptance evidence. `sim.run` remains a generic MCP stub, scanner lifecycle persistence is absent, the named scan metric is not connected to the observability exporter, and no 24-hour paper-run closure/attribution artifact exists.
+- 2026-07-17 repair: the old lifecycle helper encoded states and transitions that were unrelated to SPEC-012. The shared checker and migration 0037 now enforce the exact eight-state transition matrix, including attribution before closure and deterministic injected-time expiry.
+- 2026-07-17 repair: venue fees are not one universal bps value. Scanner and simulator now load conservative, venue-adjacent taker schedules; account/market-specific live rates remain an execution-adapter override, and the read-only OpenBB provider fails closed as an execution leg.
 
 ## Decision Log
 - 2026-07-15: Decomposition lives in `crates/aether-decompose/` as a shared crate. Both scanner and simulator consume it. This follows the same pattern as `aether-fillmodel` for the parity guarantee.
 - 2026-07-15: Scanner is stateless over the bus (resumes from offsets). Deduplication uses in-memory open-chain tracking for v1; production will use Postgres for crash recovery.
 - 2026-07-15: Confidence scoring is deterministic (no LLM in scan loop per INV-1). Features: spread width, quote freshness, venue diversity. LLM-based confidence will be a separate EP-205 concern.
+- 2026-07-17: Scanner IDs are derived deterministically from the snapshot timestamp and canonical legs, so identical captured inputs produce byte-identical opportunity sequences. Settlement discounts load from the router-owned mismatch table rather than a second hardcoded table.
+- 2026-07-17: EP-307 is reactivated after the S8-authorized EP-306 M5 repair passed the complete repository gate. Work resumes at M2 and proceeds through the still-open lifecycle, metric/performance, replay, and attribution acceptance seams.
+- 2026-07-17: Detection persistence uses a transactional Postgres open-chain dedupe key plus an at-least-once outbox. The gateway owns `scored -> surfaced`; scanner expiry owns only pre-surface `detected/scored -> expired -> closed` chains.
+- 2026-07-17: EP-307 code milestones are complete, but plan status remains `revise` until the operator-owned, literal 24-hour paper evidence command passes. Accelerated replay is intentionally not represented as wall-clock evidence.
 
 ## Outcomes & Retrospective
-- `cargo test -p aether-decompose`: 42 tests pass (28 unit + 14 golden).
-- `cargo test -p aether-simulator`: parity test proves identical fills to paper ledger.
-- `cargo test -p aether-scanner`: 11 tests pass (detection, scoring, dedupe, cadence).
-- `cargo check --workspace`: 73 crates compile clean.
-- EP-307 satisfies SPEC-012's core requirements: 11-component decomposition, parity contract, deterministic scoring, ~500ms cadence with shedding.
-
-## Decision Log
-(event-matching approach; confidence feature set; shed-ladder thresholds)
-
-## Outcomes & Retrospective
-(cadence numbers; parity proof; determinism evidence)
+- 2026-07-17 targeted audit: `cargo test -p aether-decompose -p aether-scanner -p aether-simulator` passes 66 tests across 9 suites; strict targeted Clippy is clean.
+- Repository validation: the Rust workspace, 343 client tests, 21 shared-type tests, and the non-integration Python suite pass; `security-check.sh` and `git diff --check` are clean. The global format gate remains blocked by unrelated dirty later-plan files.
+- Repaired contracts: exact sum law including negative edge, repository mismatch lookup, fail-closed fill errors, same-event/open/fresh cross-venue detection, kind-aware dedupe, canonical `opps.detected` publication, deterministic replay IDs, and cadence-driven shedding.
+- Completed code gates: real Rust-backed `sim.run` with fill/sensitivity parity, venue-configured fees, bus-driven incremental scanner, durable lifecycle/dedupe/outbox, gateway feed surfacing, Prometheus histogram/counters, Phase-1 p95/shedding tests, deterministic three-venue restart replay, and expiry attribution closure.
+- Database-backed acceptance: scanner replay/dedupe/expiry/attribution tests and gateway `scored -> surfaced` delivery test pass on a fresh migration-0037 scratch database. The replay emits three opportunities, publishes each once across restart, and closes all three with attribution.
+- Remaining external acceptance only: run `cargo run -p aether-scanner --bin ep307-evidence` after a continuous 24-hour paper window. Until it exits zero, EP-307 truthfully remains `revise`.

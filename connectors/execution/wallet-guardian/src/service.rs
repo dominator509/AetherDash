@@ -125,28 +125,6 @@ impl GuardianService {
             .ok_or(GuardianError::Proposal(ProposalError::NotFound(request.proposal_id)))
     }
 
-    /// Sign an approved proposal using the guardian keystore.
-    /// M5: Full signing will go here. M1-M2: placeholder.
-    pub fn sign_proposal(&self, id: &Ulid) -> Result<Vec<u8>, GuardianError> {
-        let proposal =
-            self.proposals.get(id).ok_or(GuardianError::Proposal(ProposalError::NotFound(*id)))?;
-        if proposal.state != ProposalState::Approved
-            && proposal.state != ProposalState::AutoApproved
-        {
-            return Err(GuardianError::ApprovalDenied("proposal not in approved state".into()));
-        }
-        if proposal.approval_expires_at.is_some_and(|expiry| {
-            aether_core::time::UtcTime::now().unix_millis() > expiry.unix_millis()
-        }) {
-            return Err(GuardianError::Proposal(ProposalError::Expired(*id)));
-        }
-        let hash = hash_bytes(&proposal.proposal_hash)?;
-        self.keystore
-            .sign_proposal(&hash)
-            .map(|sig| sig.to_vec())
-            .map_err(|_| GuardianError::KeystoreUnavailable)
-    }
-
     /// Broadcast an approved guardian-custody proposal as a signed EIP-1559 transaction.
     pub async fn broadcast_approved_proposal(
         &mut self,
@@ -206,6 +184,21 @@ impl GuardianService {
         client.build_approved_proposal_request(proposal).map_err(GuardianError::from)
     }
 
+    /// Build a WalletConnect request bound to the account approved by the live
+    /// session. The proposal must already have passed the Guardian policy.
+    pub fn build_walletconnect_request_for_account(
+        &self,
+        id: &Ulid,
+        client: &PairingClient,
+        account: &str,
+    ) -> Result<String, GuardianError> {
+        let proposal =
+            self.proposals.get(id).ok_or(GuardianError::Proposal(ProposalError::NotFound(*id)))?;
+        client
+            .build_approved_proposal_request_for_account(proposal, account)
+            .map_err(GuardianError::from)
+    }
+
     /// Refuse all operations if keystore is unavailable — fail closed.
     pub fn is_operational(&self) -> bool {
         self.keystore.is_available()
@@ -223,18 +216,6 @@ fn value_usd_from_hex_wei(raw: &str) -> Decimal {
     };
     Decimal::from(wei.min(1_000_000_000_000_000_000u128))
         / Decimal::new(1_000_000_000_000_000_000i64, 0)
-}
-
-fn hash_bytes(hash_hex: &str) -> Result<[u8; 32], GuardianError> {
-    let bytes = hex::decode(hash_hex).map_err(|error| {
-        GuardianError::ApprovalDenied(format!("invalid proposal hash: {error}"))
-    })?;
-    if bytes.len() != 32 {
-        return Err(GuardianError::ApprovalDenied("proposal hash must be 32 bytes".into()));
-    }
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&bytes);
-    Ok(out)
 }
 
 #[cfg(test)]
@@ -318,7 +299,7 @@ mod tests {
         // A grep test in CI validates this.
         let svc = make_service();
         // The only public methods are: propose_transaction, get_proposal,
-        // approve_proposal, sign_proposal, is_operational
+        // approve_proposal, is_operational
         // No key export or arbitrary signing exists.
         let _ = svc;
     }

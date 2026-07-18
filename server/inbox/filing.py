@@ -46,6 +46,7 @@ async def file_to_brain(
         origin="inbox",
         trust="low",
         raw_content=raw_bytes,
+        ladder_rung=5,
     )
 
     logger.debug(

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from aether_py.canonical import canonical_json_string
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 # ── Enums ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +85,7 @@ class BrainObject(BaseModel):
     tier: Tier = Tier.warm
     current_stage: str = "intake"
     parked_reason: str | None = None
+    ladder_rung: int = Field(default=6, ge=1, le=6)
 
     @field_validator("id")
     @classmethod

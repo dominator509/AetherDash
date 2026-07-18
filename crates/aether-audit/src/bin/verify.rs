@@ -1,9 +1,9 @@
 //! AETHER Audit Verify CLI.
 //! Usage: aether-audit verify [--incremental|--full]
 
-use aether_audit::chain::AuditChain;
-use aether_audit::verifier::{ChainVerifier, VerificationResult};
 use aether_audit::anchor::AnchorStore;
+use aether_audit::chain::AuditChain;
+use aether_audit::verifier::ChainVerifier;
 use std::process;
 
 fn main() {
@@ -12,7 +12,11 @@ fn main() {
 
     let mut chain = AuditChain::new();
     // In production: load chain from Postgres/ClickHouse
-    chain.append("cli", "verify.run", "audit", b"").unwrap();
+    if let Err(error) = chain.append("cli", "verify.run", "audit", b"") {
+        eprintln!("verify: FAILED");
+        eprintln!("  error: {error}");
+        process::exit(1);
+    }
 
     let result = match mode {
         "--incremental" => {

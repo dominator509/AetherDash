@@ -2,6 +2,7 @@
 //!
 //! Every test below is hand-computed.  Modifying a golden value requires
 //! re-verification against a known-correct reference.
+#![allow(clippy::field_reassign_with_default)]
 
 use aether_decompose::components::*;
 use aether_decompose::decompose::{decompose, DecompositionContext};
@@ -29,7 +30,8 @@ fn golden_all_zero() {
     assert_eq!(ed.gas_cost, Decimal::ZERO, "gas_cost must be zero");
     assert_eq!(ed.bridge_cost, Decimal::ZERO, "bridge_cost must be zero");
     assert_eq!(
-        ed.settlement_mismatch_discount, Decimal::ZERO,
+        ed.settlement_mismatch_discount,
+        Decimal::ZERO,
         "settlement_mismatch_discount must be zero",
     );
     assert_eq!(ed.liquidity_haircut, Decimal::ZERO, "liquidity_haircut must be zero");
@@ -52,10 +54,10 @@ fn golden_probability_arb_simple() {
     let ed = decompose(&ctx);
     assert_eq!(ed.gross_spread, Decimal::new(5, 2), "gross spread 0.05");
     assert_eq!(ed.fees, Decimal::new(2, 1), "fees = 100 * 0.001 * 2 = 0.20");
-    assert_eq!(ed.gas_cost, Decimal::new(42, 5), "gas_cost = 0.00042");
+    assert_eq!(ed.gas_cost, Decimal::ZERO, "non-chain opportunities pay no gas");
     assert_eq!(ed.confidence_penalty, Decimal::ZERO, "full confidence -> zero");
-    // net = 0.05 - 0.20 - 0.00042 = -0.15042, clamped to 0
-    assert_eq!(ed.net_edge, Decimal::ZERO, "net_edge clamped to zero");
+    // net = 0.05 - 0.20 = -0.15; negative edge is preserved by the sum law.
+    assert_eq!(ed.net_edge, Decimal::new(-15, 2));
 }
 
 /// Golden 3: Currency arb.
@@ -89,6 +91,7 @@ fn golden_sum_law_three_components() {
     ctx.confidence_k = Decimal::ONE;
     ctx.gas_units = 21000;
     ctx.gas_price_gwei = 50;
+    ctx.requires_gas = true;
     // gross = (110-100)/105 = 0.095238...
     let gross = gross_spread(Decimal::new(100, 0), Decimal::new(110, 0), "currency");
     let fee = fees(Decimal::new(1000, 0), Decimal::new(1, 3)); // 2.0
@@ -97,9 +100,9 @@ fn golden_sum_law_three_components() {
 
     let ed = decompose(&ctx);
     assert_eq!(ed.gross_spread, gross);
-    let costs = vec![fee, gas, conf];
+    let costs = [fee, gas, conf];
     let total_costs: Decimal = costs.iter().sum();
-    let expected_net = (gross - total_costs).max(Decimal::ZERO);
+    let expected_net = gross - total_costs;
     assert_eq!(ed.net_edge, expected_net, "sum law: net = max(0, gross - costs)");
     assert_eq!(ed.fees, fee);
     assert_eq!(ed.gas_cost, gas);
@@ -110,10 +113,7 @@ fn golden_sum_law_three_components() {
 /// $1000 notional at 10bps per leg => $2.00 total.
 #[test]
 fn golden_fees() {
-    assert_eq!(
-        fees(Decimal::new(1000, 0), Decimal::new(1, 3)),
-        Decimal::new(200, 2),
-    );
+    assert_eq!(fees(Decimal::new(1000, 0), Decimal::new(1, 3)), Decimal::new(200, 2),);
 }
 
 /// Golden 6: Gross spread for probability returns zero when sell < buy.
@@ -171,22 +171,23 @@ fn golden_bridge_cost() {
 #[test]
 fn golden_full_decomposition_realistic() {
     let mut ctx = DecompositionContext::default();
-    ctx.buy_price = Decimal::new(40, 2);    // 0.40
-    ctx.sell_price = Decimal::new(55, 2);   // 0.55
+    ctx.buy_price = Decimal::new(40, 2); // 0.40
+    ctx.sell_price = Decimal::new(55, 2); // 0.55
     ctx.price_kind = "probability".into();
-    ctx.notional = Decimal::new(10000, 0);  // $10k
-    ctx.fee_bps = Decimal::new(1, 3);        // 10bps
+    ctx.notional = Decimal::new(10000, 0); // $10k
+    ctx.fee_bps = Decimal::new(1, 3); // 10bps
     ctx.is_cross_chain = true;
     ctx.bridge_fee_bps = Decimal::new(5, 3); // 0.5%
     ctx.mismatch_discount = Decimal::new(1, 2); // 1%
-    ctx.funding_rate = Decimal::new(5, 3);   // 0.5% annual
+    ctx.funding_rate = Decimal::new(5, 3); // 0.5% annual
     ctx.hold_hours = Decimal::new(12, 0);
     ctx.max_quote_age_ms = 10000;
     ctx.tick_stale_ms = 5000;
-    ctx.confidence = Decimal::new(85, 2);    // 0.85
+    ctx.confidence = Decimal::new(85, 2); // 0.85
     ctx.confidence_k = Decimal::new(1, 0);
     ctx.gas_units = 50000;
     ctx.gas_price_gwei = 30;
+    ctx.requires_gas = true;
 
     let ed = decompose(&ctx);
 
@@ -231,7 +232,7 @@ fn golden_full_decomposition_realistic() {
         ed.confidence_penalty,
     ];
     let total_costs: Decimal = costs.iter().sum();
-    let expected_net = (ed.gross_spread - total_costs).max(Decimal::ZERO);
+    let expected_net = ed.gross_spread - total_costs;
     assert_eq!(
         ed.net_edge, expected_net,
         "sum law holds: gross={}, costs={}, net={}",
@@ -253,10 +254,8 @@ fn golden_mismatch_config() {
 
 /// Golden 14: Edge clamping when costs exceed gross.
 #[test]
-fn golden_net_edge_clamping() {
-    // gross=1, costs=10 => net clamped to 0
-    assert_eq!(net_edge(Decimal::new(1, 0), &[Decimal::new(10, 0)]), Decimal::ZERO);
-    // gross=10, costs=10 => net clamped to 0 (gross - costs = 0)
+fn golden_net_edge_sum_law_including_negative_values() {
+    assert_eq!(net_edge(Decimal::new(1, 0), &[Decimal::new(10, 0)]), Decimal::new(-9, 0));
     assert_eq!(net_edge(Decimal::new(10, 0), &[Decimal::new(10, 0)]), Decimal::ZERO);
     // gross=10, costs=9 => net = 1
     assert_eq!(net_edge(Decimal::new(10, 0), &[Decimal::new(9, 0)]), Decimal::new(1, 0));

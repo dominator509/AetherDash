@@ -77,6 +77,17 @@ impl LimitTracker {
         self.daily_spent += value_usd;
         *self.per_destination_spent.entry(destination.to_string()).or_default() += value_usd;
     }
+
+    /// Seed durable rolling usage before evaluating a new proposal.
+    pub fn seed_usage(
+        &mut self,
+        daily_spent: Decimal,
+        destination: &str,
+        destination_spent: Decimal,
+    ) {
+        self.daily_spent = daily_spent;
+        self.per_destination_spent.insert(destination.to_string(), destination_spent);
+    }
 }
 
 #[cfg(test)]

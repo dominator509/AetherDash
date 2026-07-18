@@ -1,6 +1,6 @@
 // Command room state management.
 
-export type CommandMessageRole = 'user' | 'assistant' | 'system';
+export type CommandMessageRole = "user" | "assistant" | "system";
 
 export interface CommandMessage {
   id: string;
@@ -15,7 +15,7 @@ export interface ActionCard {
   refId: string;
   summary: string;
   tierReason: string;
-  paperLive: 'paper' | 'live';
+  paperLive: "paper" | "live";
   requiresTotp: boolean;
   confirmed: boolean;
 }
@@ -35,7 +35,7 @@ export function createCommandRoomState(): CommandRoomState {
   return {
     messages: [],
     streaming: false,
-    streamBuffer: '',
+    streamBuffer: "",
     slashCommands: [],
     tier: 1,
   };
@@ -51,7 +51,7 @@ export function finalizeStream(state: CommandRoomState): CommandRoomState {
   if (state.streamBuffer.length === 0) return state;
   const message: CommandMessage = {
     id: crypto.randomUUID(),
-    role: 'assistant',
+    role: "assistant",
     text: state.streamBuffer,
     timestamp: Date.now(),
     actionCards: [],
@@ -59,7 +59,7 @@ export function finalizeStream(state: CommandRoomState): CommandRoomState {
   return {
     ...state,
     messages: [...state.messages, message],
-    streamBuffer: '',
+    streamBuffer: "",
     streaming: false,
   };
 }
@@ -68,7 +68,7 @@ export function finalizeStream(state: CommandRoomState): CommandRoomState {
 export function addActionCard(state: CommandRoomState, card: ActionCard): CommandRoomState {
   const messages = [...state.messages];
   const lastMsg = messages[messages.length - 1];
-  if (lastMsg && lastMsg.role === 'assistant') {
+  if (lastMsg && lastMsg.role === "assistant") {
     lastMsg.actionCards = [...lastMsg.actionCards, card];
     messages[messages.length - 1] = { ...lastMsg };
   }
@@ -76,10 +76,14 @@ export function addActionCard(state: CommandRoomState, card: ActionCard): Comman
 }
 
 /** Submit a user command. */
-export function submitCommand(state: CommandRoomState, text: string, roomContext: Record<string, unknown> = {}): CommandRoomState {
+export function submitCommand(
+  state: CommandRoomState,
+  text: string,
+  _roomContext: Record<string, unknown> = {},
+): CommandRoomState {
   const userMsg: CommandMessage = {
     id: crypto.randomUUID(),
-    role: 'user',
+    role: "user",
     text,
     timestamp: Date.now(),
     actionCards: [],
@@ -87,7 +91,7 @@ export function submitCommand(state: CommandRoomState, text: string, roomContext
   return {
     ...state,
     messages: [...state.messages, userMsg],
-    streamBuffer: '',
+    streamBuffer: "",
     streaming: true,
   };
 }

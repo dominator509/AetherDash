@@ -14,12 +14,7 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import type {
-  PanelLayoutState,
-  PanelId,
-  PanelInstance,
-  DockPosition,
-} from "@/lib/panel-layout";
+import type { PanelLayoutState, PanelId, PanelInstance, DockPosition } from "@/lib/panel-layout";
 import {
   undockPanel,
   closePanel,
@@ -32,10 +27,7 @@ import {
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 /** Maps component name strings from PanelConfig to actual React components. */
-export type PanelComponentRegistry = Record<
-  string,
-  React.ComponentType<Record<string, unknown>>
->;
+export type PanelComponentRegistry = Record<string, React.ComponentType<Record<string, unknown>>>;
 
 export interface PanelLayoutProps {
   /** Current panel layout state. */
@@ -70,59 +62,57 @@ const DOCK_BOTTOM_HEIGHT = 280;
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export function PanelLayout({
-  state,
-  onChange,
-  registry,
-  className = "",
-}: PanelLayoutProps) {
+export function PanelLayout({ state, onChange, registry, className = "" }: PanelLayoutProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // ---- Derived panel groups ----
 
-  const { centerPanels, leftPanels, rightPanels, bottomPanels, floatingPanels } =
-    useMemo(() => {
-      const groups: Record<DockPosition, PanelInstance[]> = {
-        center: [],
-        left: [],
-        right: [],
-        bottom: [],
-        floating: [],
-      };
+  const { centerPanels, leftPanels, rightPanels, bottomPanels, floatingPanels } = useMemo(() => {
+    const groups: Record<DockPosition, PanelInstance[]> = {
+      center: [],
+      left: [],
+      right: [],
+      bottom: [],
+      floating: [],
+    };
 
-      for (const id of state.order) {
-        const panel = state.panels.get(id);
-        if (!panel || !panel.visible) continue;
-        groups[panel.dock]?.push(panel);
-      }
+    for (const id of state.order) {
+      const panel = state.panels.get(id);
+      if (!panel || !panel.visible) continue;
+      groups[panel.dock]?.push(panel);
+    }
 
-      return {
-        centerPanels: groups.center,
-        leftPanels: groups.left,
-        rightPanels: groups.right,
-        bottomPanels: groups.bottom,
-        floatingPanels: groups.floating,
-      };
-    }, [state]);
+    return {
+      centerPanels: groups.center,
+      leftPanels: groups.left,
+      rightPanels: groups.right,
+      bottomPanels: groups.bottom,
+      floatingPanels: groups.floating,
+    };
+  }, [state]);
 
   // When maximized, only render that panel
-  const maximizedPanel = state.maximized
-    ? state.panels.get(state.maximized)
-    : null;
+  const maximizedPanel = state.maximized ? state.panels.get(state.maximized) : null;
 
   // ---- Clamp floating panels on mount ----
 
   useEffect(() => {
     let changed = false;
     for (const panel of floatingPanels) {
-      if (panel.x < 0) { panel.x = 0; changed = true; }
-      if (panel.y < 0) { panel.y = 0; changed = true; }
+      if (panel.x < 0) {
+        panel.x = 0;
+        changed = true;
+      }
+      if (panel.y < 0) {
+        panel.y = 0;
+        changed = true;
+      }
     }
     if (changed) {
       onChange({ ...state, panels: new Map(state.panels) });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---- Drag handlers ----
 
@@ -186,7 +176,12 @@ export function PanelLayout({
 
       if (dragState.type === "move") {
         onChange(
-          movePanel(state, dragState.panelId, dragState.startPanelX + dx, dragState.startPanelY + dy),
+          movePanel(
+            state,
+            dragState.panelId,
+            dragState.startPanelX + dx,
+            dragState.startPanelY + dy,
+          ),
         );
       } else if (dragState.type === "resize") {
         const handle = dragState.handle ?? "se";
@@ -198,9 +193,7 @@ export function PanelLayout({
         if (handle.includes("s")) newH = dragState.startH + dy;
         if (handle.includes("n")) newH = dragState.startH - dy;
 
-        onChange(
-          resizePanel(state, dragState.panelId, Math.round(newW), Math.round(newH)),
-        );
+        onChange(resizePanel(state, dragState.panelId, Math.round(newW), Math.round(newH)));
       }
     };
 
@@ -239,12 +232,7 @@ export function PanelLayout({
 
   const handleMaximize = useCallback(
     (id: PanelId) => {
-      onChange(
-        maximizePanel(
-          state,
-          state.maximized === id ? null : id,
-        ),
-      );
+      onChange(maximizePanel(state, state.maximized === id ? null : id));
     },
     [state, onChange],
   );
@@ -276,14 +264,10 @@ export function PanelLayout({
   const renderPanelHeader = (panel: PanelInstance) => (
     <div
       className="flex items-center justify-between px-2 py-1 bg-gray-100 border-b border-gray-200 cursor-grab active:cursor-grabbing select-none flex-shrink-0"
-      onMouseDown={(e) =>
-        panel.dock === "floating" && handleDragStart(e, panel.config.id, "move")
-      }
+      onMouseDown={(e) => panel.dock === "floating" && handleDragStart(e, panel.config.id, "move")}
       onDoubleClick={() => handleUndock(panel.config.id)}
     >
-      <span className="text-xs font-medium text-gray-700 truncate">
-        {panel.config.title}
-      </span>
+      <span className="text-xs font-medium text-gray-700 truncate">{panel.config.title}</span>
       <div className="flex items-center gap-0.5">
         {/* Undock button — only show for docked panels */}
         {panel.dock !== "floating" && (
@@ -293,7 +277,15 @@ export function PanelLayout({
             title="Undock panel"
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <rect x="1" y="1" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="0.8" />
+              <rect
+                x="1"
+                y="1"
+                width="6"
+                height="6"
+                rx="1"
+                stroke="currentColor"
+                strokeWidth="0.8"
+              />
               <path d="M5 4 L9 8 M9 5 V9 H5" stroke="currentColor" strokeWidth="0.8" />
             </svg>
           </PanelButton>
@@ -307,17 +299,45 @@ export function PanelLayout({
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
             {state.maximized === panel.config.id ? (
               <>
-                <rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="0.8" />
-                <rect x="0.5" y="0.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="0.8" />
+                <rect
+                  x="3"
+                  y="3"
+                  width="6"
+                  height="6"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="0.8"
+                />
+                <rect
+                  x="0.5"
+                  y="0.5"
+                  width="4.5"
+                  height="4.5"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="0.8"
+                />
               </>
             ) : (
-              <rect x="1" y="1" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="0.8" />
+              <rect
+                x="1"
+                y="1"
+                width="8"
+                height="8"
+                rx="1"
+                stroke="currentColor"
+                strokeWidth="0.8"
+              />
             )}
           </svg>
         </PanelButton>
         {/* Close button — hidden for pinned panels */}
         {!panel.config.pinned && (
-          <PanelButton label="Close" onClick={() => handleClose(panel.config.id)} title="Close panel">
+          <PanelButton
+            label="Close"
+            onClick={() => handleClose(panel.config.id)}
+            title="Close panel"
+          >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 2 L8 8 M8 2 L2 8" stroke="currentColor" strokeWidth="0.8" />
             </svg>
@@ -347,7 +367,10 @@ export function PanelLayout({
 
   if (maximizedPanel) {
     return (
-      <div ref={containerRef} className={`relative w-full h-full overflow-hidden bg-gray-950 ${className}`}>
+      <div
+        ref={containerRef}
+        className={`relative w-full h-full overflow-hidden bg-gray-950 ${className}`}
+      >
         <div className="absolute inset-0 z-50 flex flex-col bg-white border-2 border-blue-400 rounded">
           {renderPanelContent(maximizedPanel)}
         </div>
@@ -372,13 +395,11 @@ export function PanelLayout({
         className="w-full h-full"
         style={{
           display: "grid",
-          gridTemplateColumns: hasLeft ? `${DOCK_LEFT_WIDTH}px 1fr${hasRight ? ` ${DOCK_RIGHT_WIDTH}px` : ""}` : `1fr${hasRight ? ` ${DOCK_RIGHT_WIDTH}px` : ""}`,
+          gridTemplateColumns: hasLeft
+            ? `${DOCK_LEFT_WIDTH}px 1fr${hasRight ? ` ${DOCK_RIGHT_WIDTH}px` : ""}`
+            : `1fr${hasRight ? ` ${DOCK_RIGHT_WIDTH}px` : ""}`,
           gridTemplateRows: hasBottom ? `1fr ${DOCK_BOTTOM_HEIGHT}px` : "1fr",
-          gridTemplateAreas: [
-            hasLeft ? "left" : "",
-            "center",
-            hasRight ? "right" : "",
-          ]
+          gridTemplateAreas: [hasLeft ? "left" : "", "center", hasRight ? "right" : ""]
             .filter(Boolean)
             .map((area) => {
               if (area === "left") return `"left center${hasRight ? " right" : ""}"`;
@@ -391,13 +412,12 @@ export function PanelLayout({
       >
         {/* Left dock */}
         {hasLeft && (
-          <div className="flex flex-col gap-0.5 p-0.5 overflow-hidden bg-gray-900" style={{ gridArea: "left" }}>
+          <div
+            className="flex flex-col gap-0.5 p-0.5 overflow-hidden bg-gray-900"
+            style={{ gridArea: "left" }}
+          >
             {leftPanels.map((panel) => (
-              <DockedPanel
-                key={panel.config.id}
-                panel={panel}
-                onFocus={handleFocus}
-              >
+              <DockedPanel key={panel.config.id} panel={panel} onFocus={handleFocus}>
                 {renderPanelContent(panel)}
               </DockedPanel>
             ))}
@@ -405,18 +425,17 @@ export function PanelLayout({
         )}
 
         {/* Center dock */}
-        <div className="flex flex-col gap-0.5 p-0.5 overflow-hidden bg-gray-900" style={{ gridArea: "center" }}>
+        <div
+          className="flex flex-col gap-0.5 p-0.5 overflow-hidden bg-gray-900"
+          style={{ gridArea: "center" }}
+        >
           {centerPanels.length === 0 && (
             <div className="flex items-center justify-center h-full text-gray-500 text-xs bg-gray-900 rounded border border-dashed border-gray-700">
               Drop panels here or undock a panel to float
             </div>
           )}
           {centerPanels.map((panel) => (
-            <DockedPanel
-              key={panel.config.id}
-              panel={panel}
-              onFocus={handleFocus}
-            >
+            <DockedPanel key={panel.config.id} panel={panel} onFocus={handleFocus}>
               {renderPanelContent(panel)}
             </DockedPanel>
           ))}
@@ -424,13 +443,12 @@ export function PanelLayout({
 
         {/* Right dock */}
         {hasRight && (
-          <div className="flex flex-col gap-0.5 p-0.5 overflow-hidden bg-gray-900" style={{ gridArea: "right" }}>
+          <div
+            className="flex flex-col gap-0.5 p-0.5 overflow-hidden bg-gray-900"
+            style={{ gridArea: "right" }}
+          >
             {rightPanels.map((panel) => (
-              <DockedPanel
-                key={panel.config.id}
-                panel={panel}
-                onFocus={handleFocus}
-              >
+              <DockedPanel key={panel.config.id} panel={panel} onFocus={handleFocus}>
                 {renderPanelContent(panel)}
               </DockedPanel>
             ))}
@@ -440,14 +458,12 @@ export function PanelLayout({
 
       {/* Bottom dock — rendered below the grid */}
       {hasBottom && (
-        <div className="absolute bottom-0 left-0 right-0 flex gap-0.5 p-0.5 overflow-hidden bg-gray-900 border-t border-gray-700"
-          style={{ height: DOCK_BOTTOM_HEIGHT }}>
+        <div
+          className="absolute bottom-0 left-0 right-0 flex gap-0.5 p-0.5 overflow-hidden bg-gray-900 border-t border-gray-700"
+          style={{ height: DOCK_BOTTOM_HEIGHT }}
+        >
           {bottomPanels.map((panel) => (
-            <DockedPanel
-              key={panel.config.id}
-              panel={panel}
-              onFocus={handleFocus}
-            >
+            <DockedPanel key={panel.config.id} panel={panel} onFocus={handleFocus}>
               {renderPanelContent(panel)}
             </DockedPanel>
           ))}

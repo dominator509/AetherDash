@@ -15,6 +15,7 @@ Core series (labels in braces):
 - `aether_llm_cache_hit_ratio` (gauge) and `aether_llm_prefix_cache_hits_total` / `_misses_total` - INV-3; the 90% target from PROJECT_BRIEF is read off this.
 - `aether_llm_cost_usd_total{provider,model,purpose}` and `aether_llm_calls_total{...}` - cost per surfaced opportunity derives from these + `aether_opps_surfaced_total`.
 - `aether_scan_cycle_ms` (histogram) - ~500 ms cadence check (SPEC-012).
+- `aether_scan_shed_total` / `aether_scan_fill_failures_total` - visible cost-aware shedding and fail-closed book-walk rejection.
 - `aether_order_submit_latency_ms{venue}` (histogram) - 20-50 ms API-venue budget.
 - `aether_router_decisions_total{verdict,reason}` - every rejection reason is a label value; a reason firing 100% or 0% for a day is an alert.
 - `aether_guardian_proposals_total{status}` and `aether_guardian_approval_latency_s`.
@@ -29,7 +30,7 @@ Core series (labels in braces):
 ## Health endpoints
 - `/healthz` = process liveness (always cheap, no dependencies).
 - `/readyz` = dependencies reachable (DB ping, bus metadata, downstream gRPC health). Gateway readiness additionally requires router readiness - the client should not accept order intents the router can't take.
-- `scripts/smoke-test.sh` `SERVICES_HEALTHZ` list mirrors this section as services land: gateway :8080, brain :8000, llm-router :8001, alerts :8002, inbox :8003 (gRPC services use grpc-health-probe convention instead).
+- `scripts/smoke-test.sh` and `scripts/health-check.sh` mirror this section as services land: gateway :8080, brain :8000, llm-router :8001, alerts :8002, inbox :8003, actions :8004, ingestion :8005 (gRPC services use grpc-health-probe convention instead).
 
 ## Tracing
 `trace_id` originates at the gateway (or scheduler for jobs) and propagates via headers/bus message metadata end-to-end; an opportunity's trace covers detect -> score -> surface -> intent -> router -> fill -> attribution. Full OTLP export is optional in v1; the ID discipline is not.

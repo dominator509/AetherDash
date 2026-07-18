@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- EP-207 recall v2: add a versioned graded nDCG/MRR benchmark, bounded one-hop Kuzu entity/market expansion, kind-specific age decay, EP-206 source-reliability weighting, optional cache-first local reranking, and a 100 ms wall-clock breaker that returns immutable v1 results on overload or stage failure.
+- EP-206 ingestion fleet: add durable source/rung audit, six compliance-ladder adapters with explicit downgrade evidence, bounded scheduler cursor semantics, real RapidOCR/ONNX screenshot reprocessing, source reliability scoring, loopback health/readiness/metrics/audit surfaces, and a hardened single-scheduler systemd deployment.
+- EP-307 completion repair: add the production bus-driven scanner, durable open-chain lifecycle/outbox, gateway feed surfacing, venue-adjacent conservative fee schedules, real Rust-backed simulator fill/sensitivity output, canonical scan histogram/counters, deterministic three-venue restart replay, and Postgres-backed closure/attribution evidence.
+- EP-306 S8/M5 repair: replace the Wallet Guardian banner stub with a loopback tonic service backed by durable proposal/event storage, credential-only key and TOTP custody, current grant/session revalidation, authoritative reference pricing and value derivation, atomic single-use step-up approval, exact contract-selector policy, a stdin-only Guardian action client, and restart-safe custody broadcast jobs with durable nonces and receipt reconciliation.
+- EP-203/EP-308 hardening: wire MCP `sim.run` to the canonical Rust simulator; add the loopback action service and `aether-execute-paper` transport that reload current grants/approvals, run shared router authz/risk, persist fills, and drain the outbox before completion; and add signed SMS, TLS email, plus single-use audited approval flows with mandatory client step-up for live-order and Guardian actions.
 - EP-000: Repository discovery & blueprint pack installation
 - EP-001: Monorepo scaffold with Rust (cargo), TypeScript (pnpm), and Python (uv) workspaces
 - EP-002: Core domain types (`crates/aether-core`), proto contracts (`proto/aether/core/v1/`), TS mirror (`packages/types`), Python mirror (`pylib/aether_py`)
@@ -71,5 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `scripts/production-readiness-check.sh`: Upgraded from stub to full gate with integrated health-check, per-step pass/fail reporting, and PRODUCTION_READINESS.md checklist auditing
+- EP-306 S8 hardening: serialize rolling-limit reservation across concurrent proposals, count all live proposal exposure, fail closed on malformed EIP-1559 signing fields, consume approval challenges after five invalid TOTP attempts, and enforce the 24-hour destination/selector allowlist cooldown at Guardian startup.
+- EP-307 audit hardening: replaced the no-op scanner path with deterministic canonical opportunity generation/publication; added same-event, status, venue, freshness, dedupe-kind, and bounded-work gates; loaded settlement mismatch discounts from the router-owned table; preserved negative net edge under the canonical sum law; and made simulator fill errors fail closed.
+- EP-307 status remains `revise` only for the operator-owned literal 24-hour paper-run artifact; all six code milestones and accelerated database-backed evidence gates are complete.
 
 [Unreleased]: https://github.com/operator/aetherdash/compare/v0.1.0...HEAD

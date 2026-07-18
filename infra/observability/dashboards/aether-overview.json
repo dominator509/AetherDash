@@ -9,12 +9,12 @@
     },
     {
       "title": "Scan Cycle (ms)",
-      "targets": [{ "expr": "aether_scan_cycle_ms" }],
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(aether_scan_cycle_ms_bucket[5m])) by (le))" }],
       "gridPos": { "x": 8, "y": 0, "w": 8, "h": 6 }
     },
     {
       "title": "Shed Count",
-      "targets": [{ "expr": "aether_scan_shed_count" }],
+      "targets": [{ "expr": "aether_scan_shed_total" }],
       "gridPos": { "x": 16, "y": 0, "w": 8, "h": 6 }
     },
     {
@@ -29,7 +29,7 @@
     },
     {
       "title": "Open Lifecycles",
-      "targets": [{ "expr": "aether_lifecycle_open" }],
+      "targets": [{ "expr": "aether_opportunity_lifecycle_open" }],
       "gridPos": { "x": 16, "y": 6, "w": 8, "h": 6 }
     },
     {
@@ -41,6 +41,11 @@
       "title": "Audit Chain Verified",
       "targets": [{ "expr": "aether_audit_chain_verified" }],
       "gridPos": { "x": 8, "y": 12, "w": 8, "h": 6 }
+    },
+    {
+      "title": "Ingestion by Compliance Rung",
+      "targets": [{ "expr": "sum by (source, ladder_rung) (aether_ingest_objects_total)" }],
+      "gridPos": { "x": 16, "y": 12, "w": 8, "h": 6 }
     }
   ]
 }

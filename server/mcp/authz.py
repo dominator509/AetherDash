@@ -31,7 +31,6 @@ class Decision:
 
 
 _MUTATING_TOOLS = {
-    "sim.run",
     "orders.draft",
     "alerts.configure",
     "vault.regenerate",

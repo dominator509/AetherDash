@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-203: Alert Engine & Comms
 
-**Band:** 2xx Brain | **Phase:** 1 | **Status:** revise | **Blocked by:** EP-004
+**Band:** 2xx Brain | **Phase:** 1 | **Status:** done | **Blocked by:** EP-004
 
 ## Purpose / Big Picture
 Push actionable intelligence off-screen: an alert engine that consumes opportunities/events and dispatches to Telegram, Discord, and Slack with inline Simulate/Execute/Ignore actions that honor the actor's tier. Phase-1 channels; SMS/email + full approval flows are EP-308.
@@ -43,13 +43,21 @@ Per-milestone; `test-integration.sh` green (API stubs, no real tokens); `verify.
 Alert dispatch dedups by (opportunity, rule) so restarts don't re-spam; callbacks are idempotent by action id. History is the record; a crash mid-dispatch re-derives pending from the consumer offset. Paper-only seam replaced when EP-305 lands.
 
 ## Progress
-- [x] M1 Rule engine  - [x] M2 Telegram  - [x] M3 Discord+Slack  - [ ] M4 Inline enforcement (awaits EP-304/305 effect adapters)  - [x] M5 History+ops
+- [x] M1 Rule engine  - [x] M2 Telegram  - [x] M3 Discord+Slack  - [x] M4 Inline enforcement  - [x] M5 History+ops
 
 ## Surprises & Discoveries
 The original implementation only formatted outbound messages and returned policy-like dictionaries. The hardened implementation verifies each platform webhook, resolves channel identities and current grants from Postgres, records per-channel delivery outcomes, and fails closed when the future simulator/router effect adapter is unavailable.
 
+- 2026-07-17 audit: `sim.run` was still a generic MCP echo and was incorrectly classified as a mutating tier-3 action. It now invokes the canonical Rust simulator JSON transport, and simulation no longer requires confirmation.
+- 2026-07-17 repair: inline callbacks now report completion only after a loopback-or-HTTPS authoritative action service returns an explicit completed result. Missing transport, ambiguous queued results, insecure remote HTTP, and downstream errors fail closed.
+- 2026-07-17 completion: the receiving action service now reloads current grants and action-bound approvals, runs simulation through the canonical simulator, records Ignore lifecycle transitions, and sends paper intents through a Rust executor that repeats shared router authorization/risk before durable fill/outbox completion. Explicit paper balances are required; none are fabricated.
+
 ## Decision Log
-Step-up and confirmation bounce to the authenticated client; chat callbacks never accept TOTP material. Execute remains paper-only and cannot produce an effect until EP-304/305 installs the shared enforcement adapter.
+Step-up and confirmation bounce to the authenticated client; chat callbacks never accept TOTP material. Inline Execute remains paper-only in EP-203 and reaches the shared EP-305 authorization/risk plus EP-304 persistence path through the authoritative action service.
+
+- 2026-07-17: the alerts service does not duplicate router or caps policy. Its action adapter carries only the verified actor/action reference to the authoritative server-plane service, which reloads the current grant and independently applies the canonical checks. Multi-leg opportunities are not marked executed until every durable paper order completes; partial failures remain accepted and retryable by deterministic order id.
 
 ## Outcomes & Retrospective
-Three channel adapters and authenticated callback endpoints are implemented with durable per-channel history and an aiokafka `opps.detected`/`alerts.outbound` path. Completion remains blocked on the EP-304/305 effect adapter; readiness and callbacks report that condition rather than simulating success.
+Three channel adapters and authenticated callback endpoints are implemented with durable per-channel history and an aiokafka `opps.detected`/`alerts.outbound` path. Readiness and callbacks report missing downstream action dependencies rather than simulating success.
+
+The MCP simulator path, alert-side adapter, receiving action API, canonical paper router transport, durable lifecycle transition, migration, and hardened deployment unit are implemented. Focused alert/MCP/comms/action tests and router/ledger suites prove fail-closed transport, current grant/scope checks, confirmation binding, replay handling, and no premature multi-leg completion. Repository-wide `verify.sh` is green. The migrated integration acceptance also passes without restarting services: a uniquely grouped alert consumer reads a scripted `opps.detected` envelope from the running Redpanda, evaluates it, publishes `alerts.outbound`, records the channel attempt in a clean migration-1-through-35 Postgres database, and observes the exact sent message id. Production still requires migration 0034, explicit paper balances, internal service tokens, Postgres, and Redpanda; missing inputs degrade safely rather than simulate success.

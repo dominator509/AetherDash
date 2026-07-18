@@ -1,0 +1,6 @@
+# Conservative baseline using the higher published spot taker rate. User tier,
+# referral, and account-specific rates must override this before live routing.
+model = "notional_rate"
+taker_rate = "0.0007"
+source = "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/fees"
+verified_utc = "2026-07-17"

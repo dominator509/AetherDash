@@ -25,7 +25,7 @@ AETHER_ENV_FILE="/etc/aether/environment"
 AETHER_NGINX_SITES="/etc/nginx/sites-available"
 AETHER_LOG_DIR="/var/log/aether"
 AETHER_DATA_DIR="${AETHER_HOME}/data"
-AETHER_KEYSTORE_DIR="/etc/aether/guardian-keystore"
+AETHER_CREDENTIAL_DIR="${AETHER_HOME}/shared/credentials"
 AETHER_SCRIPTS_DIR="${AETHER_HOME}/scripts"
 
 # Self path
@@ -155,7 +155,7 @@ setup_user_and_dirs() {
         "$AETHER_HOME"
         "$AETHER_DATA_DIR"
         "$AETHER_LOG_DIR"
-        "$AETHER_KEYSTORE_DIR"
+        "$AETHER_CREDENTIAL_DIR"
         "$AETHER_SCRIPTS_DIR"
         "/etc/aether"
         "/var/www/acme"
@@ -173,8 +173,8 @@ setup_user_and_dirs() {
     # Set ownership
     run chown -R "$AETHER_USER":"$AETHER_GROUP" "$AETHER_HOME"
     run chown -R "$AETHER_USER":"$AETHER_GROUP" "$AETHER_LOG_DIR"
-    run chown -R "$AETHER_USER":"$AETHER_GROUP" "$AETHER_KEYSTORE_DIR"
-    run chmod 750 "$AETHER_KEYSTORE_DIR"
+    run chown root:root "$AETHER_CREDENTIAL_DIR"
+    run chmod 700 "$AETHER_CREDENTIAL_DIR"
 
     # Log directory must be writable by the service user
     run chmod 755 "$AETHER_LOG_DIR"
@@ -221,7 +221,9 @@ install_systemd_units() {
         aether-simulator.service
         aether-paper-ledger.service
         aether-alerts.service
+        aether-actions.service
         aether-inbox.service
+        aether-ingest.service
         audit-verify.service
         audit-verify.timer
     )
@@ -420,6 +422,8 @@ install_binaries() {
         aether-scanner
         aether-simulator
         aether-paper-ledger
+        aether-execute-paper
+        guardian-client
     )
 
     local count=0
@@ -455,7 +459,7 @@ setup_python_env() {
     # Check for uv or pip
     if command -v uv &>/dev/null; then
         run uv venv "$venv_path"
-        run uv sync --directory "${REPO_ROOT}" --link-mode copy
+        run env UV_PROJECT_ENVIRONMENT="$venv_path" uv sync --directory "${REPO_ROOT}" --all-packages --link-mode copy
         ok "Python environment created with uv"
     elif command -v python3 &>/dev/null; then
         run python3 -m venv "$venv_path"

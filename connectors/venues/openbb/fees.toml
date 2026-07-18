@@ -1,0 +1,5 @@
+# OpenBB is a read-only data provider, never an execution venue.
+model = "read_only"
+taker_rate = "0"
+source = "repo capability manifest"
+verified_utc = "2026-07-17"

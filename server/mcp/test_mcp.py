@@ -1,5 +1,8 @@
 """MCP tier-filtering contract tests."""
 
+from decimal import Decimal
+from typing import Any
+
 import pytest
 from app import app
 from auth import PermissionDeniedError, Session
@@ -76,6 +79,124 @@ def test_trader_can_call_read_tool() -> None:
     resp = client.post("/tools/brain.search", headers=_auth("test-trader"))
     assert resp.status_code == 200
     assert "stub" in resp.json()["result"]
+
+
+def test_sim_run_uses_canonical_handler(monkeypatch: MonkeyPatch) -> None:
+    import app as app_module
+
+    async def fake_simulator(payload: dict[str, object]) -> dict[str, object]:
+        assert payload["buy_price"] == "0.62"
+        return {"decomposition": {"net_edge": "0.04"}, "buy_fills": []}
+
+    monkeypatch.setattr(app_module, "run_simulation", fake_simulator)
+    resp = client.post(
+        "/tools/sim.run",
+        headers=_auth("test-trader"),
+        json={"buy_price": "0.62"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["result"]["decomposition"]["net_edge"] == "0.04"
+
+
+def test_tier_three_simulation_does_not_require_confirmation(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    import app as app_module
+
+    async def fake_simulator(payload: dict[str, object]) -> dict[str, object]:
+        return {"decomposition": {"net_edge": "0"}}
+
+    monkeypatch.setattr(app_module, "run_simulation", fake_simulator)
+    resp = client.post(
+        "/tools/sim.run",
+        headers=_auth("test-trader"),
+        json={"scenario": "paper"},
+    )
+    assert resp.status_code == 200
+
+
+def test_swarm_launch_confirmation_is_actor_bound_payload_bound_and_single_use(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    import app as app_module
+
+    class FakePacket:
+        def model_dump(self, *, mode: str) -> dict[str, object]:
+            assert mode == "json"
+            return {
+                "recommendation": {
+                    "text": "Proceed cautiously.",
+                    "citations": [
+                        {"object_id": "brain-1", "provenance_hash": "hash-1"}
+                    ],
+                },
+                "rationale": [
+                    {
+                        "text": "Fixture evidence.",
+                        "citations": [
+                            {"object_id": "brain-1", "provenance_hash": "hash-1"}
+                        ],
+                    }
+                ],
+                "proposal_only": True,
+            }
+
+    class FakeOrchestrator:
+        async def launch(self, request: Any, *, progress: object) -> FakePacket:
+            assert request.question == "Should we enter?"
+            assert callable(progress)
+            return FakePacket()
+
+    monkeypatch.setattr(app_module, "SwarmOrchestrator", FakeOrchestrator)
+    payload = {
+        "question": "Should we enter?",
+        "budget": {
+            "max_calls": 1,
+            "max_tokens": 1_000,
+            "max_cost_usd": str(Decimal("1")),
+            "max_seconds": 5,
+        },
+        "workers": 1,
+    }
+
+    challenge = client.post(
+        "/tools/swarm.launch", headers=_auth("test-trader"), json=payload
+    )
+    assert challenge.status_code == 412
+    details = challenge.json()["details"]
+    ref_id = details.removeprefix("confirmation_ref=")
+
+    mismatched = client.post(
+        "/tools/swarm.launch",
+        headers=_auth("test-trader"),
+        json={**payload, "question": "Changed", "confirmation_ref": ref_id},
+    )
+    assert mismatched.status_code == 412
+
+    # Payload mismatch consumes the opaque capability, so a fresh challenge is required.
+    challenge = client.post(
+        "/tools/swarm.launch", headers=_auth("test-trader"), json=payload
+    )
+    ref_id = challenge.json()["details"].removeprefix("confirmation_ref=")
+    confirmed_payload = {**payload, "confirmation_ref": ref_id}
+    launched = client.post(
+        "/tools/swarm.launch", headers=_auth("test-trader"), json=confirmed_payload
+    )
+    assert launched.status_code == 200
+    result = launched.json()["result"]
+    assert result["proposal_only"] is True
+    assert result["recommendation"]["citations"][0]["provenance_hash"] == "hash-1"
+
+    replay = client.post(
+        "/tools/swarm.launch", headers=_auth("test-trader"), json=confirmed_payload
+    )
+    assert replay.status_code == 412
+
+
+def test_sim_run_rejects_empty_payload() -> None:
+    resp = client.post("/tools/sim.run", headers=_auth("test-trader"), json={})
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "invalid_argument"
 
 
 def test_admin_live_tool_requires_step_up() -> None:

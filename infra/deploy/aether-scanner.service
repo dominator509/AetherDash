@@ -2,14 +2,14 @@
 # AETHER Scanner
 # Plane 2 — bus consumer that subscribes to md.* topics,
 # detects opportunities, scores them, and publishes to
-# opps.detected.  Stateless; restarts cleanly with consumer
-# group rebalance.
+# opps.detected. Open-chain dedupe and lifecycle state are durable in
+# Postgres; bus consumers resume through their service groups.
 # ================================================================
 [Unit]
 Description=AETHER Opportunity Scanner
 Documentation=https://github.com/AetherDash/aether
-After=network.target redpanda.service clickhouse.service
-Wants=redpanda.service clickhouse.service
+After=network.target redpanda.service postgresql.service
+Wants=redpanda.service postgresql.service
 
 [Service]
 Type=simple

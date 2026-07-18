@@ -3,11 +3,10 @@
 //! SPEC-012: The simulator MUST produce identical fills to the paper ledger
 //! (direct `walk_book` call) for the same book + intent.  This is the
 //! **parity contract** between EP-304 (paper ledger) and EP-307 (simulator).
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use aether_core::ids::{MarketKey, Ulid, VenueId};
-use aether_core::order::{
-    OrderIntent, OrderType, Origin, OriginKind, Side, SizeUnit, TimeInForce,
-};
+use aether_core::order::{OrderIntent, OrderType, Origin, OriginKind, Side, SizeUnit, TimeInForce};
 use aether_core::quote::{BookLevel, OrderBook, Quote, QuoteSource};
 use aether_core::time::UtcTime;
 use aether_core::Fill;
@@ -19,7 +18,7 @@ use rust_decimal::Decimal;
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 fn test_market() -> MarketKey {
-    MarketKey::new(&VenueId::new("test").unwrap(), "TST").unwrap()
+    MarketKey::new(&VenueId::new("hyperliquid").unwrap(), "TST").unwrap()
 }
 
 fn test_book() -> OrderBook {
@@ -28,25 +27,13 @@ fn test_book() -> OrderBook {
         test_market(),
         // Bids descending
         vec![
-            BookLevel {
-                price: Decimal::new(9980, 2),
-                size: Decimal::new(1000, 0),
-            },
-            BookLevel {
-                price: Decimal::new(9970, 2),
-                size: Decimal::new(500, 0),
-            },
+            BookLevel { price: Decimal::new(9980, 2), size: Decimal::new(1000, 0) },
+            BookLevel { price: Decimal::new(9970, 2), size: Decimal::new(500, 0) },
         ],
         // Asks ascending
         vec![
-            BookLevel {
-                price: Decimal::new(10020, 2),
-                size: Decimal::new(1000, 0),
-            },
-            BookLevel {
-                price: Decimal::new(10050, 2),
-                size: Decimal::new(500, 0),
-            },
+            BookLevel { price: Decimal::new(10020, 2), size: Decimal::new(1000, 0) },
+            BookLevel { price: Decimal::new(10050, 2), size: Decimal::new(500, 0) },
         ],
         2,
         ts,
@@ -56,11 +43,7 @@ fn test_book() -> OrderBook {
 }
 
 /// Build an OrderIntent matching the simulator's internal `build_intent`.
-fn paper_ledger_intent(
-    book: &OrderBook,
-    side: Side,
-    size: Decimal,
-) -> OrderIntent {
+fn paper_ledger_intent(book: &OrderBook, side: Side, size: Decimal) -> OrderIntent {
     let origin =
         Origin::new(OriginKind::Automation, 3, Ulid::new()).expect("valid origin with tier 3");
     let quote_snapshot = Quote {
@@ -114,21 +97,21 @@ fn parity_simulator_fills_match_paper_ledger() {
     let input = SimulationInput {
         buy_price: Decimal::new(100, 0),
         sell_price: Decimal::new(101, 0),
-        price_kind: "probability".into(),
+        price_kind: "currency".into(),
         notional,
         buy_book: Some(book.clone()),
-        sell_book: None,
+        sell_book: Some(book.clone()),
         funding_rate: Decimal::ZERO,
         hold_hours: Decimal::ZERO,
         max_quote_age_ms: 0,
         tick_stale_ms: 5000,
         confidence: Decimal::ONE,
         is_cross_chain: false,
-        mismatch_discount: Decimal::ZERO,
+        buy_venue: "hyperliquid".into(),
+        sell_venue: "hyperliquid".into(),
     };
-    let simulator = Simulator::new(SimulationConfig::default());
-    let sim_result =
-        simulator.simulate(&input).expect("simulator should succeed");
+    let simulator = Simulator::new(SimulationConfig::default()).unwrap();
+    let sim_result = simulator.simulate(&input).expect("simulator should succeed");
 
     // ── Assertions ──
     assert_eq!(
@@ -140,22 +123,10 @@ fn parity_simulator_fills_match_paper_ledger() {
     for (i, (sim_fill, paper_fill)) in
         sim_result.buy_fills.iter().zip(paper_fills.iter()).enumerate()
     {
-        assert_eq!(
-            sim_fill.price, paper_fill.price,
-            "parity: fill {i} price mismatch"
-        );
-        assert_eq!(
-            sim_fill.size, paper_fill.size,
-            "parity: fill {i} size mismatch"
-        );
-        assert_eq!(
-            sim_fill.side, paper_fill.side,
-            "parity: fill {i} side mismatch"
-        );
-        assert_eq!(
-            sim_fill.market, paper_fill.market,
-            "parity: fill {i} market mismatch"
-        );
+        assert_eq!(sim_fill.price, paper_fill.price, "parity: fill {i} price mismatch");
+        assert_eq!(sim_fill.size, paper_fill.size, "parity: fill {i} size mismatch");
+        assert_eq!(sim_fill.side, paper_fill.side, "parity: fill {i} side mismatch");
+        assert_eq!(sim_fill.market, paper_fill.market, "parity: fill {i} market mismatch");
         assert_eq!(
             sim_fill.fee.amount, paper_fill.fee.amount,
             "parity: fill {i} fee amount mismatch"
@@ -164,10 +135,7 @@ fn parity_simulator_fills_match_paper_ledger() {
             sim_fill.fee.currency, paper_fill.fee.currency,
             "parity: fill {i} fee currency mismatch"
         );
-        assert_eq!(
-            sim_fill.paper, paper_fill.paper,
-            "parity: fill {i} paper flag mismatch"
-        );
+        assert_eq!(sim_fill.paper, paper_fill.paper, "parity: fill {i} paper flag mismatch");
     }
 }
 
@@ -187,9 +155,9 @@ fn parity_simulator_sell_fills_match_paper_ledger() {
     let input = SimulationInput {
         buy_price: Decimal::new(100, 0),
         sell_price: Decimal::new(101, 0),
-        price_kind: "probability".into(),
+        price_kind: "currency".into(),
         notional,
-        buy_book: None,
+        buy_book: Some(book.clone()),
         sell_book: Some(book),
         funding_rate: Decimal::ZERO,
         hold_hours: Decimal::ZERO,
@@ -197,11 +165,11 @@ fn parity_simulator_sell_fills_match_paper_ledger() {
         tick_stale_ms: 5000,
         confidence: Decimal::ONE,
         is_cross_chain: false,
-        mismatch_discount: Decimal::ZERO,
+        buy_venue: "hyperliquid".into(),
+        sell_venue: "hyperliquid".into(),
     };
-    let simulator = Simulator::new(SimulationConfig::default());
-    let sim_result =
-        simulator.simulate(&input).expect("simulator should succeed");
+    let simulator = Simulator::new(SimulationConfig::default()).unwrap();
+    let sim_result = simulator.simulate(&input).expect("simulator should succeed");
 
     assert_eq!(
         sim_result.sell_fills.len(),
@@ -226,19 +194,20 @@ fn parity_deterministic_repeatability() {
     let input = SimulationInput {
         buy_price: Decimal::new(100, 0),
         sell_price: Decimal::new(101, 0),
-        price_kind: "probability".into(),
+        price_kind: "currency".into(),
         notional: Decimal::new(100, 0),
-        buy_book: Some(book),
-        sell_book: None,
+        buy_book: Some(book.clone()),
+        sell_book: Some(book),
         funding_rate: Decimal::ZERO,
         hold_hours: Decimal::ZERO,
         max_quote_age_ms: 0,
         tick_stale_ms: 5000,
         confidence: Decimal::ONE,
         is_cross_chain: false,
-        mismatch_discount: Decimal::ZERO,
+        buy_venue: "hyperliquid".into(),
+        sell_venue: "hyperliquid".into(),
     };
-    let sim = Simulator::new(SimulationConfig::default());
+    let sim = Simulator::new(SimulationConfig::default()).unwrap();
 
     let r1 = sim.simulate(&input).expect("first run");
     let r2 = sim.simulate(&input).expect("second run");

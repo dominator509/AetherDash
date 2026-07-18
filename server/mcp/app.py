@@ -17,11 +17,20 @@ from auth import (
     init_pool,
 )
 from authz import Verdict, emit_decision, evaluate_tool
+from confirmation import ConfirmationStore
 from error_envelope import ErrorCode, new_error_envelope
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from simulator import SimulationRejectedError, SimulatorUnavailableError, run_simulation
+
+from server.swarm.orchestrator import (
+    ProgressEvent,
+    SwarmNoEvidenceError,
+    SwarmOrchestrator,
+    SwarmRequest,
+)
 
 
 @asynccontextmanager
@@ -33,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="AETHER MCP Server", version="0.1.0", lifespan=lifespan)
+_confirmations = ConfirmationStore()
 
 
 @app.exception_handler(HTTPException)
@@ -113,11 +123,13 @@ def filter_for_session(session: Any) -> list[ToolInfo]:
     return filtered
 
 
-def _abort(status: int, code: ErrorCode, message: str) -> None:
+def _abort(
+    status: int, code: ErrorCode, message: str, *, details: str | None = None
+) -> None:
     """Raise an HTTPException with an ErrorEnvelope body."""
     raise HTTPException(
         status_code=status,
-        detail=new_error_envelope(code, message),
+        detail=new_error_envelope(code, message, details),
     )
 
 
@@ -145,8 +157,12 @@ async def list_tools(authorization: str | None = Header(None)) -> Any:
 
 
 @app.post("/tools/{tool_name}")
-async def call_tool(tool_name: str, authorization: str | None = Header(None)) -> Any:
-    """Stub: echo back the tool name. Real implementations in EP-201+."""
+async def call_tool(
+    tool_name: str,
+    payload: dict[str, Any] | None = None,
+    authorization: str | None = Header(None),
+) -> Any:
+    """Invoke an authorized tool, using a concrete handler when available."""
     try:
         session = await authenticate(authorization)
     except PermissionDeniedError as e:
@@ -160,7 +176,24 @@ async def call_tool(tool_name: str, authorization: str | None = Header(None)) ->
         _abort(404, ErrorCode.not_found, f"Unknown tool: {tool_name}")
     assert tool is not None  # type narrowing after _abort
 
-    decision = evaluate_tool(session, tool)
+    body = dict(payload or {})
+    confirmation_ref = body.pop("confirmation_ref", None)
+    confirmed = False
+    if isinstance(confirmation_ref, str):
+        confirmed = await _confirmations.consume(
+            confirmation_ref,
+            actor_id=session.actor_id,
+            tool_name=tool_name,
+            payload=body,
+        )
+        if not confirmed:
+            _abort(
+                412,
+                ErrorCode.failed_precondition,
+                "Confirmation is invalid, expired, consumed, or payload-mismatched",
+            )
+
+    decision = evaluate_tool(session, tool, confirmed=confirmed)
     emit_decision(session, tool_name, decision)
     if decision.verdict is Verdict.deny:
         _abort(
@@ -168,12 +201,57 @@ async def call_tool(tool_name: str, authorization: str | None = Header(None)) ->
             ErrorCode.permission_denied,
             "Tool is not permitted by the current grant",
         )
-    if decision.verdict in {Verdict.confirm_required, Verdict.step_up_required}:
+    if decision.verdict is Verdict.confirm_required:
+        ref_id = await _confirmations.issue(
+            actor_id=session.actor_id,
+            tool_name=tool_name,
+            payload=body,
+        )
         _abort(
             412,
             ErrorCode.failed_precondition,
-            "Human confirmation or fresh step-up authentication is required",
+            "Human confirmation is required",
+            details=f"confirmation_ref={ref_id}",
         )
+    if decision.verdict is Verdict.step_up_required:
+        _abort(
+            412,
+            ErrorCode.failed_precondition,
+            "Fresh step-up authentication is required",
+        )
+
+    if tool_name == "sim.run":
+        try:
+            return {"tool": tool_name, "result": await run_simulation(payload or {})}
+        except SimulationRejectedError as exc:
+            _abort(400, ErrorCode.invalid_argument, str(exc))
+        except SimulatorUnavailableError:
+            _abort(503, ErrorCode.unavailable, "Canonical simulator is unavailable")
+
+    if tool_name == "swarm.launch":
+        try:
+            request = SwarmRequest.model_validate(body)
+            progress_events: list[dict[str, Any]] = []
+
+            async def collect_progress(event: ProgressEvent) -> None:
+                progress_events.append(event.model_dump(mode="json"))
+
+            packet = await SwarmOrchestrator().launch(
+                request, progress=collect_progress
+            )
+            return {
+                "tool": tool_name,
+                "progress": progress_events,
+                "result": packet.model_dump(mode="json"),
+            }
+        except ValueError as exc:
+            _abort(400, ErrorCode.invalid_argument, str(exc))
+        except SwarmNoEvidenceError:
+            _abort(
+                422,
+                ErrorCode.failed_precondition,
+                "No cited Brain evidence was recalled",
+            )
 
     return {
         "tool": tool_name,

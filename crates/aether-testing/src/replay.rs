@@ -97,20 +97,12 @@ pub struct ReplayHarness {
 impl ReplayHarness {
     /// Create a new harness in capture mode.
     pub fn new_capture() -> Self {
-        Self {
-            events: Vec::new(),
-            mode: ReplayMode::Capture,
-            wall_start_ms: Self::now_ms(),
-        }
+        Self { events: Vec::new(), mode: ReplayMode::Capture, wall_start_ms: Self::now_ms() }
     }
 
     /// Create a harness from previously captured events (replay mode).
     pub fn new_replay(events: Vec<CapturedEvent>) -> Self {
-        Self {
-            events,
-            mode: ReplayMode::Replay,
-            wall_start_ms: 0,
-        }
+        Self { events, mode: ReplayMode::Replay, wall_start_ms: 0 }
     }
 
     /// Append an event to the capture buffer.
@@ -155,11 +147,8 @@ impl ReplayHarness {
         &self,
         handler: &mut impl FnMut(&CapturedEvent) -> Result<Vec<u8>, ReplayError>,
     ) -> Result<ReplayResult, ReplayError> {
-        let original_combined: Vec<u8> = self
-            .events
-            .iter()
-            .flat_map(|e| e.payload_bytes.clone())
-            .collect();
+        let original_combined: Vec<u8> =
+            self.events.iter().flat_map(|e| e.payload_bytes.clone()).collect();
         let original_sha256 = hex_sha256(&original_combined);
 
         let mut replay_outputs: Vec<Vec<u8>> = Vec::with_capacity(self.events.len());
@@ -168,18 +157,14 @@ impl ReplayHarness {
             replay_outputs.push(out);
         }
 
-        let replay_combined: Vec<u8> = replay_outputs.iter().flat_map(|v| v.iter()).copied().collect();
+        let replay_combined: Vec<u8> =
+            replay_outputs.iter().flat_map(|v| v.iter()).copied().collect();
         let replay_sha256 = hex_sha256(&replay_combined);
 
         let matched = original_sha256 == replay_sha256;
         let mut mismatches = Vec::new();
         if !matched {
-            for (i, (orig, replay)) in self
-                .events
-                .iter()
-                .zip(replay_outputs.iter())
-                .enumerate()
-            {
+            for (i, (orig, replay)) in self.events.iter().zip(replay_outputs.iter()).enumerate() {
                 let orig_hash = hex_sha256(&orig.payload_bytes);
                 let replay_hash = hex_sha256(replay);
                 if orig_hash != replay_hash {
@@ -212,9 +197,7 @@ impl ReplayHarness {
     /// Returns `ReplayError::CaptureNotFound` when the path does not exist.
     pub fn load(path: &Path) -> Result<Self, ReplayError> {
         if !path.exists() {
-            return Err(ReplayError::CaptureNotFound(
-                path.display().to_string(),
-            ));
+            return Err(ReplayError::CaptureNotFound(path.display().to_string()));
         }
         let bytes = fs::read(path)?;
         let events: Vec<CapturedEvent> = serde_json::from_slice(&bytes)?;
@@ -251,11 +234,7 @@ impl ReplayHarness {
 fn hex_sha256(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<String>()
+    hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect::<String>()
 }
 
 // ---------------------------------------------------------------------------
@@ -288,9 +267,8 @@ mod tests {
         assert_eq!(harness.events()[1].seq, 1);
 
         // Identity handler: return the original payload bytes unchanged.
-        let result = harness
-            .replay_events(&mut |ev: &CapturedEvent| Ok(ev.payload_bytes.clone()))
-            .unwrap();
+        let result =
+            harness.replay_events(&mut |ev: &CapturedEvent| Ok(ev.payload_bytes.clone())).unwrap();
 
         assert!(result.matched, "identity handler must produce matching hashes");
         assert_eq!(result.event_count, 2);
@@ -314,10 +292,7 @@ mod tests {
         assert_eq!(loaded.events().len(), 1);
         assert_eq!(loaded.events()[0].event_type, "test");
         assert_eq!(loaded.events()[0].trace_id, "trace-p");
-        assert_eq!(
-            loaded.events()[0].payload_sha256,
-            harness.events()[0].payload_sha256
-        );
+        assert_eq!(loaded.events()[0].payload_sha256, harness.events()[0].payload_sha256);
     }
 
     #[test]
@@ -366,8 +341,7 @@ mod tests {
         let harness = ReplayHarness::new_replay(vec![]);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut h = harness;
-            h.record_event("test", "t", &TestPayload { value: 0, label: "x".into() })
-                .ok();
+            h.record_event("test", "t", &TestPayload { value: 0, label: "x".into() }).ok();
         }));
         assert!(result.is_err(), "record_event on replay harness should panic");
     }

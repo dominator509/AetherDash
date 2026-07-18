@@ -5,7 +5,7 @@
 
 use aether_core::time::UtcTime;
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 /// SHA-256 hash bytes.
@@ -49,6 +49,12 @@ pub struct AuditChain {
     events: Vec<AuditEvent>,
     next_seq: u64,
     sealed: bool,
+}
+
+impl Default for AuditChain {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AuditChain {
@@ -97,7 +103,7 @@ impl AuditChain {
         event.hash = hash;
         self.next_seq += 1;
         self.events.push(event);
-        Ok(self.events.last().unwrap())
+        self.events.last().ok_or(AuditError::EmptyChain)
     }
 
     /// Verify the entire chain. Returns Ok(()) if all links are valid.
@@ -119,9 +125,18 @@ impl AuditChain {
         Ok(())
     }
 
-    pub fn len(&self) -> usize { self.events.len() }
-    pub fn last_seq(&self) -> u64 { self.next_seq.saturating_sub(1) }
-    pub fn events(&self) -> &[AuditEvent] { &self.events }
+    pub fn len(&self) -> usize {
+        self.events.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
+    pub fn last_seq(&self) -> u64 {
+        self.next_seq.saturating_sub(1)
+    }
+    pub fn events(&self) -> &[AuditEvent] {
+        &self.events
+    }
 
     fn compute_hash(event: &AuditEvent) -> Hash {
         let preimage = format!(

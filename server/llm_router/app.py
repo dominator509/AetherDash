@@ -32,6 +32,7 @@ class CompleteRequest(BaseModel):
     dynamic_inputs: dict[str, Any] = Field(default_factory=dict)
     rag_chunks: list[str] = Field(default_factory=list)
     model_policy: str = "default"
+    max_tokens: int | None = Field(default=None, ge=1, le=32_768)
 
 
 class EmbedRequest(BaseModel):
@@ -88,6 +89,7 @@ async def complete_endpoint(body: CompleteRequest) -> dict[str, Any]:
             purpose=body.purpose,
             messages=assembly.messages,
             model_policy=body.model_policy,
+            max_tokens=body.max_tokens,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

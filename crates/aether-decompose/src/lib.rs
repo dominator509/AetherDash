@@ -3,6 +3,7 @@
 
 pub mod components;
 pub mod decompose;
+pub mod fees;
 pub mod mismatch;
 
 pub use components::*;

@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 # Layer: 6 - Verification & Operations
-# EP-306: WalletConnect live readiness proof runner.
-#
-# This does not create WalletConnect credentials or pair a wallet by itself.
-# It verifies the operator supplied the live relay/testnet inputs, then runs the
-# ignored Rust harness that emits the policy-approved pairing/request packet for
-# the operator-wallet leg.
+# EP-306: WalletConnect live relay/session proof runner.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -52,11 +47,14 @@ case "${AETHER_GUARDIAN__WC_OPERATOR_ACCOUNT}" in
     ;;
 esac
 
-echo "WalletConnect live readiness env present:"
+echo "WalletConnect live relay/session env present:"
 echo "  AETHER_GUARDIAN__WC_PROJECT_ID=<set>"
 echo "  AETHER_GUARDIAN__WC_RELAY_URL=<set>"
 echo "  AETHER_GUARDIAN__WC_OPERATOR_ACCOUNT=${AETHER_GUARDIAN__WC_OPERATOR_ACCOUNT}"
 echo "  AETHER_GUARDIAN__WC_TESTNET_CHAIN_ID=${AETHER_GUARDIAN__WC_TESTNET_CHAIN_ID}"
 echo
-echo "Running ignored WalletConnect readiness harness..."
-cargo test -p aether-wallet-guardian --test wc_live_readiness -- --ignored --nocapture
+echo "Starting the real WalletConnect relay/session client..."
+node scripts/walletconnect-live-client.mjs
+
+evidence_path="${AETHER_GUARDIAN__WC_EVIDENCE_PATH:-data/walletconnect-live-evidence.json}"
+scripts/walletconnect-live-evidence-check.sh "$evidence_path"

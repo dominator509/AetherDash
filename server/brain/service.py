@@ -47,6 +47,8 @@ async def store_draft(
     origin: str | None = None,
     trust: str | None = None,
     raw_content: bytes | None = None,
+    ladder_rung: int = 6,
+    trace_id: str | None = None,
 ) -> BrainRef:
     """Ingest a raw content draft and return a BrainRef.
 
@@ -99,6 +101,9 @@ async def store_draft(
         )
         return existing_by_prov
 
+    if not 1 <= ladder_rung <= 6:
+        raise ValueError("ladder_rung must be between 1 and 6")
+
     # 5. Assemble BrainObject
     resolved_origin = Origin(origin) if origin else Origin.ingest_fleet
     resolved_trust = TrustLevel(trust) if trust else TrustLevel.medium
@@ -117,10 +122,17 @@ async def store_draft(
         clean_ref=clean_ref,
         provenance_hash=provenance_hash,
         tier=Tier.warm,
+        ladder_rung=ladder_rung,
     )
 
     # 6. INSERT into brain_objects (ON CONFLICT DO NOTHING for atomic dedupe)
-    inserted_id = await store.insert_object(brain_obj, on_conflict_do_nothing=True)
+    audit_trace_id = trace_id or str(ulid.new())
+    inserted_id = await store.insert_object(
+        brain_obj,
+        on_conflict_do_nothing=True,
+        intake_bytes=len(content_bytes),
+        trace_id=audit_trace_id,
+    )
     if inserted_id is None:
         # Another concurrent insert of the same source/content won.
         existing_ref = await store.object_exists_by_raw_sha256(raw_sha256, draft.source)
@@ -132,13 +144,17 @@ async def store_draft(
             )
             return existing_ref
         # Fallback: try without ON CONFLICT
-        await store.insert_object(brain_obj)
+        await store.insert_object(
+            brain_obj,
+            intake_bytes=len(content_bytes),
+            trace_id=audit_trace_id,
+        )
 
     # 7. Emit ingest_events row (rung: 1 = intake)
     await store.emit_ingest_event(
         object_id=obj_id,
         source=draft.source,
-        ladder_rung=1,
+        ladder_rung=ladder_rung,
         bytes_count=len(content_bytes),
     )
 

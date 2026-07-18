@@ -1,0 +1,1 @@
+[{"source": "licensed:fixture", "rung": 2, "adapter": "licensed_feed", "interval_seconds": 60, "endpoint": "https://example.test/feed", "credential_headers": {"Authorization": "FIXTURE_TOKEN_ENV"}}]

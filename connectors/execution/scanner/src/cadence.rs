@@ -3,6 +3,8 @@
 
 use std::time::Duration;
 
+pub const SCAN_CYCLE_METRIC: &str = "aether_scan_cycle_ms";
+
 #[derive(Debug, Clone)]
 pub struct CadenceController {
     target_cycle_ms: u64,
@@ -28,14 +30,13 @@ impl CadenceController {
     /// Begin a new scan cycle. Returns which shed level to use (0 = full, 1+ = increasingly aggressive).
     pub fn begin_cycle(&mut self) -> usize {
         let elapsed = self.last_cycle_ms;
-        for (i, &threshold) in self.shed_thresholds.iter().enumerate() {
-            if elapsed > threshold {
-                self.cycles_shed += 1;
-                return i + 1;
-            }
-        }
         self.cycles_completed += 1;
-        0 // full scan
+        let shed_level =
+            self.shed_thresholds.iter().filter(|&&threshold| elapsed > threshold).count();
+        if shed_level > 0 {
+            self.cycles_shed += 1;
+        }
+        shed_level
     }
 
     /// End a cycle and record the elapsed time.
@@ -70,8 +71,9 @@ mod tests {
     fn shed_when_over_budget() {
         let mut cc = CadenceController::new(500);
         cc.last_cycle_ms = 510; // over budget
-        assert_eq!(cc.begin_cycle(), 1); // shed level 1
+        assert_eq!(cc.begin_cycle(), 4); // all thresholds exceeded
         assert_eq!(cc.cycles_shed, 1);
+        assert_eq!(cc.cycles_completed, 1);
     }
 
     #[test]

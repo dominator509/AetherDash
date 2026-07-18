@@ -18,14 +18,17 @@ class FakeEffects:
         self.ignored: list[tuple[str, str]] = []
         self.executions: list[tuple[str, str]] = []
 
-    async def simulate(self, opportunity_id: str, actor_id: str) -> None:
+    async def simulate(self, opportunity_id: str, actor_id: str) -> dict:
         self.simulations.append((opportunity_id, actor_id))
+        return {"status": "completed"}
 
-    async def ignore(self, opportunity_id: str, actor_id: str) -> None:
+    async def ignore(self, opportunity_id: str, actor_id: str) -> dict:
         self.ignored.append((opportunity_id, actor_id))
+        return {"status": "completed"}
 
-    async def execute_paper(self, opportunity_id: str, actor_id: str) -> None:
+    async def execute_paper(self, opportunity_id: str, actor_id: str) -> dict:
         self.executions.append((opportunity_id, actor_id))
+        return {"status": "completed"}
 
 
 @pytest.mark.asyncio
@@ -43,7 +46,7 @@ async def test_callback_invokes_effect_after_policy_allows() -> None:
         result = await process_action_callback("ignore", "opp-1", "actor-1", 1)
     finally:
         configure_action_effects(None)
-    assert result["status"] == "ignored"
+    assert result["status"] == "completed"
     assert effects.ignored == [("opp-1", "actor-1")]
 
 

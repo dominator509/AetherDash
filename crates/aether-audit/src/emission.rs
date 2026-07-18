@@ -17,28 +17,100 @@ impl ActionClass {
     pub fn catalog() -> Vec<Self> {
         vec![
             // Auth / permissions (EP-401)
-            Self { domain: "auth".into(), action: "session.login".into(), actor_type: "human".into() },
-            Self { domain: "auth".into(), action: "session.logout".into(), actor_type: "human".into() },
-            Self { domain: "auth".into(), action: "grant.create".into(), actor_type: "admin".into() },
-            Self { domain: "auth".into(), action: "grant.revoke".into(), actor_type: "admin".into() },
-            Self { domain: "auth".into(), action: "caps.update".into(), actor_type: "admin".into() },
+            Self {
+                domain: "auth".into(),
+                action: "session.login".into(),
+                actor_type: "human".into(),
+            },
+            Self {
+                domain: "auth".into(),
+                action: "session.logout".into(),
+                actor_type: "human".into(),
+            },
+            Self {
+                domain: "auth".into(),
+                action: "grant.create".into(),
+                actor_type: "admin".into(),
+            },
+            Self {
+                domain: "auth".into(),
+                action: "grant.revoke".into(),
+                actor_type: "admin".into(),
+            },
+            Self {
+                domain: "auth".into(),
+                action: "caps.update".into(),
+                actor_type: "admin".into(),
+            },
             // Risk + orders (EP-305)
-            Self { domain: "execution".into(), action: "risk.verdict".into(), actor_type: "system".into() },
-            Self { domain: "execution".into(), action: "order.submitted".into(), actor_type: "agent".into() },
-            Self { domain: "execution".into(), action: "order.filled".into(), actor_type: "system".into() },
-            Self { domain: "execution".into(), action: "order.cancelled".into(), actor_type: "agent".into() },
+            Self {
+                domain: "execution".into(),
+                action: "risk.verdict".into(),
+                actor_type: "system".into(),
+            },
+            Self {
+                domain: "execution".into(),
+                action: "order.submitted".into(),
+                actor_type: "agent".into(),
+            },
+            Self {
+                domain: "execution".into(),
+                action: "order.filled".into(),
+                actor_type: "system".into(),
+            },
+            Self {
+                domain: "execution".into(),
+                action: "order.cancelled".into(),
+                actor_type: "agent".into(),
+            },
             // Guardian (EP-306)
-            Self { domain: "guardian".into(), action: "proposal.created".into(), actor_type: "agent".into() },
-            Self { domain: "guardian".into(), action: "proposal.approved".into(), actor_type: "human".into() },
-            Self { domain: "guardian".into(), action: "proposal.denied".into(), actor_type: "system".into() },
-            Self { domain: "guardian".into(), action: "tx.broadcast".into(), actor_type: "system".into() },
+            Self {
+                domain: "guardian".into(),
+                action: "proposal.created".into(),
+                actor_type: "agent".into(),
+            },
+            Self {
+                domain: "guardian".into(),
+                action: "proposal.approved".into(),
+                actor_type: "human".into(),
+            },
+            Self {
+                domain: "guardian".into(),
+                action: "proposal.denied".into(),
+                actor_type: "system".into(),
+            },
+            Self {
+                domain: "guardian".into(),
+                action: "tx.broadcast".into(),
+                actor_type: "system".into(),
+            },
             // Config / operations
-            Self { domain: "operations".into(), action: "live_enabled.toggled".into(), actor_type: "admin".into() },
-            Self { domain: "operations".into(), action: "flag.changed".into(), actor_type: "admin".into() },
-            Self { domain: "operations".into(), action: "plugin.installed".into(), actor_type: "admin".into() },
+            Self {
+                domain: "operations".into(),
+                action: "live_enabled.toggled".into(),
+                actor_type: "admin".into(),
+            },
+            Self {
+                domain: "operations".into(),
+                action: "flag.changed".into(),
+                actor_type: "admin".into(),
+            },
+            Self {
+                domain: "operations".into(),
+                action: "plugin.installed".into(),
+                actor_type: "admin".into(),
+            },
             // Scanner
-            Self { domain: "scanner".into(), action: "opportunity.detected".into(), actor_type: "system".into() },
-            Self { domain: "scanner".into(), action: "opportunity.expired".into(), actor_type: "system".into() },
+            Self {
+                domain: "scanner".into(),
+                action: "opportunity.detected".into(),
+                actor_type: "system".into(),
+            },
+            Self {
+                domain: "scanner".into(),
+                action: "opportunity.expired".into(),
+                actor_type: "system".into(),
+            },
         ]
     }
 
@@ -48,7 +120,10 @@ impl ActionClass {
         let mut missing = Vec::new();
         for required in Self::catalog() {
             if !emitted.contains(&required) {
-                missing.push(Box::leak(format!("{}.{} ({})", required.domain, required.action, required.actor_type).into_boxed_str()) as &str);
+                missing.push(Box::leak(
+                    format!("{}.{} ({})", required.domain, required.action, required.actor_type)
+                        .into_boxed_str(),
+                ) as &str);
             }
         }
         missing

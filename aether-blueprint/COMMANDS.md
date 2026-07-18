@@ -63,14 +63,14 @@ Brings up the dev stack (`docker compose -f infra/dev/docker-compose.yml up -d -
 - Python: `uv run pytest -m integration -q`
 Prints `integration: ok`. Requires Docker (A-06); missing Docker is `MISSING TOOL`, exit 2.
 
-## WalletConnect live readiness proof (EP-306, HUMAN/operator supplied)
+## WalletConnect live relay/session proof (EP-306, HUMAN/operator supplied)
 ```
 scripts/walletconnect-live-readiness.sh
-scripts/walletconnect-live-evidence-check.sh <evidence.json>
+scripts/walletconnect-live-evidence-check.sh data/walletconnect-live-evidence.json
 ```
-Runs the ignored Wallet Guardian WalletConnect readiness harness after validating the operator supplied `AETHER_GUARDIAN__WC_PROJECT_ID`, `AETHER_GUARDIAN__WC_RELAY_URL`, `AETHER_GUARDIAN__WC_OPERATOR_ACCOUNT`, and `AETHER_GUARDIAN__WC_TESTNET_CHAIN_ID`. This command emits the policy-approved pairing/request packet for the operator-wallet testnet leg. Missing env is `MISSING`/exit 2; a pass is evidence for the repo-side packet only, not proof that the external wallet signed unless the operator records the wallet-side approval in OPERATIONS.md.
+Uses the official WalletConnect Sign Client to connect to the configured relay, writes a uniquely topic-stamped scannable QR under gitignored `data/`, renders a terminal QR without printing the secret-bearing raw pairing URI, waits for a session granting the configured chain/account, invokes the Rust Guardian to policy-evaluate and assemble the exact transaction, sends that request over the approved session, and writes evidence only after the wallet returns a transaction hash. Missing env is `MISSING`/exit 2; rejection or relay/session/request failure is non-zero and produces no successful evidence.
 
-`walletconnect-live-evidence-check.sh` validates the operator-recorded evidence file after wallet approval. Use `aether-blueprint/examples/walletconnect-live-evidence.example.json` as the copy template. M6 is not complete until this checker passes on the real operator evidence file.
+`walletconnect-live-evidence-check.sh` validates the generated evidence file after wallet approval. The default path is gitignored `data/walletconnect-live-evidence.json`; override it with `AETHER_GUARDIAN__WC_EVIDENCE_PATH`. M6 is not complete until this checker passes on evidence from the real client.
 
 ## E2E tests
 ```
@@ -78,6 +78,14 @@ scripts/test-e2e.sh
 ```
 - `pnpm --filter @aether/client e2e` (Playwright). ACTIVE after EP-101.
 Prints `e2e: ok`.
+
+## EP-307 24-hour paper-run evidence (HUMAN/operator run)
+```
+cargo run -p aether-scanner --bin ep307-evidence
+```
+This read-only verifier examines the preceding 24 hours in `DATABASE_URL`. It passes only when activity spans all 24 hourly buckets, every opportunity is closed with attribution, and at least one chain followed the paper-execution path. A green accelerated replay test is implementation evidence, not a substitute for this wall-clock acceptance artifact.
+
+Production scanner wiring uses `cargo run -p aether-scanner` (or `/usr/local/bin/aether-scanner`) with `DATABASE_URL`, `AETHER_KAFKA_BOOTSTRAP`, explicit `AETHER_SCANNER_TICK_TOPICS` and `AETHER_SCANNER_BOOK_TOPICS`, and optional `AETHER_SCANNER_METRICS_BIND` (default `127.0.0.1:9107`). The gateway consumes `opps.detected` and appends `scored -> surfaced` only when `AETHER_GATEWAY_BUS_ENABLED=1`.
 
 ## Build
 ```
@@ -126,9 +134,14 @@ Chains: preflight -> format-check -> lint -> typecheck -> unit -> build. Prints 
 ## Local start
 ```
 docker compose -f infra/dev/docker-compose.yml up -d --wait   # data stack (ACTIVE after EP-003)
+uv sync --all-packages                                        # all Python workspace members, including ingestion OCR
 cargo run -p aether-gateway                                    # WS gateway     (ACTIVE after EP-004)
 uv run uvicorn server.brain.app:app --reload                   # brain API      (ACTIVE after EP-201)
 uv run uvicorn server.llm_router.app:app --host 127.0.0.1 --port 8001  # LLM router (ACTIVE after EP-202)
+uv run uvicorn server.alerts.app:app --host 127.0.0.1 --port 8002      # Alerts (ACTIVE after EP-203)
+uv run uvicorn server.actions.app:app --host 127.0.0.1 --port 8004     # Authoritative alert effects (ACTIVE after EP-203)
+set AETHER_INGEST__CONFIG_PATH=aether-blueprint\examples\ingest-sources.example.json
+uv run uvicorn server.ingest.app:app --host 127.0.0.1 --port 8005      # Ingestion fleet (ACTIVE after EP-206)
 uv run python -m connectors.venues.openbb.src.server                  # OpenBB venue (ACTIVE after EP-303)
 cargo run -p aether-venue-hyperliquid                                # Hyperliquid venue (ACTIVE after EP-303)
 cargo run -p aether-venue-alpaca                                     # Alpaca paper venue (ACTIVE after EP-303)
@@ -154,7 +167,27 @@ Runs verify.sh -> integration tests -> e2e tests -> security-check.sh -> depende
 ```
 scripts/health-check.sh
 ```
-Curls /healthz and /readyz on every service defined in ENVIRONMENT.md: infrastructure (Postgres pg_isready, ClickHouse ping, Redis PING, Qdrant readyz, MinIO health, Redpanda admin), app services (Gateway :8080, Brain :8000, LLM Router :8001, Alerts :8002, Inbox :8003), gRPC services via grpc-health-probe (Order Router :50051, Risk Engine :50052, Wallet Guardian :50053), and venue adapters (Kalshi :8084, Polymarket :8085, Hyperliquid :8086, Alpaca :8087, OpenBB :8088). Prints `health: ok`. Services not running are `SKIP` (non-fatal unless `FORCE_FAIL=1`).
+Curls /healthz and /readyz on every service defined in ENVIRONMENT.md: infrastructure (Postgres pg_isready, ClickHouse ping, Redis PING, Qdrant readyz, MinIO health, Redpanda admin), app services (Gateway :8080, Brain :8000, LLM Router :8001, Alerts :8002, Inbox :8003, Actions :8004), gRPC services via grpc-health-probe (Order Router :50051, Risk Engine :50052, Wallet Guardian :50053), and venue adapters (Kalshi :8084, Polymarket :8085, Hyperliquid :8086, Alpaca :8087, OpenBB :8088). Prints `health: ok`. Services not running are `SKIP` (non-fatal unless `FORCE_FAIL=1`).
+
+## Ingestion fleet audit (EP-206)
+```
+uv run pytest server/ingest/tests -q
+curl -fsS http://127.0.0.1:8005/healthz
+curl -fsS http://127.0.0.1:8005/readyz
+curl -fsS http://127.0.0.1:8005/metrics
+curl -fsS http://127.0.0.1:8005/audit/sources
+```
+The source audit returns durable object/rung events and explicit downgrade decisions. It never returns source credentials. Integration tests additionally require `AETHER_INTEGRATION_TEST=1` and a disposable `DATABASE_URL` with migrations applied.
+
+## Brain recall-v2 benchmark (EP-207)
+```
+uv run python -m server.brain.benchmark testdata/brain-bench/graded --ranker v1 --k 5
+uv run python -m server.brain.benchmark testdata/brain-bench/graded --ranker graph --k 5
+uv run python -m server.brain.benchmark testdata/brain-bench/graded --ranker weighted --k 5
+uv run python -m server.brain.benchmark testdata/brain-bench/graded --ranker rerank --k 5
+uv run pytest server/brain/tests/test_benchmark.py server/brain/tests/test_recall_v2.py -q
+```
+The reported micro-latency covers ranking stages only. The required end-to-end 100 ms p95 gate remains `server/brain/tests/test_recall.py::test_recall_p95_budget` against migrated Postgres, Qdrant, and Kuzu. Optional reranking is local-only, bounded to 25 ms, and disabled by default.
 
 ## Database backup / restore (EP-408, HUMAN supervised)
 ```

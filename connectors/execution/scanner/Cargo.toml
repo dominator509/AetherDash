@@ -13,12 +13,19 @@ workspace = true
 aether-core = { path = "../../../crates/aether-core" }
 aether-decompose = { path = "../../../crates/aether-decompose" }
 aether-bus = { path = "../../../crates/aether-bus" }
+aether-observe = { path = "../../../crates/aether-observe" }
+aether-fillmodel = { path = "../../../crates/aether-fillmodel" }
+aether-simulator = { path = "../simulator" }
 rust_decimal = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
+ulid = "1"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "rust_decimal", "json"] }
+axum = "0.7"
 
 [dev-dependencies]
 tokio-test = "0.4"

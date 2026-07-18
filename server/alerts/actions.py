@@ -112,7 +112,7 @@ async def handle_action(
         return {
             "action": action.value,
             "opportunity_id": opportunity_id,
-            "status": "ignored",
+            "status": "authorized",
             "requires_confirm": False,
             "reason": "Alert suppressed by operator",
         }
@@ -121,7 +121,7 @@ async def handle_action(
         return {
             "action": action.value,
             "opportunity_id": opportunity_id,
-            "status": "simulated",
+            "status": "authorized",
             "requires_confirm": False,
             "reason": "Simulation queued for execution",
         }
@@ -131,9 +131,11 @@ async def handle_action(
             return {
                 "action": action.value,
                 "opportunity_id": opportunity_id,
-                "status": "auto_confirmed",
+                "status": "authorized",
                 "requires_confirm": False,
-                "reason": (f"Execute action auto-confirmed for tier {operator_tier}"),
+                "reason": (
+                    f"Execute action authorized for tier {operator_tier}; canonical caps and risk checks remain required"
+                ),
             }
         # Tiers 3 and 4 require confirmation
         return {

@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-205: Research Swarms & Decision Packets
 
-**Band:** 2xx Brain | **Phase:** 4 | **Status:** draft | **Blocked by:** EP-103, EP-202
+**Band:** 2xx Brain | **Phase:** 4 | **Status:** active | **Blocked by:** EP-103, EP-202
 
 ## Purpose / Big Picture
 Turn a question into bounded parallel research that returns ONE decision packet with citations, under a declared budget. Swarms are the command room's power tool - many agents, a shared scratchpad, a single synthesized answer the operator can act on.
@@ -49,7 +49,7 @@ A killed swarm leaves a partial scratchpad and no packet (fail-open understandin
 (worker coordination patterns; budget accounting granularity)
 
 ## Decision Log
-(worker count policy; scratchpad store; budget dimension weights)
+- 2026-07-18: Activated after EP-207 completed its five milestones and all validation gates. Both declared dependencies, EP-103 and EP-202, are done.
 
 ## Outcomes & Retrospective
 (packet quality on fixtures; budget adherence evidence)

@@ -78,6 +78,19 @@ pub fn sign_eip1559_transaction(
     Ok(unsigned.encode_signed(&signature))
 }
 
+/// Compute the canonical Ethereum transaction hash for an already-signed raw
+/// transaction. Persisting this hash with the raw bytes makes crash recovery
+/// independent of an RPC send response.
+pub fn raw_transaction_hash(raw_tx: &str) -> Result<String, BroadcastError> {
+    let bytes = parse_hex_bytes(raw_tx)?;
+    if bytes.first() != Some(&0x02) {
+        return Err(BroadcastError::InvalidTransaction(
+            "signed transaction is not EIP-1559 type 2".into(),
+        ));
+    }
+    Ok(format!("0x{}", hex::encode(keccak256(&bytes))))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Eip1559Tx {
     chain_id: u64,
@@ -277,5 +290,16 @@ mod tests {
         assert_eq!(rlp_u64(0), vec![0x80]);
         assert_eq!(rlp_u64(127), vec![0x7f]);
         assert_eq!(rlp_u64(128), vec![0x81, 0x80]);
+    }
+
+    #[test]
+    fn raw_transaction_hash_is_stable_and_chain_shaped() {
+        let keystore = KeyStore::new("/tmp/test.key");
+        let raw = sign_eip1559_transaction(&keystore, &make_tx(), 7, 31337).unwrap();
+        let first = raw_transaction_hash(&raw).unwrap();
+        let second = raw_transaction_hash(&raw).unwrap();
+        assert_eq!(first, second);
+        assert!(first.starts_with("0x"));
+        assert_eq!(first.len(), 66);
     }
 }

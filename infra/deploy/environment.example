@@ -42,6 +42,18 @@ AETHER_QDRANT__URL=http://localhost:6333
 
 # Redpanda (Kafka-compatible bus)
 AETHER_KAFKA__BROKERS=localhost:9092
+# Canonical Rust/Python bus adapter variable.
+AETHER_KAFKA_BOOTSTRAP=localhost:9092
+
+# EP-307 scanner inputs and loopback Prometheus exporter. Only venues that
+# publish order books belong in the book list; OpenBB is intentionally absent.
+AETHER_SCANNER_TICK_TOPICS=md.ticks.kalshi,md.ticks.polymarket,md.ticks.hyperliquid,md.ticks.alpaca,md.ticks.openbb
+AETHER_SCANNER_BOOK_TOPICS=md.books.kalshi,md.books.polymarket,md.books.hyperliquid
+AETHER_SCANNER_METRICS_BIND=127.0.0.1:9107
+
+# Consume durable detections into the authenticated WebSocket feed and append
+# the canonical scored->surfaced lifecycle transition.
+AETHER_GATEWAY_BUS_ENABLED=1
 
 # MinIO (S3-compatible object store) — (secret) both values
 AETHER_MINIO__ENDPOINT=http://localhost:9000
@@ -75,14 +87,24 @@ AETHER_ALERTS__BIND=127.0.0.1:8002
 # Inbox webhook receiver — loopback only
 AETHER_INBOX__BIND=127.0.0.1:8003
 
+# Authoritative alert action effects — loopback only
+AETHER_ACTIONS__BIND=127.0.0.1:8004
+
+# Ingestion fleet — loopback only. The JSON file contains source policy and
+# environment-variable references, never credential values.
+AETHER_INGEST__CONFIG_PATH=/etc/aether/ingest-sources.json
+AETHER_INGEST__WORKERS=4
+AETHER_INGEST__OCR_ENABLED=1
+AETHER_INGEST__OCR_ENGINE=cpu
+AETHER_INGEST__OCR_INTERVAL_SECONDS=5
+
 # Order router gRPC — loopback only
 AETHER_ROUTER__BIND=127.0.0.1:50051
 
 # Risk engine gRPC — loopback only
 AETHER_RISK__BIND=127.0.0.1:50052
 
-# Wallet Guardian gRPC — loopback only
-AETHER_GUARDIAN__BIND=127.0.0.1:50053
+# Wallet Guardian gRPC is configured in the dedicated section below.
 
 # ═══════════════════════════════════════════════════════════════
 # LLM provider API keys — (all secret)
@@ -141,6 +163,24 @@ AETHER_GUARDIAN__BIND=127.0.0.1:50053
 # AETHER_COMMS__TWILIO_SID=...
 # AETHER_COMMS__TWILIO_TOKEN=...
 # AETHER_COMMS__TWILIO_FROM=+15551234567
+# AETHER_COMMS__TWILIO_TO=+15557654321
+# AETHER_COMMS__TWILIO_WEBHOOK_URL=https://alerts.example.com/callbacks/twilio
+# AETHER_COMMS__SMTP_HOST=smtp.example.com
+# AETHER_COMMS__SMTP_PORT=587
+# AETHER_COMMS__SMTP_USERNAME=...
+# AETHER_COMMS__SMTP_PASSWORD=...
+# AETHER_COMMS__EMAIL_FROM=alerts@example.com
+# AETHER_COMMS__EMAIL_TO=operator@example.com
+
+# Internal action/approval transport. Generate independent random values.
+# AETHER_ALERTS_ACTIONS_URL=http://127.0.0.1:8004
+# AETHER_ALERTS_ACTIONS_TOKEN=...
+# AETHER_ACTIONS_SERVICE_TOKEN=...
+# AETHER_ALERTS_INTERNAL_TOKEN=...
+# AETHER_SIMULATOR_BIN=/usr/local/bin/aether-simulator
+# AETHER_PAPER_EXECUTOR_BIN=/usr/local/bin/aether-execute-paper
+# AETHER_GUARDIAN_ENDPOINT=http://127.0.0.1:50053
+# AETHER_GUARDIAN_CLIENT_BIN=/usr/local/bin/guardian-client
 
 # ═══════════════════════════════════════════════════════════════
 # Inbox (email ingestion) credentials — (all secret)
@@ -159,9 +199,18 @@ AETHER_GUARDIAN__BIND=127.0.0.1:50053
 # Wallet Guardian
 # ═══════════════════════════════════════════════════════════════
 
-# Path to the Guardian's encrypted keystore.
-# HARD-DENY: no other component may read this path (SECURITY.md).
-AETHER_GUARDIAN__KEYSTORE_PATH=/etc/aether/guardian-keystore
+# The keystore and operator TOTP are systemd encrypted credentials, never env.
+# Provision guardian-keystore.cred and operator-totp.cred per OPERATIONS.md.
+AETHER_GUARDIAN__BIND_ADDR=127.0.0.1:50053
+# AETHER_GUARDIAN__SERVICE_TOKEN=...
+# Entries require an RFC3339 activation timestamp at least 24h old.
+# AETHER_GUARDIAN__ALLOWED_DESTINATIONS=0x...@2026-07-17T00:00:00Z
+# AETHER_GUARDIAN__ALLOWED_CONTRACT_CALLS=0x...:0xa9059cbb@2026-07-17T00:00:00Z
+# AETHER_GUARDIAN__RPC_1=https://operator-configured.example
+# AETHER_GUARDIAN__RPC_137=https://operator-configured.example
+# AETHER_GUARDIAN__RPC_42161=https://operator-configured.example
+# AETHER_GUARDIAN__WORKER_POLL_MS=1000
+# AETHER_GUARDIAN__WORKER_BATCH_SIZE=10
 
 # ═══════════════════════════════════════════════════════════════
 # Execution safety flags

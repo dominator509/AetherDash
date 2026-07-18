@@ -100,6 +100,16 @@ banner "Inbox"
 INBOX_BIND="${AETHER_INBOX__BIND:-127.0.0.1:8003}"
 check "Inbox" "http://${INBOX_BIND}/healthz" "Inbox healthz"
 
+# ---- Authoritative action effects (EP-203) ---------------------------------
+banner "Actions"
+ACTIONS_BIND="${AETHER_ACTIONS__BIND:-127.0.0.1:8004}"
+check "Actions" "http://${ACTIONS_BIND}/healthz" "Actions healthz"
+
+# ---- Ingestion fleet (EP-206) ---------------------------------------------
+banner "Ingestion Fleet"
+check "Ingestion" "http://127.0.0.1:8005/healthz" "Ingestion healthz"
+check "Ingestion" "http://127.0.0.1:8005/readyz" "Ingestion readyz"
+
 # ---- gRPC services (using grpc-health-probe) --------------------------------
 banner "gRPC Services"
 

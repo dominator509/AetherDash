@@ -4,11 +4,20 @@
   "relay_url": "wss://relay.walletconnect.com",
   "operator_account": "0x1234567890123456789012345678901234567890",
   "pairing_topic": "0123456789abcdef0123456789abcdef",
-  "pairing_uri": "wc:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef@2?relay-protocol=irn&symKey=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef&topic=0123456789abcdef0123456789abcdef",
+  "pairing_uri_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "session_topic": "abcdef0123456789abcdef0123456789",
+  "proposal_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "proposal_hash": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "policy_trace": [
+    {
+      "rule": "chain_allowlist",
+      "outcome": "pass"
+    }
+  ],
   "request_id": 1,
   "request_method": "eth_sendTransaction",
   "guardian_policy_state": "auto_approved",
   "wallet_approved": true,
-  "wallet_approval_artifact": "wallet-confirmation:replace-with-operator-wallet-confirmation-or-testnet-tx-hash",
-  "operator_recorded_by": "operator-name"
+  "wallet_approval_artifact": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "operator_recorded_by": "walletconnect-live-client"
 }

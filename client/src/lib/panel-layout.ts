@@ -58,10 +58,7 @@ export function createPanelLayout(): PanelLayoutState {
  * Register a new panel from its configuration.
  * If a panel with the same id already exists, it is replaced.
  */
-export function addPanel(
-  state: PanelLayoutState,
-  config: PanelConfig,
-): PanelLayoutState {
+export function addPanel(state: PanelLayoutState, config: PanelConfig): PanelLayoutState {
   const existing = state.panels.get(config.id);
   const instance: PanelInstance = {
     config,
@@ -84,10 +81,7 @@ export function addPanel(
  * Undock a panel — makes it floating and raises it to the top of the z-order.
  * No-op if panel does not exist.
  */
-export function undockPanel(
-  state: PanelLayoutState,
-  id: PanelId,
-): PanelLayoutState {
+export function undockPanel(state: PanelLayoutState, id: PanelId): PanelLayoutState {
   const panel = state.panels.get(id);
   if (!panel) return state;
 
@@ -150,10 +144,7 @@ export function movePanel(
  * Close (remove) a panel entirely.
  * If the panel is maximized, also clears maximized state.
  */
-export function closePanel(
-  state: PanelLayoutState,
-  id: PanelId,
-): PanelLayoutState {
+export function closePanel(state: PanelLayoutState, id: PanelId): PanelLayoutState {
   if (state.maximized === id) {
     state.maximized = null;
   }
@@ -166,10 +157,7 @@ export function closePanel(
  * Toggle visibility of a panel (hide without removing).
  * Cannot hide a pinned panel.
  */
-export function togglePanelVisibility(
-  state: PanelLayoutState,
-  id: PanelId,
-): PanelLayoutState {
+export function togglePanelVisibility(state: PanelLayoutState, id: PanelId): PanelLayoutState {
   const panel = state.panels.get(id);
   if (!panel || panel.config.pinned) return state;
   panel.visible = !panel.visible;
@@ -179,10 +167,7 @@ export function togglePanelVisibility(
 /**
  * Maximize a panel to fill the layout. Pass null to restore all.
  */
-export function maximizePanel(
-  state: PanelLayoutState,
-  id: PanelId | null,
-): PanelLayoutState {
+export function maximizePanel(state: PanelLayoutState, id: PanelId | null): PanelLayoutState {
   if (id !== null && !state.panels.has(id)) return state;
   state.maximized = id;
   return state;
@@ -191,10 +176,7 @@ export function maximizePanel(
 /**
  * Bring a panel to the top of the z-order.
  */
-export function bringToFront(
-  state: PanelLayoutState,
-  id: PanelId,
-): PanelLayoutState {
+export function bringToFront(state: PanelLayoutState, id: PanelId): PanelLayoutState {
   const idx = state.order.indexOf(id);
   if (idx === -1) return state;
   state.order.splice(idx, 1);
@@ -212,10 +194,7 @@ export function bringToFront(
 /**
  * Save the current set of panel configs as a named preset.
  */
-export function savePreset(
-  state: PanelLayoutState,
-  name: string,
-): PanelLayoutState {
+export function savePreset(state: PanelLayoutState, name: string): PanelLayoutState {
   const configs: PanelConfig[] = [];
   for (const [, instance] of state.panels) {
     configs.push({ ...instance.config });
@@ -227,10 +206,7 @@ export function savePreset(
 /**
  * Load a named preset, replacing all current panels.
  */
-export function loadPreset(
-  state: PanelLayoutState,
-  name: string,
-): PanelLayoutState {
+export function loadPreset(state: PanelLayoutState, name: string): PanelLayoutState {
   const configs = state.presets[name];
   if (!configs) return state;
 

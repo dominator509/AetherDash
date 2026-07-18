@@ -1,7 +1,7 @@
 // Feed state: normalized by opportunity ID.
 // Updates coalesce on lifecycle transitions (no duplicate cards).
 
-import { FeedItem } from '../types/opportunity';
+import { FeedItem } from "../types/opportunity";
 
 export interface FeedState {
   /** All feed items, keyed by opportunity ID. */
@@ -35,11 +35,11 @@ export function upsertFeedItem(state: FeedState, item: FeedItem): FeedState {
 export function expireFeedItems(state: FeedState, maxAgeMs: number): FeedState {
   const now = Date.now();
   for (const [id, item] of state.items) {
-    if (item.opportunity.state === 'expired' || item.opportunity.state === 'closed') {
+    if (item.opportunity.state === "expired" || item.opportunity.state === "closed") {
       const detectedAt = new Date(item.opportunity.detected_ts).getTime();
       if (now - detectedAt > maxAgeMs) {
         state.items.delete(id);
-        state.order = state.order.filter(o => o !== id);
+        state.order = state.order.filter((o) => o !== id);
       }
     }
   }
@@ -54,7 +54,5 @@ export function setFeedDegraded(state: FeedState, degraded: boolean): FeedState 
 
 /** Get feed items sorted by current order. */
 export function getOrderedItems(state: FeedState): FeedItem[] {
-  return state.order
-    .map(id => state.items.get(id)!)
-    .filter(Boolean);
+  return state.order.map((id) => state.items.get(id)!).filter(Boolean);
 }

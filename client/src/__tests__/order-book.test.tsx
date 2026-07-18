@@ -180,7 +180,7 @@ describe("OrderBook", () => {
 
   it("truncates levels to maxLevels", () => {
     const manyBids = Array.from({ length: 30 }, (_, i) =>
-      makeBookLevel((20.00 - i * 0.01).toFixed(2), "100"),
+      makeBookLevel((20.0 - i * 0.01).toFixed(2), "100"),
     );
     const manyAsks = Array.from({ length: 30 }, (_, i) =>
       makeBookLevel((20.01 + i * 0.01).toFixed(2), "100"),

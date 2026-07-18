@@ -1,17 +1,18 @@
 # ================================================================
 # AETHER Wallet Guardian
 # Plane 3 — isolated signing policy service (separate process).
-# Exposes propose_transaction() gRPC only.  No export_key, no
+# Exposes the WalletGuardian gRPC contract only.  No export_key, no
 # sign_arbitrary.  Raw keys live ONLY inside the Guardian
 # keystore boundary (OS keychain / enclave / MPC backend).
 # ================================================================
 [Unit]
 Description=AETHER Wallet Guardian (gRPC)
 Documentation=https://github.com/AetherDash/aether
-After=network.target
+After=network-online.target
+Wants=network-online.target
 # The Guardian must NEVER depend on any AETHER service; it is a
 # standalone signing boundary with no runtime coupling.
-# Key material path is configured via AETHER_GUARDIAN__KEYSTORE_PATH.
+# Key material is delivered by systemd encrypted credentials.
 
 [Service]
 Type=simple
@@ -28,13 +29,23 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/log/aether
-# Restrict keystore path via mount namespace
-BindReadOnlyPaths=/etc/aether/guardian-keystore:/etc/aether/guardian-keystore
 CapabilityBoundingSet=
 AmbientCapabilities=
 KeyringMode=private
+PrivateDevices=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+UMask=0077
 
-# Resource limits — minimal footprint, stateless
+# Resource limits — minimal process footprint; durable state is in Postgres
 MemoryMax=256M
 MemoryHigh=192M
 CPUQuota=30%
@@ -43,6 +54,8 @@ LimitNOFILE=8192
 LimitNPROC=64
 
 EnvironmentFile=/etc/aether/environment
+LoadCredentialEncrypted=guardian-keystore:/opt/aether/shared/credentials/guardian-keystore.cred
+LoadCredentialEncrypted=operator-totp:/opt/aether/shared/credentials/operator-totp.cred
 Environment=AETHER_ENV=prod
 Environment=AETHER_LOG__FORMAT=json
 StandardOutput=journal

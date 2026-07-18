@@ -218,6 +218,7 @@ async def complete_with_fallback(
     purpose: str,
     messages: list[dict[str, str]],
     model_policy: str = "default",
+    max_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Call ``complete()`` and fall back through the chain on transient errors.
 
@@ -247,6 +248,7 @@ async def complete_with_fallback(
                 purpose=purpose,
                 messages=messages,
                 model_policy=policy,
+                max_tokens=max_tokens,
             )
         except ValueError:
             raise

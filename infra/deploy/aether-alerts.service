@@ -7,8 +7,8 @@
 [Unit]
 Description=AETHER Alerts Engine
 Documentation=https://github.com/AetherDash/aether
-After=network.target postgresql.service redis.service redpanda.service
-Wants=postgresql.service redis.service redpanda.service
+After=network.target postgresql.service redis.service redpanda.service aether-actions.service
+Wants=postgresql.service redis.service redpanda.service aether-actions.service
 
 [Service]
 Type=simple

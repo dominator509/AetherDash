@@ -1,0 +1,1 @@
+[{"source": "rss:fixture", "rung": 1, "adapter": "rss_or_sitemap", "interval_seconds": 60, "endpoint": "https://example.test/rss"}]

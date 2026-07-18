@@ -219,14 +219,29 @@ impl PairingClient {
 
     /// Build a WalletConnect transaction request payload.
     pub fn build_transaction_request(&self, tx: &TxSpec) -> Result<String, WcError> {
+        self.build_transaction_request_for_account(tx, "0x0000000000000000000000000000000000000000")
+    }
+
+    /// Build a WalletConnect transaction request bound to the account granted
+    /// by the live WalletConnect session.
+    pub fn build_transaction_request_for_account(
+        &self,
+        tx: &TxSpec,
+        account: &str,
+    ) -> Result<String, WcError> {
         if !self.paired {
             return Err(WcError::NotPaired);
+        }
+        if !is_evm_address(account) {
+            return Err(WcError::InvalidRequest(
+                "session account must be a 0x-prefixed 20-byte address".into(),
+            ));
         }
         let request = WcTransactionRequest {
             id: 1,
             method: "eth_sendTransaction".into(),
             params: vec![WcTxParam {
-                from: "0x0000000000000000000000000000000000000000".into(),
+                from: account.to_lowercase(),
                 to: tx.to.clone(),
                 value: tx.value.clone(),
                 data: tx.data.clone(),
@@ -250,6 +265,19 @@ impl PairingClient {
     /// This is the production entrypoint. It prevents WC mode from bypassing
     /// the same policy and approval lifecycle used by guardian-custody mode.
     pub fn build_approved_proposal_request(&self, proposal: &Proposal) -> Result<String, WcError> {
+        self.build_approved_proposal_request_for_account(
+            proposal,
+            "0x0000000000000000000000000000000000000000",
+        )
+    }
+
+    /// Build a policy-approved request bound to the account granted by the
+    /// live WalletConnect session.
+    pub fn build_approved_proposal_request_for_account(
+        &self,
+        proposal: &Proposal,
+        account: &str,
+    ) -> Result<String, WcError> {
         if proposal.custody_mode != CustodyMode::WalletConnect {
             return Err(WcError::WrongCustodyMode);
         }
@@ -258,7 +286,7 @@ impl PairingClient {
         {
             return Err(WcError::PolicyNotApproved);
         }
-        self.propose_wc_transaction(&proposal.tx)
+        self.build_transaction_request_for_account(&proposal.tx, account)
     }
 
     pub fn session_topic(&self) -> Option<&str> {
@@ -291,6 +319,12 @@ fn wc_approval_digest(topic: &str, account: &str, chain_id: u64, request_json: &
         "request": request_json,
     });
     hex::encode(Sha256::digest(serde_json::to_vec(&wire).unwrap_or_default()))
+}
+
+fn is_evm_address(value: &str) -> bool {
+    value.len() == 42
+        && value.starts_with("0x")
+        && value.as_bytes()[2..].iter().all(u8::is_ascii_hexdigit)
 }
 
 #[cfg(test)]
@@ -391,6 +425,33 @@ mod tests {
         assert!(matches!(
             client.build_approved_proposal_request(&wrong_mode),
             Err(WcError::WrongCustodyMode)
+        ));
+    }
+
+    #[test]
+    fn live_request_is_bound_to_session_account() {
+        let mut client = PairingClient::new();
+        client.create_pairing();
+        client.complete_pairing("test-topic");
+        let tx = crate::proposal::TxSpec {
+            chain_id: 11155111,
+            to: "0x1234567890123456789012345678901234567890".into(),
+            value: "0x0".into(),
+            data: "0x".into(),
+            gas_limit: 21_000,
+            max_fee_per_gas: "0x3b9aca00".into(),
+            max_priority_fee_per_gas: "0x3b9aca00".into(),
+        };
+        let request = client
+            .build_transaction_request_for_account(
+                &tx,
+                "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            )
+            .unwrap();
+        assert!(request.contains("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+        assert!(matches!(
+            client.build_transaction_request_for_account(&tx, "not-an-address"),
+            Err(WcError::InvalidRequest(_))
         ));
     }
 

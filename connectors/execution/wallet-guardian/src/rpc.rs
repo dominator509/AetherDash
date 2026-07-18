@@ -40,6 +40,7 @@ struct RpcErrorBody {
 }
 
 /// JSON-RPC client for a single chain endpoint.
+#[derive(Clone)]
 pub struct RpcClient {
     url: String,
     http: reqwest::Client,
@@ -93,6 +94,36 @@ impl RpcClient {
             .map_err(|e| RpcError::Parse(format!("invalid nonce: {e}")))
     }
 
+    /// Call eth_getTransactionCount against the pending state so concurrent
+    /// already-submitted transactions are included in nonce allocation.
+    pub async fn eth_get_pending_transaction_count(&self, address: &str) -> Result<u64, RpcError> {
+        let params = vec![serde_json::json!(address), serde_json::json!("pending")];
+        let result = self.call("eth_getTransactionCount", params).await?;
+        parse_hex_u64(&result, "pending nonce")
+    }
+
+    /// Return whether a transaction is visible in the node's pending or
+    /// canonical transaction index.
+    pub async fn eth_transaction_known(&self, tx_hash: &str) -> Result<bool, RpcError> {
+        let result =
+            self.call("eth_getTransactionByHash", vec![serde_json::json!(tx_hash)]).await?;
+        Ok(!result.is_null())
+    }
+
+    /// Return the execution outcome once a receipt exists. `None` means the
+    /// transaction is still pending or not yet known to this RPC endpoint.
+    pub async fn eth_transaction_receipt(&self, tx_hash: &str) -> Result<Option<bool>, RpcError> {
+        let result =
+            self.call("eth_getTransactionReceipt", vec![serde_json::json!(tx_hash)]).await?;
+        if result.is_null() {
+            return Ok(None);
+        }
+        let status = result
+            .get("status")
+            .ok_or_else(|| RpcError::Parse("transaction receipt omitted status".into()))?;
+        Ok(Some(parse_hex_u64(status, "receipt status")? == 1))
+    }
+
     /// Call eth_gasPrice.
     pub async fn eth_gas_price(&self) -> Result<u64, RpcError> {
         let result = self.call("eth_gasPrice", vec![]).await?;
@@ -103,13 +134,20 @@ impl RpcClient {
 
     async fn call(&self, method: &str, params: Vec<Value>) -> Result<Value, RpcError> {
         let req = RpcRequest { jsonrpc: "2.0", method: method.into(), params, id: 1 };
-        let resp = self.http.post(&self.url).json(&req).send().await?;
+        let resp = self.http.post(&self.url).json(&req).send().await?.error_for_status()?;
         let body: RpcResponse = resp.json().await?;
         if let Some(err) = body.error {
             return Err(RpcError::RpcError { code: err.code, message: err.message });
         }
         Ok(body.result.unwrap_or(Value::Null))
     }
+}
+
+fn parse_hex_u64(value: &Value, field: &str) -> Result<u64, RpcError> {
+    let raw =
+        value.as_str().ok_or_else(|| RpcError::Parse(format!("{field} returned non-string")))?;
+    u64::from_str_radix(raw.trim_start_matches("0x"), 16)
+        .map_err(|e| RpcError::Parse(format!("invalid {field}: {e}")))
 }
 
 /// Parameters for an eth_call.

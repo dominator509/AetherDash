@@ -1,0 +1,38 @@
+[
+  {
+    "id": "fed-policy",
+    "query": "Federal Reserve rate decision inflation outlook",
+    "qdrant": [{"object_id":"fed-minutes","score":0.94},{"object_id":"cpi-release","score":0.87},{"object_id":"tech-earnings","score":0.42}],
+    "fts": [{"object_id":"fed-decision","provenance_hash":"h-fed","score":0.91},{"object_id":"fed-minutes","provenance_hash":"h-minutes","score":0.84},{"object_id":"jobs-report","provenance_hash":"h-jobs","score":0.51}],
+    "graph": [{"object_id":"fed-decision","shared_edges":2},{"object_id":"cpi-release","shared_edges":1}],
+    "metadata": {"fed-decision":{"kind":"news","age_hours":2,"reliability":0.95},"fed-minutes":{"kind":"report","age_hours":24,"reliability":0.90},"cpi-release":{"kind":"news","age_hours":8,"reliability":0.85},"jobs-report":{"kind":"news","age_hours":48,"reliability":0.60},"tech-earnings":{"kind":"news","age_hours":120,"reliability":0.30}},
+    "rerank_scores": {"fed-decision":0.98,"fed-minutes":0.96,"cpi-release":0.75,"jobs-report":0.35,"tech-earnings":0.05}
+  },
+  {
+    "id": "prediction-resolution",
+    "query": "prediction market resolution criteria court ruling",
+    "qdrant": [{"object_id":"resolution-rules","score":0.92},{"object_id":"court-docket","score":0.82},{"object_id":"market-price","score":0.55}],
+    "fts": [{"object_id":"court-docket","provenance_hash":"h-court","score":0.88},{"object_id":"resolution-rules","provenance_hash":"h-rules","score":0.81},{"object_id":"unrelated-election","provenance_hash":"h-election","score":0.40}],
+    "graph": [{"object_id":"resolution-rules","shared_edges":2},{"object_id":"court-docket","shared_edges":1}],
+    "metadata": {"resolution-rules":{"kind":"market_description","age_hours":720,"reliability":0.95},"court-docket":{"kind":"filing","age_hours":24,"reliability":0.90},"market-price":{"kind":"news","age_hours":6,"reliability":0.65},"unrelated-election":{"kind":"news","age_hours":168,"reliability":0.20}},
+    "rerank_scores": {"resolution-rules":0.98,"court-docket":0.96,"market-price":0.40,"unrelated-election":0.02}
+  },
+  {
+    "id": "crypto-liquidity",
+    "query": "crypto perpetual liquidity funding basis",
+    "qdrant": [{"object_id":"funding-snapshot","score":0.93},{"object_id":"orderbook-depth","score":0.89},{"object_id":"token-unlock","score":0.60}],
+    "fts": [{"object_id":"basis-analysis","provenance_hash":"h-basis","score":0.90},{"object_id":"funding-snapshot","provenance_hash":"h-funding","score":0.86},{"object_id":"orderbook-depth","provenance_hash":"h-depth","score":0.71}],
+    "graph": [{"object_id":"basis-analysis","shared_edges":2},{"object_id":"funding-snapshot","shared_edges":1}],
+    "metadata": {"basis-analysis":{"kind":"report","age_hours":12,"reliability":0.95},"funding-snapshot":{"kind":"news","age_hours":1,"reliability":0.90},"orderbook-depth":{"kind":"news","age_hours":2,"reliability":0.80},"token-unlock":{"kind":"news","age_hours":96,"reliability":0.50}},
+    "rerank_scores": {"basis-analysis":0.98,"funding-snapshot":0.96,"orderbook-depth":0.72,"token-unlock":0.30}
+  },
+  {
+    "id": "earnings-surprise",
+    "query": "earnings revenue guidance surprise",
+    "qdrant": [{"object_id":"earnings-call","score":0.95},{"object_id":"guidance-cut","score":0.90},{"object_id":"macro-calendar","score":0.44}],
+    "fts": [{"object_id":"guidance-cut","provenance_hash":"h-guidance","score":0.93},{"object_id":"earnings-call","provenance_hash":"h-call","score":0.88},{"object_id":"analyst-preview","provenance_hash":"h-preview","score":0.63}],
+    "graph": [{"object_id":"guidance-cut","shared_edges":2},{"object_id":"earnings-call","shared_edges":1}],
+    "metadata": {"guidance-cut":{"kind":"news","age_hours":1,"reliability":0.95},"earnings-call":{"kind":"transcript","age_hours":4,"reliability":0.90},"analyst-preview":{"kind":"report","age_hours":72,"reliability":0.60},"macro-calendar":{"kind":"event","age_hours":240,"reliability":0.30}},
+    "rerank_scores": {"guidance-cut":0.98,"earnings-call":0.96,"analyst-preview":0.35,"macro-calendar":0.02}
+  }
+]

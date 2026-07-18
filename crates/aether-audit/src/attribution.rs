@@ -1,10 +1,10 @@
 //! P&L Attribution: closes opportunity chains with predicted vs realized P&L.
 //! SPEC-012: every closed chain MUST have an attribution row.
 
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
 use aether_core::ids::Ulid;
 use aether_core::time::UtcTime;
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Attribution record — predicted vs realized per component.
@@ -86,15 +86,15 @@ mod tests {
             funding: Decimal::ZERO,
         };
         let realized = AttributionInput {
-            gross_spread: Decimal::new(9, 2),  // 0.09
-            fees: Decimal::new(2, 2),          // 0.02
-            slippage: Decimal::new(2, 2),      // 0.02
+            gross_spread: Decimal::new(9, 2), // 0.09
+            fees: Decimal::new(2, 2),         // 0.02
+            slippage: Decimal::new(2, 2),     // 0.02
             funding: Decimal::ZERO,
         };
         let attr = compute_attribution(Ulid::new(), &predicted, &realized).unwrap();
-        assert_eq!(attr.net_predicted, Decimal::new(7, 2));  // 0.10 - 0.02 - 0.01 = 0.07
-        assert_eq!(attr.net_realized, Decimal::new(5, 2));   // 0.09 - 0.02 - 0.02 = 0.05
-        assert_eq!(attr.divergence, Decimal::new(2, 2));     // 0.07 - 0.05 = 0.02
+        assert_eq!(attr.net_predicted, Decimal::new(7, 2)); // 0.10 - 0.02 - 0.01 = 0.07
+        assert_eq!(attr.net_realized, Decimal::new(5, 2)); // 0.09 - 0.02 - 0.02 = 0.05
+        assert_eq!(attr.divergence, Decimal::new(2, 2)); // 0.07 - 0.05 = 0.02
     }
 
     #[test]

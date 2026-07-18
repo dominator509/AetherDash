@@ -8,7 +8,7 @@ license = { text = "AGPL-3.0-or-later" }
 [tool.uv.workspace]
 # EP-001: minimal workspace. Each EP appends its members when directories are created.
 # Expected layout: pylib, server/brain, server/llm_router, server/alerts, etc.
-members = ["pylib", "server/brain", "server/llm_router", "server/alerts", "server/inbox", "connectors"]
+members = ["pylib", "server/brain", "server/llm_router", "server/alerts", "server/inbox", "server/ingest", "server/swarm", "connectors"]
 
 [tool.ruff]
 target-version = "py311"

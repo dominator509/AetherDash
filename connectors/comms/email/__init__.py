@@ -1,0 +1,1 @@
+"""SMTP email connector."""

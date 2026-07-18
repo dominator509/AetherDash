@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-206: Ingestion Fleet, OCR, Source-Reliability Scoring
 
-**Band:** 2xx Brain | **Phase:** 3 | **Status:** draft | **Blocked by:** EP-201
+**Band:** 2xx Brain | **Phase:** 3 | **Status:** done | **Blocked by:** EP-201
 
 ## Purpose / Big Picture
 Scale the Brain's intake compliantly and deepen it: an ingestion fleet honoring the compliance ladder (INV-4), OCR for screenshots/scans, and source-reliability scoring that raises the trust of proven sources. This is where the Brain goes from "what the operator forwards" to "a curated view of the world."
@@ -43,13 +43,23 @@ Per-milestone; `test-integration.sh` green; `verify.sh` -> `verify: ok`; the ant
 Content-hash dedup across the fleet (shared with EP-204); scheduler resumes from source cursors; OCR re-runs are idempotent on stored raw. A source that starts requiring bot bypass is disabled, not worked around. GPU absence degrades to CPU OCR, not failure.
 
 ## Progress
-- [ ] M1 Fleet+scheduler  - [ ] M2 Compliant rungs  - [ ] M3 OCR  - [ ] M4 Reliability scoring  - [ ] M5 Rung audit+metrics
+- [x] M1 Fleet+scheduler  - [x] M2 Compliant rungs  - [x] M3 OCR  - [x] M4 Reliability scoring  - [x] M5 Rung audit+metrics
 
 ## Surprises & Discoveries
-(robots/rate-limit realities per source; OCR quality; GPU availability)
+- 2026-07-18: The inherited Brain pipeline emitted processing-stage numbers as compliance rungs, including impossible rung 7, while ordinary intake always emitted rung 1. Compliance identity now belongs to the object at intake and is stored atomically with one durable source event; processing stages no longer emit false rung events.
+- 2026-07-18: A source could be fetched repeatedly before its queued batch committed a cursor. The scheduler now reserves each source while in flight, applies bounded queue back-pressure before fetching, and refuses payloads whose source identity differs from the registered source.
+- 2026-07-18: All six compliance adapters are implemented. RSS/Atom/sitemap parsing rejects DTD/entity declarations, crawl fails closed when robots.txt is unavailable or redirected and enforces same-origin plus declared rate limits, and licensed/session credentials are injected at request time rather than stored or logged.
+- 2026-07-18: No system Tesseract executable or existing OCR fixture was available. The CPU path uses the maintained `rapidocr` package with ONNX Runtime and wheel-bundled small models; a generated PNG fixture is recognized without a GPU or external executable, and a live Brain/MinIO test proves the re-filed object becomes recallable.
+- 2026-07-18: Source reliability uses a neutral Bayesian prior, unit-weighted market-correlation outcomes, and double-weighted explicit operator feedback. Evidence is append-only in Postgres; the bounded projection is written to Kuzu `Source` nodes and upgrades pre-existing Source schemas in place.
+- 2026-07-18: A project-root `uv sync` omitted ingestion-member OCR dependencies in the deployed environment. Production installation now syncs all workspace packages into the exact `/opt/aether/.venv`, and the ingestion unit invokes that environment's Python directly with a single uvicorn worker so only one scheduler owns each source cursor.
 
 ## Decision Log
-(OCR engine choice; GPU vs CPU policy; reliability scoring formula)
+- 2026-07-17: Activated after EP-307 completed every code milestone and moved to `revise` solely for operator-owned 24-hour wall-clock evidence. EP-201 is done, so the declared dependency is satisfied.
+- 2026-07-18: Compliance rung is immutable intake metadata (`brain_objects.ladder_rung`) with one Postgres audit row per newly ingested object. ClickHouse remains a best-effort observability projection and is not the audit authority.
+- 2026-07-18: A lower-compliance adapter may replace a declared higher rung only with a source/rung-bound operator decision persisted in `ingest_rung_decisions`; the scheduler records and then audits the actual rung used.
+- 2026-07-18: OCR defaults to ONNX Runtime CPU. `AETHER_INGEST__OCR_ENGINE=gpu` lazily attempts the documented TensorRT backend and falls back visibly to CPU when unavailable, preserving A-15's optional-GPU boundary.
+- 2026-07-18: Reliability evidence remains authoritative in Postgres and the Kuzu score is a rebuildable projection. EP-207 consumes the Kuzu `Source.reliability` value but does not own its formula or evidence.
+- 2026-07-18: The fleet exposes loopback-only `/healthz`, dependency-aware `/readyz`, Prometheus `/metrics`, and `/audit/sources`. Source configuration is an operator-owned, secret-free JSON policy file; absence or invalid policy fails startup closed.
 
 ## Outcomes & Retrospective
-(sources live by rung; anti-bot refusal evidence; reliability inputs for EP-207)
+All six compliance rungs have executable adapters and durable actual-rung evidence; bot-bypass requests fail validation and robots-denied paths are never fetched. OCR uses real RapidOCR/ONNX on CPU, preserves the original rung while reprocessing parked screenshots through the Brain, and has an optional GPU fallback boundary. Reliability evidence is durable and its bounded Kuzu projection is ready for EP-207. The complete ingestion suite passed 34/34 against a disposable migrated Postgres/MinIO stack, including live OCR and service lifespan/audit checks; `scripts/verify.sh` and `scripts/security-check.sh` both passed. The umbrella integration script was not used because it starts the stack and runs unrelated ignored live-wallet tests, which the operator explicitly excluded; the plan-owned live integrations were run directly instead.

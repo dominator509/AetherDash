@@ -1,11 +1,13 @@
 """Alert dispatch — create AlertMsg and publish to ``alerts.outbound`` bus topic."""
 
 import logging
-from typing import TYPE_CHECKING, Protocol
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Protocol
 
 import ulid
 
 from server.alerts.actions import InlineAction, handle_action
+from server.alerts.effects import ActionEffectError
 from server.alerts.history import record_alert, update_delivery
 from server.alerts.models import AlertMsg, AlertPayload, now_iso
 
@@ -18,11 +20,13 @@ logger = logging.getLogger(__name__)
 class ActionEffects(Protocol):
     """Existing system seams used after a policy verdict permits an action."""
 
-    async def simulate(self, opportunity_id: str, actor_id: str) -> None: ...
+    async def simulate(self, opportunity_id: str, actor_id: str) -> dict[str, Any]: ...
 
-    async def ignore(self, opportunity_id: str, actor_id: str) -> None: ...
+    async def ignore(self, opportunity_id: str, actor_id: str) -> dict[str, Any]: ...
 
-    async def execute_paper(self, opportunity_id: str, actor_id: str) -> None: ...
+    async def execute_paper(
+        self, opportunity_id: str, actor_id: str, approval_id: str | None = None
+    ) -> dict[str, Any]: ...
 
 
 _action_effects: ActionEffects | None = None
@@ -66,6 +70,14 @@ async def dispatch_to_channel(
 
             msg_id = await sl_send(payload)
             results[channel] = msg_id
+        elif channel == "sms":
+            from connectors.comms.twilio.sender import send_alert as sms_send
+
+            results[channel] = await sms_send(payload)
+        elif channel == "email":
+            from connectors.comms.email.sender import send_alert as email_send
+
+            results[channel] = await email_send(payload)
         else:
             logger.warning("Unknown channel: %s — skipping", channel)
             results[channel] = ""
@@ -146,7 +158,7 @@ async def deliver_alert(
     opportunity: dict,
     rule: "Rule",
     reason: str,
-    publish: object | None = None,
+    publish: Callable[[str, dict], Awaitable[None]] | None = None,
 ) -> list[AlertMsg]:
     """Persist, publish, and deliver one independently tracked alert per channel."""
     delivered: list[AlertMsg] = []
@@ -192,6 +204,7 @@ async def process_action_callback(
 
     Returns the same dict as ``handle_action``.
     """
+    parsed: InlineAction | str
     try:
         parsed = InlineAction(action)
     except ValueError:
@@ -204,19 +217,30 @@ async def process_action_callback(
         operator_tier=operator_tier,
     )
     status = result.get("status")
-    if status in {"ignored", "simulated", "auto_confirmed"}:
+    if status == "authorized":
         if _action_effects is None:
             return {
                 **result,
                 "status": "failed_precondition",
                 "reason": "action effects adapter is not configured",
             }
-        if status == "ignored":
-            await _action_effects.ignore(opportunity_id, operator_id)
-        elif status == "simulated":
-            await _action_effects.simulate(opportunity_id, operator_id)
-        else:
-            await _action_effects.execute_paper(opportunity_id, operator_id)
+        try:
+            if parsed == InlineAction.IGNORE:
+                effect = await _action_effects.ignore(opportunity_id, operator_id)
+            elif parsed == InlineAction.SIMULATE:
+                effect = await _action_effects.simulate(opportunity_id, operator_id)
+            else:
+                effect = await _action_effects.execute_paper(
+                    opportunity_id, operator_id
+                )
+        except ActionEffectError:
+            logger.exception("authoritative action effect failed")
+            return {
+                **result,
+                "status": "failed_precondition",
+                "reason": "authoritative action effect did not complete",
+            }
+        result = {**result, "status": "completed", "effect": effect}
     logger.info(
         "process_action_callback: action=%s opp=%s op=%s status=%s",
         action,

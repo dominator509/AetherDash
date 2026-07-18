@@ -61,14 +61,6 @@ async def run(
 
     await store.update_object(obj_id, **updates)
 
-    # Emit ingest event (ladder_rung=7 = index)
-    await store.emit_ingest_event(
-        object_id=obj_id,
-        source=source,
-        ladder_rung=7,
-        bytes_count=len(summary or ""),
-    )
-
     logger.debug(
         "index: object %s indexed (tier=hot, %d updates)",
         obj_id,

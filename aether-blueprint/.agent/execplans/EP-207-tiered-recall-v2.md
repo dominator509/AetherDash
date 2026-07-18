@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-207: Tiered Recall v2
 
-**Band:** 2xx Brain | **Phase:** 3 | **Status:** draft | **Blocked by:** EP-201
+**Band:** 2xx Brain | **Phase:** 3 | **Status:** done | **Blocked by:** EP-201
 
 ## Purpose / Big Picture
 Make recall smart without making it slow: extend recall v1 with one-hop Kuzu graph expansion, staleness decay, source-reliability weighting (from EP-206), and optional cross-encoder rerank - same API, same 100 ms budget, measurably better relevance on a graded benchmark.
@@ -43,13 +43,21 @@ Per-milestone; `test-integration.sh` green; `verify.sh` -> `verify: ok`; budget 
 Recall is stateless/deterministic (minus optional rerank); v1 fallback + load-breaker guarantee availability (understanding path fail-open). The benchmark set is versioned so score comparisons stay honest across changes.
 
 ## Progress
-- [ ] M1 Graded benchmark  - [ ] M2 Graph expansion  - [ ] M3 Decay+reliability  - [ ] M4 Rerank  - [ ] M5 Ship behind budget
+- [x] M1 Graded benchmark  - [x] M2 Graph expansion  - [x] M3 Decay+reliability  - [x] M4 Rerank  - [x] M5 Ship behind budget
 
 ## Surprises & Discoveries
-(graph-expansion latency; rerank model choice/budget; benchmark construction)
+- 2026-07-18: Importing recall v1 eagerly imported the LLM router client, whose LiteLLM dependency attempted a remote model-price lookup even for a deterministic offline benchmark. Embedding import is now deferred until vector search executes, keeping graded ranking tests offline and fast.
+- 2026-07-18: Treating one-hop graph rank as a third full-strength retrieval source regressed the graded set because correlated graph evidence could outrank direct lexical/vector evidence. Graph RRF contribution is deliberately weighted at 0.15; the embedded Kuzu correctness test proves entity/market neighbors surface while the benchmark remains neutral.
+- 2026-07-18: Per-call read-only Kuzu database handles retained a Windows file lock and caused later Brain link writes to park objects. Recall and link now share the process-owned Kuzu connection, and expansion queries return a bounded ordered neighbor set instead of retaining independent handles.
+- 2026-07-18: The reachable default dev database has schema/migration-ledger drift: migration 20 is not recorded although one of its columns already exists, so forward migration stops there. EP-207 live evidence therefore used a fresh disposable database migrated cleanly through 0041; repairing the operator's long-lived dev database is intentionally separate from recall code.
 
 ## Decision Log
-(rerank model; weight tuning; skip-ladder thresholds)
+- 2026-07-18: Activated after EP-206 completed its five milestones and validation gates. EP-201 is done and EP-206's durable reliability projection is now available to the recall-v2 weighting stage.
+- 2026-07-18: The versioned graded set stores query-specific Qdrant/FTS candidate ranks separately from relevance judgments. M1 v1 RRF baseline at k=5 is nDCG 0.990190, MRR 1.000000, ranking-core p95 0.0122 ms over 400 timed evaluations; end-to-end store latency remains an M5 gate and is not inferred from this core timing.
+- 2026-07-18: One-hop expansion traverses shared `MENTIONS` entities and `RELATES_TO` markets, deduplicates neighbors, and excludes seed events. The graph-augmented benchmark is non-regressing at nDCG 0.990190/MRR 1.000000 with 0.0258 ms ranking-core p95.
+- 2026-07-18: Age decay uses the existing kind-specific staleness periods as half-lives; filing/market-description/email/note remain non-decaying. Reliability is bounded to [0,1] and maps to a [0.5,1.5] multiplier so missing evidence is exactly neutral. Weighted benchmark remains non-regressing at nDCG 0.990190/MRR 1.000000 with 0.0716 ms ranking-core p95.
+- 2026-07-18: Optional reranking uses EP-202's cache-first router with `model_policy=local`, only the top 12 summaries, a 25 ms maximum sub-budget, strict complete-score parsing, and skip reasons for timeout/missing documents/model failure. The deterministic fixture cross-encoder improves the graded benchmark to nDCG 1.000000/MRR 1.000000 at 0.0452 ms ranking-core p95; the slow-model test proves ranking is unchanged on timeout.
+- 2026-07-18: Recall v2 is default-on behind the unchanged API. Its wall-clock breaker reserves cancellation/serialization headroom, returns copied v1 refs on overload or stage error, and leaves optional reranking disabled unless explicitly enabled. The production Brain unit is single-worker because Kuzu is process-owned/single-writer.
 
 ## Outcomes & Retrospective
-(benchmark deltas; latency profile; downgrade behavior)
+The versioned four-query graded set establishes v1 at nDCG 0.990190/MRR 1.000000, graph and reliability stages non-regressing at the same relevance, and the bounded fixture cross-encoder at nDCG 1.000000/MRR 1.000000. Embedded Kuzu tests prove real one-hop entity/market expansion and reliability reads; deterministic weighting, slow-model skip, v2-error fallback, and no-overshoot budget tests pass. The existing end-to-end 50-sample Postgres/Qdrant/Kuzu p95 test passes with v2 default-on and the Kuzu handle remains usable for subsequent writes. The complete Brain suite, `scripts/verify.sh`, `scripts/security-check.sh`, JSON validation, and diff checks pass; the disposable migrated database was removed afterward.
