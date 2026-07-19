@@ -2,13 +2,13 @@ Layer: 5 - Execution
 
 # .agent/PLANS.md - The ExecPlan Ledger
 
-This file is the single authority on which plans exist, their status, and which one is active. Agents: exactly ONE plan is `active` at any time; implement only that plan.
+This file is the single authority on which plans exist, their status, and which one is active. Agents: exactly ONE plan is `active` while implementable plan work remains; zero may be active only when the remaining acceptance is explicitly operator-owned or externally blocked.
 
 ## Lifecycle
 `pending` (contents not yet generated) -> `draft` (contents exist, not started) -> `active` (being implemented; max one) -> `done` (Definition of done met, AGENTS.md section 14) -> or `revise` (reopened with a Decision Log reason). Status changes are edits to this table plus the plan's own Progress section.
 
 ## Active plan
-**EP-205** — Research swarms & decision packets
+**None** — all locally implementable plan work is complete. EP-306 M6 remains an operator-wallet ceremony and EP-307 remains a literal 24-hour paper-evidence run; neither is represented as locally complete.
 
 ## Ledger
 | ID | Title | Band | Phase | Status | Blocked by |
@@ -26,7 +26,7 @@ This file is the single authority on which plans exist, their status, and which 
 | EP-202 | LLM router, cache-first prompting, local fallback | 2xx Brain | 1 | done | EP-001 |
 | EP-203 | Alert engine & comms (Telegram, Discord, Slack, inline actions) | 2xx Brain | 1 | done | EP-004 |
 | EP-204 | Agentic inbox (Gmail push, MS Graph, parse/scan/file) | 2xx Brain | 1 | done | EP-201 |
-| EP-205 | Research swarms & decision packets | 2xx Brain | 4 | active | EP-103, EP-202 |
+| EP-205 | Research swarms & decision packets | 2xx Brain | 4 | done | EP-103, EP-202 |
 | EP-206 | Ingestion fleet, OCR, source-reliability scoring | 2xx Brain | 3 | done | EP-201 |
 | EP-207 | Tiered recall v2: hybrid fusion, graph traversal, decay, rerank | 2xx Brain | 3 | done | EP-201 |
 | EP-301 | Venue pack: Kalshi (reference implementation + replay fixtures) | 3xx Connectors | 1 | done | EP-004 |
@@ -42,7 +42,7 @@ This file is the single authority on which plans exist, their status, and which 
 | EP-403 | Plugin runtime: signed manifests, sandbox, capability host | 4xx Cross-cutting | 4 | done | EP-401 |
 | EP-404 | Observability: redaction, Prometheus, health, self-improvement metrics | 4xx Cross-cutting | 2 | done | EP-004 |
 | EP-405 | Testing hardening: replay harness, lifecycle assertions, regression | 4xx Cross-cutting | 3 | done | EP-305, EP-307 |
-| EP-406 | Code-writing agent, cron jobs, backtesting agent | 4xx Cross-cutting | 4 | draft | EP-403 |
+| EP-406 | Code-writing agent, cron jobs, backtesting agent | 4xx Cross-cutting | 4 | done | EP-403 |
 | EP-407 | Deployment & release engineering (plane hosts, systemd, wiring) | 4xx Cross-cutting | 4 | done | EP-404 |
 | EP-408 | Production readiness closure | 4xx Cross-cutting | 4 | done | all above |
 

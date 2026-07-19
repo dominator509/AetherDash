@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from server.swarm.budget import BudgetExceededError, BudgetLedger, BudgetLimits
+from server.swarm.budget import (
+    BudgetAccountingError,
+    BudgetExceededError,
+    BudgetLedger,
+    BudgetLimits,
+)
 from server.swarm.models import Finding, WorkerGrant
 from server.swarm.packet import DecisionPacket, build_packet
 from server.swarm.scratchpad import Scratchpad
@@ -51,9 +57,18 @@ class SwarmOrchestrator:
         *,
         retriever: EvidenceRetriever | None = None,
         completion: Completion | None = None,
+        max_cost_per_token_usd: Decimal | None = None,
     ) -> None:
         self.retriever = retriever or BrainRecallRetriever()
         self.completion = completion
+        raw_ceiling = os.environ.get("AETHER_SWARM__MAX_COST_PER_TOKEN_USD", "0.0001")
+        self.max_cost_per_token_usd = (
+            max_cost_per_token_usd
+            if max_cost_per_token_usd is not None
+            else Decimal(raw_ceiling)
+        )
+        if self.max_cost_per_token_usd <= 0:
+            raise ValueError("swarm token-cost ceiling must be positive")
 
     async def launch(
         self,
@@ -96,10 +111,33 @@ class SwarmOrchestrator:
                         detail=exc.dimension,
                     )
                 )
+            except BudgetAccountingError:
+                await ledger.mark_truncated("provider_overage")
+                await progress(
+                    ProgressEvent(
+                        kind="budget_truncated",
+                        worker_id=worker.worker_id,
+                        detail="provider_overage",
+                    )
+                )
+            except Exception:
+                # One failed research branch must not discard cited findings
+                # produced by the other branches on this understanding path.
+                await progress(
+                    ProgressEvent(
+                        kind="worker_failed",
+                        worker_id=worker.worker_id,
+                        detail="worker_error",
+                    )
+                )
 
         try:
             async with asyncio.timeout(request.budget.max_seconds):
-                await asyncio.gather(*(run(worker) for worker in workers))
+                # Two waves retain bounded parallelism while guaranteeing that
+                # later workers can observe the first wave's shared scratchpad.
+                split = max(1, (worker_count + 1) // 2)
+                await asyncio.gather(*(run(worker) for worker in workers[:split]))
+                await asyncio.gather(*(run(worker) for worker in workers[split:]))
         except TimeoutError:
             await ledger.mark_truncated("seconds")
             await progress(ProgressEvent(kind="budget_truncated", detail="seconds"))
@@ -126,5 +164,6 @@ class SwarmOrchestrator:
             worker_id=worker_id,
             grant=WorkerGrant(actor_id=worker_id),
             retriever=self.retriever,
+            max_cost_per_token_usd=self.max_cost_per_token_usd,
             **kwargs,
         )

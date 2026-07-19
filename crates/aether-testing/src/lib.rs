@@ -13,4 +13,4 @@ pub mod replay;
 
 pub use lifecycle::{LifecycleAssertion, LifecycleChecker, TransitionTrace};
 pub use regression::{RegressionCase, RegressionResult, RegressionSuite};
-pub use replay::{ReplayError, ReplayHarness, ReplayResult};
+pub use replay::{CapturedEvent, ReplayError, ReplayHarness, ReplayResult};

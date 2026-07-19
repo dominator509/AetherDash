@@ -96,3 +96,17 @@ async def test_provider_cannot_report_more_than_pre_authorized() -> None:
         await ledger.commit(
             reservation, actual_tokens=11, actual_cost_usd=Decimal("0.50")
         )
+    usage = await ledger.usage()
+    assert usage.calls == 1
+    assert usage.tokens == 10
+    await ledger.assert_within_limits()
+
+
+@pytest.mark.asyncio
+async def test_aborted_provider_attempt_consumes_call_budget() -> None:
+    ledger = BudgetLedger(limits(max_calls=1))
+    reservation = await ledger.reserve(tokens=10, cost_usd=Decimal("0.50"))
+    await ledger.abort_call(reservation)
+    assert (await ledger.usage()).calls == 1
+    with pytest.raises(BudgetExceededError, match="calls"):
+        await ledger.reserve(tokens=1, cost_usd=Decimal("0"))

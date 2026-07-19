@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-403: Plugin Runtime - Signed Manifests, Sandbox, Capability Host
 
-**Band:** 4xx Cross-cutting | **Phase:** 4 | **Status:** draft | **Blocked by:** EP-401
+**Band:** 4xx Cross-cutting | **Phase:** 4 | **Status:** done | **Blocked by:** EP-401
 
 ## Purpose / Big Picture
 Let the operator (and later the code-writing agent) extend AETHER safely: a plugin runtime where every plugin ships a signed capability manifest, runs sandboxed, is dependency-scanned at load, and has each capability checked at the host boundary on every call. INV-6 made real - extensibility without opening the system.
@@ -44,13 +44,19 @@ Per-milestone; `test-unit.sh` + `test-integration.sh` green; `verify.sh` + `secu
 Plugins are isolated - a misbehaving plugin can't affect the host (sandbox) and is revocable immediately; load is idempotent; the capability check runs every call so nothing is grandfathered. S9-adjacent: weakening the sandbox/signing/capability checks is a hard-deny (SECURITY.md HARD-DENY 7).
 
 ## Progress
-- [ ] M1 Runtime+sandbox  - [ ] M2 Manifest+signing  - [ ] M3 Capability host  - [ ] M4 Dep-scan  - [ ] M5 Lifecycle+approval  - [ ] M6 Hostile suite+example
+- [x] M1 Runtime+sandbox  - [x] M2 Manifest+signing  - [x] M3 Capability host  - [x] M4 Dep-scan  - [x] M5 Lifecycle+approval  - [x] M6 Hostile suite+example
 
 ## Surprises & Discoveries
-(Wasm host ergonomics; capability granularity; dep-scan for Wasm modules)
+- The prior crate was a configuration registry, not a runtime; migration 0016 also made new rows approved by default. Migration 0042 moves legacy rows back to installed and requires durable approval evidence.
+- Wasm modules do not expose a trustworthy language-package lockfile. The signed manifest therefore carries a deterministic SBOM plus lock hash, and the operator injects the current deny-policy database into the load gate.
+- The workspace dependency audit also reports pre-existing `quick-xml` advisories through `rust-s3` and the unfixed RSA timing advisory; neither is introduced by this plan. Wasmi 0.40 resolves upstream's yanked-but-not-vulnerable `spin` 0.9.8.
 
 ## Decision Log
-(runtime choice + rationale; capability set design; signing scheme)
+- 2026-07-18: Reopened after the EP-406 dependency audit proved the ledger's prior `done` status was unsupported: all milestones were unchecked, the crate had no executable Wasm sandbox or dependency gate, lifecycle was in-memory without step-up, and migration 0016 defaulted records directly to `approved`. EP-406 returns to draft until this gate is real.
+- 2026-07-18: Use Wasmi 0.40 as the embedded interpreter. It supplies deterministic fuel metering, strict engine limits, and explicit host linking without linking WASI; this keeps filesystem and socket authority structurally absent while avoiding a JIT/native-code fast path.
+- 2026-07-18: Approval receipts bind the exact signed manifest and exact capability grant. The Postgres loader locks the approved row while it revalidates the artifact and changes state, so no public state-transition method can bypass the gate.
 
 ## Outcomes & Retrospective
-(hostile-suite evidence; example plugin; INV-6 proof bundle)
+- `cargo test -p aether-plugin`: 13 passed, 1 Postgres test intentionally ignored in the default unit run; hostile fs/socket/unsigned/tampered/over-scope/vulnerable/fuel/memory cases are denied and audit-asserted, while the `read_markets.wat` example executes its granted host call.
+- Isolated Postgres proof: migrations 1-42 applied from zero and the ignored durable lifecycle test passed (1/1); the scratch database was removed afterward.
+- `cargo clippy -p aether-plugin --all-targets -- -D warnings`, `scripts/security-check.sh`, and the repository-wide `scripts/verify.sh` all pass. Live/restart integration was not run because the operator explicitly excluded restart-based live tests.

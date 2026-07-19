@@ -50,6 +50,7 @@ class PromptAssembly:
 _PURPOSE_INSTRUCTION: dict[str, str] = {
     "summarize": "summarize_instruction",
     "extract": "extract_instruction",
+    "code_plugin": "code_plugin_instruction",
 }
 
 

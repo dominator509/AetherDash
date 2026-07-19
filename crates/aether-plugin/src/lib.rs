@@ -1,9 +1,23 @@
+pub mod approval;
+pub mod audit;
+pub mod dependency;
+pub mod gate;
+pub mod generation;
 pub mod manifest;
+pub mod persistence;
 pub mod registry;
+pub mod runtime;
 pub mod sandbox;
 pub mod signing;
 
-pub use manifest::{Capability, PluginKind, PluginManifest};
-pub use registry::PluginRegistry;
+pub use approval::VerifiedPluginApproval;
+pub use audit::{MemoryPluginAudit, PluginAuditEvent, PluginAuditSink};
+pub use dependency::{dependency_lock_hash, DependencyScanner};
+pub use gate::{GateError, PluginGate};
+pub use generation::{CompiledPlugin, GeneratedPluginDraft, GenerationCompileError};
+pub use manifest::{Capability, PluginDependency, PluginKind, PluginManifest};
+pub use persistence::{PersistentLoadError, PgPluginRepository};
+pub use registry::{PluginRegistry, PluginStatus};
+pub use runtime::{ExecutionReport, RuntimeError, WasmRuntime};
 pub use sandbox::SandboxConfig;
 pub use signing::{sign_manifest, verify_manifest, EdSignature as PluginSignature, KeyPair};

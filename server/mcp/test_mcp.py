@@ -1,5 +1,6 @@
 """MCP tier-filtering contract tests."""
 
+import json
 from decimal import Decimal
 from typing import Any
 
@@ -191,6 +192,55 @@ def test_swarm_launch_confirmation_is_actor_bound_payload_bound_and_single_use(
         "/tools/swarm.launch", headers=_auth("test-trader"), json=confirmed_payload
     )
     assert replay.status_code == 412
+
+
+def test_swarm_stream_emits_live_progress_then_one_packet(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    import app as app_module
+
+    class FakePacket:
+        def model_dump(self, *, mode: str) -> dict[str, object]:
+            assert mode == "json"
+            return {"proposal_only": True, "citations": [{"object_id": "brain-1"}]}
+
+    class FakeOrchestrator:
+        async def launch(self, request: Any, *, progress: Any) -> FakePacket:
+            await progress(app_module.ProgressEvent(kind="started"))
+            await progress(app_module.ProgressEvent(kind="packet_ready"))
+            return FakePacket()
+
+    monkeypatch.setattr(app_module, "SwarmOrchestrator", FakeOrchestrator)
+    payload = {
+        "question": "Stream this",
+        "budget": {
+            "max_calls": 1,
+            "max_tokens": 1_000,
+            "max_cost_usd": "1",
+            "max_seconds": 5,
+        },
+        "workers": 1,
+    }
+    challenge = client.post(
+        "/tools/swarm.launch/stream", headers=_auth("test-trader"), json=payload
+    )
+    assert challenge.status_code == 412
+    ref_id = challenge.json()["details"].removeprefix("confirmation_ref=")
+
+    with client.stream(
+        "POST",
+        "/tools/swarm.launch/stream",
+        headers=_auth("test-trader"),
+        json={**payload, "confirmation_ref": ref_id},
+    ) as response:
+        assert response.status_code == 200
+        records = [line for line in response.iter_lines() if line]
+
+    assert [record["type"] for record in map(json.loads, records)] == [
+        "progress",
+        "progress",
+        "packet",
+    ]
 
 
 def test_sim_run_rejects_empty_payload() -> None:

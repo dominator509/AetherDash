@@ -95,6 +95,9 @@ pub fn evaluate(actor: &Actor, action: Action, context: EvaluationContext<'_>) -
         {
             return Decision::deny("hard_deny.wallet_threshold", context.grant);
         }
+        Action::ApplySelfImprovement if actor.kind != ActorKind::Human => {
+            return Decision::deny("self_improvement.human_required", context.grant);
+        }
         _ => {}
     }
 

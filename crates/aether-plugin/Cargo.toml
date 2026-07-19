@@ -10,6 +10,7 @@ license = "AGPL-3.0-or-later"
 workspace = true
 
 [dependencies]
+aether-authz = { path = "../aether-authz" }
 aether-core = { path = "../aether-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -19,3 +20,9 @@ hex = "0.4"
 ed25519-dalek = { version = "2", features = ["serde"] }
 rand = "0.8"
 toml = "0.8"
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "json"] }
+wasmi = { version = "0.40", features = ["extra-checks"] }
+wat = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }
+
+[dev-dependencies]

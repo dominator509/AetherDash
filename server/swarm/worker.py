@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from server.brain import service as brain_service
 from server.llm_router.client import complete
-from server.swarm.budget import BudgetLedger
+from server.swarm.budget import BudgetExceededError, BudgetLedger
 from server.swarm.models import BrainCitation, Finding, ResearchEvidence, WorkerGrant
 from server.swarm.scratchpad import Scratchpad
 
@@ -61,6 +61,7 @@ class ResearchWorker:
         retriever: EvidenceRetriever,
         completion: Completion = complete,
         recall_k: int = 6,
+        max_cost_per_token_usd: Decimal = Decimal("0.0001"),
     ) -> None:
         if grant.actor_id != worker_id:
             raise ValueError("worker grant must belong to the worker")
@@ -69,6 +70,9 @@ class ResearchWorker:
         self.retriever = retriever
         self.completion = completion
         self.recall_k = recall_k
+        if max_cost_per_token_usd <= 0:
+            raise ValueError("the configured token-cost ceiling must be positive")
+        self.max_cost_per_token_usd = max_cost_per_token_usd
 
     async def research(
         self,
@@ -108,10 +112,15 @@ class ResearchWorker:
         input_reserve = len(
             json.dumps(dynamic_inputs, ensure_ascii=False).encode("utf-8")
         ) + sum(len(chunk.encode("utf-8")) for chunk in chunks)
-        output_tokens = max(1, token_allowance - input_reserve)
+        affordable_tokens = int(cost_allowance / self.max_cost_per_token_usd)
+        effective_allowance = min(token_allowance, affordable_tokens)
+        if effective_allowance <= input_reserve:
+            await ledger.mark_truncated("cost_usd")
+            raise BudgetExceededError("cost_usd")
+        output_tokens = effective_allowance - input_reserve
         reservation = await ledger.reserve(
             tokens=input_reserve + output_tokens,
-            cost_usd=cost_allowance,
+            cost_usd=Decimal(effective_allowance) * self.max_cost_per_token_usd,
         )
         try:
             result = await self.completion(
@@ -133,7 +142,7 @@ class ResearchWorker:
                 actual_cost_usd=actual_cost,
             )
         except BaseException:
-            await ledger.cancel(reservation)
+            await ledger.abort_call(reservation)
             raise
 
         if result.get("error"):

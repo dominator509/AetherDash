@@ -9,14 +9,18 @@ use std::sync::atomic::Ordering;
 
 use aether_core::{ErrorCode, ErrorEnvelope, Ulid};
 use axum::{
+    body::{to_bytes, Body},
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Query, State,
+        Path, Query, State,
     },
+    http::{header, HeaderMap, Request, StatusCode},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{any, get, post},
     Router,
 };
+use futures_util::StreamExt;
+use reqwest::Url;
 use sqlx::PgPool;
 use tokio::sync::broadcast;
 
@@ -33,14 +37,49 @@ pub struct AppState {
     /// Subscribe/unsubscribe manage per-client receivers.
     /// Populated from durable `opps.detected` events by the gateway binary.
     pub broadcast_tx: broadcast::Sender<String>,
+    mcp_client: reqwest::Client,
+    mcp_base_url: Url,
 }
 
 impl AppState {
     /// Create a new AppState with a DB pool and a fresh broadcast channel.
     pub fn new(pool: PgPool) -> Self {
         let (broadcast_tx, _) = broadcast::channel(256);
-        Self { pool, broadcast_tx }
+        Self {
+            pool,
+            broadcast_tx,
+            mcp_client: reqwest::Client::new(),
+            mcp_base_url: match Url::parse("http://127.0.0.1:8000/") {
+                Ok(url) => url,
+                Err(_) => unreachable!("the built-in MCP URL is valid"),
+            },
+        }
     }
+
+    /// Override the loopback-only MCP upstream used by the control-plane proxy.
+    pub fn with_mcp_base_url(mut self, raw: &str) -> Result<Self, String> {
+        self.mcp_base_url = validate_mcp_base_url(raw)?;
+        Ok(self)
+    }
+}
+
+fn validate_mcp_base_url(raw: &str) -> Result<Url, String> {
+    let mut url = Url::parse(raw).map_err(|_| "AETHER_MCP__URL must be a valid URL")?;
+    if url.scheme() != "http" {
+        return Err("AETHER_MCP__URL must use http on loopback".into());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("AETHER_MCP__URL must not contain credentials".into());
+    }
+    match url.host_str() {
+        Some("127.0.0.1" | "localhost" | "::1") => {}
+        _ => return Err("AETHER_MCP__URL must target loopback".into()),
+    }
+    if url.path() != "/" && !url.path().is_empty() {
+        return Err("AETHER_MCP__URL must not contain a path".into());
+    }
+    url.set_path("/");
+    Ok(url)
 }
 
 /// Build the Axum router with all routes and shared state.
@@ -52,7 +91,165 @@ pub fn build_router(state: AppState) -> Router {
         .route("/healthz", get(health::healthz))
         .route("/readyz", get(health::readyz))
         .route("/metrics", get(health::metrics))
+        .route("/mcp/*path", any(proxy_mcp))
         .with_state(state)
+}
+
+const MAX_MCP_REQUEST_BYTES: usize = 1_048_576;
+
+/// Forward the authenticated MCP control plane to its loopback-only service.
+/// Only the headers required by the MCP contract cross the process boundary.
+async fn proxy_mcp(
+    State(state): State<AppState>,
+    Path(path): Path<String>,
+    request: Request<Body>,
+) -> axum::response::Response {
+    let (parts, body) = request.into_parts();
+    if parts.method != axum::http::Method::GET && parts.method != axum::http::Method::POST {
+        return StatusCode::METHOD_NOT_ALLOWED.into_response();
+    }
+    // Mutate only the path of the prevalidated loopback origin. URL joining
+    // would let a path beginning with `//` replace the authority (SSRF).
+    let mut upstream = state.mcp_base_url.clone();
+    upstream.set_path(&format!("/{}", path.trim_start_matches('/')));
+    upstream.set_query(parts.uri.query());
+
+    let bytes = match to_bytes(body, MAX_MCP_REQUEST_BYTES).await {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return (StatusCode::PAYLOAD_TOO_LARGE, "MCP request body too large").into_response()
+        }
+    };
+    let mut builder = state.mcp_client.request(parts.method, upstream);
+    for name in [header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT] {
+        if let Some(value) = parts.headers.get(&name) {
+            builder = builder.header(name, value);
+        }
+    }
+    let response = match builder.body(bytes).send().await {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::warn!(error_class = %std::any::type_name_of_val(&error), "MCP upstream unavailable");
+            return (StatusCode::BAD_GATEWAY, "MCP service unavailable").into_response();
+        }
+    };
+
+    let status = response.status();
+    let content_type = response.headers().get(header::CONTENT_TYPE).cloned();
+    let stream = response.bytes_stream().map(|chunk| chunk.map_err(std::io::Error::other));
+    let mut outbound = axum::response::Response::new(Body::from_stream(stream));
+    *outbound.status_mut() = status;
+    if let Some(value) = content_type {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::CONTENT_TYPE, value);
+        *outbound.headers_mut() = headers;
+    }
+    outbound
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::items_after_test_module)]
+mod mcp_proxy_tests {
+    use std::{convert::Infallible, time::Duration};
+
+    use axum::{
+        body::{Body, Bytes},
+        http::{header, HeaderMap},
+        response::Response,
+        routing::post,
+        Router,
+    };
+    use futures_util::{stream, StreamExt};
+    use sqlx::postgres::PgPoolOptions;
+
+    use super::{build_router, validate_mcp_base_url, AppState};
+
+    #[test]
+    fn mcp_upstream_is_loopback_only() {
+        assert!(validate_mcp_base_url("http://127.0.0.1:8000").is_ok());
+        assert!(validate_mcp_base_url("http://localhost:8000/").is_ok());
+        assert!(validate_mcp_base_url("https://127.0.0.1:8000").is_err());
+        assert!(validate_mcp_base_url("http://example.com:8000").is_err());
+        assert!(validate_mcp_base_url("http://user:pass@127.0.0.1:8000").is_err());
+        assert!(validate_mcp_base_url("http://127.0.0.1:8000/admin").is_err());
+    }
+
+    async fn streaming_upstream(headers: HeaderMap) -> Response<Body> {
+        assert_eq!(
+            headers.get(header::AUTHORIZATION).and_then(|value| value.to_str().ok()),
+            Some("Bearer opaque")
+        );
+        let chunks = stream::unfold(0_u8, |state| async move {
+            match state {
+                0 => Some((Ok::<_, Infallible>(Bytes::from_static(b"first\n")), 1)),
+                1 => {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    Some((Ok(Bytes::from_static(b"second\n")), 2))
+                }
+                _ => None,
+            }
+        });
+        let mut response = Response::new(Body::from_stream(chunks));
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            "application/x-ndjson".parse().expect("static content type is valid"),
+        );
+        response
+    }
+
+    #[tokio::test]
+    async fn proxy_preserves_auth_status_content_type_and_streaming() {
+        let upstream_listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind upstream");
+        let upstream_addr = upstream_listener.local_addr().expect("upstream address");
+        tokio::spawn(async move {
+            axum::serve(
+                upstream_listener,
+                Router::new().route("/tools/swarm.launch/stream", post(streaming_upstream)),
+            )
+            .await
+            .expect("serve upstream");
+        });
+
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://aether:aether@127.0.0.1:5432/aether")
+            .expect("lazy pool URL");
+        let state = AppState::new(pool)
+            .with_mcp_base_url(&format!("http://{upstream_addr}"))
+            .expect("loopback upstream");
+        let gateway_listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind gateway");
+        let gateway_addr = gateway_listener.local_addr().expect("gateway address");
+        tokio::spawn(async move {
+            axum::serve(gateway_listener, build_router(state)).await.expect("serve gateway");
+        });
+
+        let response = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/mcp/tools/swarm.launch/stream"))
+            .header(header::AUTHORIZATION, "Bearer opaque")
+            .body("{}")
+            .send()
+            .await
+            .expect("proxy request");
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok()),
+            Some("application/x-ndjson")
+        );
+        let mut chunks = response.bytes_stream();
+        let first = tokio::time::timeout(Duration::from_millis(50), chunks.next())
+            .await
+            .expect("first chunk was buffered")
+            .expect("first chunk exists")
+            .expect("first chunk is valid");
+        assert_eq!(first, Bytes::from_static(b"first\n"));
+        let second = tokio::time::timeout(Duration::from_secs(1), chunks.next())
+            .await
+            .expect("second chunk timed out")
+            .expect("second chunk exists")
+            .expect("second chunk is valid");
+        assert_eq!(second, Bytes::from_static(b"second\n"));
+    }
 }
 
 async fn ws_handler(

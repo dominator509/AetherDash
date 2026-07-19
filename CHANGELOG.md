@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- EP-406 bounded self-improvement: add cache-first unsigned plugin generation through a stdin-only Rust compiler/installer and the full EP-403 gate; deterministic replay-backed strategy evaluation; restart-safe grant-scoped cron with fixed run/cost reservations; and metric-cited, human-step-up-only inert improvement proposals with an end-to-end INV-10 proof.
+- EP-403 plugin runtime repair: execute immutable signed Wasm under Wasmi fuel and 64 MiB memory limits with no WASI authority; enforce trusted Ed25519 signers, signed SBOM locks, exact human-step-up capability grants, per-call host checks, audited allow/deny decisions, durable install/approve/load/revoke transitions, hostile fixtures, and a working `read_markets` example.
+- EP-205 research swarms: add hard multi-dimensional pre-authorization, shared cited scratchpads, cache-first Brain workers with swarm-owned grants, structural one-packet convergence, payload-bound Tier-3 confirmation, live NDJSON progress, a loopback-only streaming MCP gateway proxy, and proposal-only command-room rendering.
 - EP-207 recall v2: add a versioned graded nDCG/MRR benchmark, bounded one-hop Kuzu entity/market expansion, kind-specific age decay, EP-206 source-reliability weighting, optional cache-first local reranking, and a 100 ms wall-clock breaker that returns immutable v1 results on overload or stage failure.
 - EP-206 ingestion fleet: add durable source/rung audit, six compliance-ladder adapters with explicit downgrade evidence, bounded scheduler cursor semantics, real RapidOCR/ONNX screenshot reprocessing, source reliability scoring, loopback health/readiness/metrics/audit surfaces, and a hardened single-scheduler systemd deployment.
 - EP-307 completion repair: add the production bus-driven scanner, durable open-chain lifecycle/outbox, gateway feed surfacing, venue-adjacent conservative fee schedules, real Rust-backed simulator fill/sensitivity output, canonical scan histogram/counters, deterministic three-venue restart replay, and Postgres-backed closure/attribution evidence.
@@ -38,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - EP-202: LLM router with cache-first prompt construction, LiteLLM library-mode integration, local fallback
 - EP-203: Alert engine & comms (Telegram, Discord, Slack, inline action buttons) (revise)
 - EP-204: Agentic inbox (Gmail Pub/Sub push, MS Graph webhooks, parse/scan/file pipeline)
-- EP-205: Research swarms & decision packets (draft)
+- EP-205: Research swarms & decision packets (done)
 - EP-206: Ingestion fleet, OCR pipeline, source-reliability scoring (active)
 - EP-207: Tiered recall v2: hybrid fusion, graph traversal, decay-based scoring, cross-encoder rerank (active)
 - EP-301: Kalshi reference venue pack with current RSA-PSS authentication, fixed-point REST/WebSocket normalization, deterministic scrubbed replay fixtures, raw-payload quarantine, demo-only V2 order contract tests, rate-limit/backoff enforcement, health/feed-lag reporting, registry migration, and the reusable venue template
@@ -54,7 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - EP-307: Arbitrage scanner & trade simulator with net-edge math
 - EP-401: Shared five-tier authorization with fail-closed hard-denies, Argon2id local-password primitives, RFC 6238 TOTP and single-use step-up challenges, opaque hashed sessions, immediate grant revocation/scopes, append-only caps activation and lower-of-two enforcement, connection-bound gateway confirmations, and MCP tool enforcement
 - EP-402: Audit chain end-to-end with hash-chained append-only audit log, hourly incremental verify, and full P&L attribution lifecycle
-- EP-403: Plugin runtime with signed manifests, sandboxed execution, and capability-scoped host (active)
+- EP-403: Plugin runtime with signed manifests, sandboxed execution, and capability-scoped host (done)
 - EP-404: Observability baseline
   - Structured JSON logging (tracing/structlog) with redaction layer for key patterns
   - Prometheus `/metrics` endpoints on every service
@@ -63,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Trace ID propagation end-to-end (gateway -> bus -> services)
   - Alert rules defined: audit-chain failure (SEV1), feed lag (SEV2), router reject-all / guardian queue stuck (SEV2), disk/backup/audit (SEV3), LLM cache-hit ratio regression (SEV3)
 - EP-405: Testing hardening: replay harness with deterministic fixture replay, lifecycle assertions, regression test suite (active)
-- EP-406: Code-writing agent, cron jobs, backtesting agent (draft)
+- EP-406: Code-writing agent, cron jobs, backtesting agent (done)
 - EP-407: Deployment & release engineering: systemd units per plane host, compose bundles, production compose variant (`compose.prod.yml`), deploy tooling, rollback procedure (active)
 
 ### EP-408: Production readiness closure

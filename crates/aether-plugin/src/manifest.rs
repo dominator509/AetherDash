@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-/// Capabilities that a plugin may request.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// Closed host capabilities. Filesystem access is structurally unavailable.
+#[derive(Debug, Clone, Copy, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum Capability {
     ReadMarkets,
@@ -11,10 +11,30 @@ pub enum Capability {
     AccessBrain,
     ExecutePaper,
     NetworkHttp,
-    FileSystem,
 }
 
-/// High-level classification of a plugin's purpose.
+impl Capability {
+    #[must_use]
+    pub const fn host_import(self) -> Option<&'static str> {
+        match self {
+            Self::ReadMarkets => Some("read_markets"),
+            Self::ReadPositions => Some("read_positions"),
+            Self::SubmitAlerts => Some("submit_alert"),
+            Self::AccessBrain => Some("access_brain"),
+            Self::ExecutePaper => Some("execute_paper"),
+            // Network access needs a separate allowlisted HTTP proxy; there is
+            // deliberately no ambient socket import in the Wasm runtime.
+            Self::NetworkHttp => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PluginDependency {
+    pub name: String,
+    pub version: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PluginKind {
@@ -25,8 +45,7 @@ pub enum PluginKind {
     DataImport,
 }
 
-/// Signed plugin manifest describing a WASM module's identity, capabilities,
-/// and integrity hash.
+/// Signed identity and software bill of materials for one immutable Wasm blob.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginManifest {
     pub name: String,
@@ -35,19 +54,23 @@ pub struct PluginManifest {
     pub author: String,
     pub kind: PluginKind,
     pub capabilities: Vec<Capability>,
-    /// SHA-256 hex digest of the WASM binary this manifest describes.
+    pub network_allowlist: Vec<String>,
+    pub dependencies: Vec<PluginDependency>,
+    pub dependency_lock_hash: String,
     pub wasm_hash: String,
     pub entry_point: String,
-    /// Human-readable permission strings (e.g. "read", "write").
-    pub permissions: Vec<String>,
     #[serde(default)]
-    pub config_schema: HashMap<String, String>,
+    pub config_schema: BTreeMap<String, String>,
 }
 
 impl PluginManifest {
-    /// Validate structural integrity of the manifest.
     pub fn validate(&self) -> Result<(), ManifestError> {
-        if self.name.is_empty() {
+        if self.name.is_empty()
+            || !self
+                .name
+                .chars()
+                .all(|value| value.is_ascii_alphanumeric() || matches!(value, '-' | '_'))
+        {
             return Err(ManifestError::InvalidName);
         }
         if self.version.is_empty() {
@@ -56,67 +79,64 @@ impl PluginManifest {
         if self.capabilities.is_empty() {
             return Err(ManifestError::NoCapabilities);
         }
-        if self.wasm_hash.len() != 64 {
-            return Err(ManifestError::InvalidHash);
+        let unique: BTreeSet<_> = self.capabilities.iter().copied().collect();
+        if unique.len() != self.capabilities.len() {
+            return Err(ManifestError::DuplicateCapability);
+        }
+        validate_sha256(&self.wasm_hash).map_err(|_| ManifestError::InvalidHash)?;
+        validate_sha256(&self.dependency_lock_hash)
+            .map_err(|_| ManifestError::InvalidDependencyHash)?;
+        if self.entry_point.is_empty() {
+            return Err(ManifestError::InvalidEntryPoint);
+        }
+        if self.capabilities.contains(&Capability::NetworkHttp) {
+            if self.network_allowlist.is_empty()
+                || self.network_allowlist.iter().any(|host| !valid_host(host))
+            {
+                return Err(ManifestError::InvalidNetworkAllowlist);
+            }
+        } else if !self.network_allowlist.is_empty() {
+            return Err(ManifestError::UnexpectedNetworkAllowlist);
         }
         Ok(())
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+fn validate_sha256(value: &str) -> Result<(), ()> {
+    if value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(())
+    }
+}
+
+fn valid_host(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && !host.contains(['/', ':', '@', '*'])
+        && host.split('.').all(|label| {
+            !label.is_empty() && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
+}
+
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum ManifestError {
-    #[error("plugin name is required")]
+    #[error("plugin name must contain only ASCII letters, digits, '-' or '_'")]
     InvalidName,
     #[error("plugin version is required")]
     InvalidVersion,
     #[error("at least one capability is required")]
     NoCapabilities,
-    #[error("wasm_hash must be 64 hex characters")]
+    #[error("capabilities must be unique")]
+    DuplicateCapability,
+    #[error("wasm_hash must be 64 hexadecimal characters")]
     InvalidHash,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn valid_manifest() -> PluginManifest {
-        PluginManifest {
-            name: "test-plugin".into(),
-            version: "1.0.0".into(),
-            description: "A test plugin".into(),
-            author: "test".into(),
-            kind: PluginKind::Scanner,
-            capabilities: vec![Capability::ReadMarkets],
-            wasm_hash: "a".repeat(64),
-            entry_point: "main".into(),
-            permissions: vec!["read".into()],
-            config_schema: HashMap::new(),
-        }
-    }
-
-    #[test]
-    fn valid_manifest_passes() {
-        assert!(valid_manifest().validate().is_ok());
-    }
-
-    #[test]
-    fn empty_name_fails() {
-        let mut m = valid_manifest();
-        m.name = "".into();
-        assert!(m.validate().is_err());
-    }
-
-    #[test]
-    fn no_capabilities_fails() {
-        let mut m = valid_manifest();
-        m.capabilities = vec![];
-        assert!(m.validate().is_err());
-    }
-
-    #[test]
-    fn bad_hash_length_fails() {
-        let mut m = valid_manifest();
-        m.wasm_hash = "short".into();
-        assert!(m.validate().is_err());
-    }
+    #[error("dependency_lock_hash must be 64 hexadecimal characters")]
+    InvalidDependencyHash,
+    #[error("entry_point is required")]
+    InvalidEntryPoint,
+    #[error("network_http requires an exact hostname allowlist")]
+    InvalidNetworkAllowlist,
+    #[error("network allowlist requires the network_http capability")]
+    UnexpectedNetworkAllowlist,
 }

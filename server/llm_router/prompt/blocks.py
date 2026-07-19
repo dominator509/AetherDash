@@ -45,6 +45,13 @@ STATIC_BLOCKS: dict[str, str] = {
         "dates (list of ISO-8601), claims (list of strings). "
         "If a field has no values, return an empty list."
     ),
+    "code_plugin_instruction": (
+        "Generate an untrusted AETHER WebAssembly plugin draft. Return exactly one JSON object "
+        "with name, version, description, author, kind, capabilities, network_allowlist, "
+        "dependencies, entry_point, config_schema, and wat_source. Never include signatures, "
+        "secrets, filesystem imports, WASI imports, or undeclared capabilities. The draft will "
+        "still be compiled, scanned, signed, human-approved, and sandboxed by EP-403."
+    ),
 }
 
 

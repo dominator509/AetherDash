@@ -13,7 +13,12 @@ import {
   CommandMessage,
   ActionCard,
 } from "../../state/command-room";
-import { formatDecisionPacket, launchSwarm, type SwarmLaunchRequest } from "../../lib/mcp";
+import {
+  formatDecisionPacket,
+  launchSwarm,
+  type SwarmLaunchRequest,
+  type SwarmProgressEvent,
+} from "../../lib/mcp";
 
 interface CommandRoomProps {
   gatewayUrl?: string;
@@ -32,6 +37,14 @@ export function CommandRoom({ gatewayUrl, sessionToken }: CommandRoomProps = {})
 
   const appendAssistant = useCallback((text: string) => {
     setState((current) => finalizeStream(appendStreamChunk(current, text)));
+  }, []);
+
+  const appendProgress = useCallback((event: SwarmProgressEvent) => {
+    const subject = event.worker_id ? `${event.worker_id}: ` : "";
+    const detail = event.detail ? ` (${event.detail})` : "";
+    setState((current) =>
+      appendStreamChunk(current, `${subject}${event.kind.replaceAll("_", " ")}${detail}\n`),
+    );
   }, []);
 
   const handleSubmit = useCallback(async () => {
@@ -62,7 +75,13 @@ export function CommandRoom({ gatewayUrl, sessionToken }: CommandRoomProps = {})
       workers: 3,
     };
     try {
-      const result = await launchSwarm(gatewayUrl, sessionToken, request);
+      const result = await launchSwarm(
+        gatewayUrl,
+        sessionToken,
+        request,
+        undefined,
+        appendProgress,
+      );
       if (result.status === "completed") {
         appendAssistant(formatDecisionPacket(result.packet));
         return;
@@ -84,7 +103,7 @@ export function CommandRoom({ gatewayUrl, sessionToken }: CommandRoomProps = {})
     } catch (error) {
       appendAssistant(error instanceof Error ? error.message : "Swarm launch failed.");
     }
-  }, [appendAssistant, gatewayUrl, input, roomContext, sessionToken]);
+  }, [appendAssistant, appendProgress, gatewayUrl, input, roomContext, sessionToken]);
 
   const confirmSwarm = useCallback(
     async (refId: string) => {
@@ -92,14 +111,14 @@ export function CommandRoom({ gatewayUrl, sessionToken }: CommandRoomProps = {})
       if (!request || !gatewayUrl || !sessionToken) {
         throw new Error("Swarm confirmation is unavailable or expired.");
       }
-      const result = await launchSwarm(gatewayUrl, sessionToken, request, refId);
+      const result = await launchSwarm(gatewayUrl, sessionToken, request, refId, appendProgress);
       if (result.status !== "completed") {
         throw new Error("Swarm confirmation did not complete.");
       }
       pendingSwarms.current.delete(refId);
       appendAssistant(formatDecisionPacket(result.packet));
     },
-    [appendAssistant, gatewayUrl, sessionToken],
+    [appendAssistant, appendProgress, gatewayUrl, sessionToken],
   );
 
   return (

@@ -46,6 +46,7 @@ Names below are the contract: EP-003/EP-004 implement them exactly; new variable
 | Gateway (WS+HTTP) | AETHER_GATEWAY__BIND | 0.0.0.0:8080 |
 | Brain API | AETHER_BRAIN__BIND | 127.0.0.1:8000 |
 | LLM router (internal) | AETHER_LLM__BIND | 127.0.0.1:8001 |
+| MCP server (gateway upstream) | AETHER_MCP__URL | http://127.0.0.1:8000 |
 | Alerts service | AETHER_ALERTS__BIND | 127.0.0.1:8002 |
 | Inbox webhook receiver | AETHER_INBOX__BIND | 127.0.0.1:8003 |
 | Authoritative action effects | AETHER_ACTIONS__BIND | 127.0.0.1:8004 |
@@ -84,6 +85,13 @@ Copy `aether-blueprint/examples/ingest-sources.example.json` to an operator-owne
 |---|---|
 | AETHER_LLM__ANTHROPIC_API_KEY / __DEEPSEEK_API_KEY / __XAI_API_KEY / __OPENAI_API_KEY | llm_router |
 | AETHER_LLM__LOCAL_ENDPOINT | llm_router (vLLM/Ollama base URL; not secret) |
+| AETHER_MCP__URL | gateway; loopback HTTP origin only (no path or credentials) |
+| AETHER_SWARM__MAX_COST_PER_TOKEN_USD | swarm; conservative maximum input/output USD per token used for pre-authorization |
+
+Research swarms pre-authorize provider cost using a conservative default ceiling of
+`0.0001 USD/token` before dispatch. Provider-reported usage above that reservation
+fails closed as `provider_overage`; raise `AETHER_SWARM__MAX_COST_PER_TOKEN_USD`
+before enabling a model whose published input or output price exceeds it.
 | AETHER_VENUE__KALSHI_KEY_ID | kalshi pack API key identifier |
 | AETHER_VENUE__KALSHI_PRIVATE_KEY_PATH | kalshi pack RSA private-key file (readable by that service user only) |
 | AETHER_VENUE__KALSHI_BASE_URL | kalshi REST origin (not secret; defaults to `https://external-api.demo.kalshi.co`) |

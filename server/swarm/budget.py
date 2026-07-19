@@ -107,6 +107,11 @@ class BudgetLedger:
                 self.truncated_dimension = (
                     self.truncated_dimension or "provider_overage"
                 )
+                # The external call happened, so it consumes a call even though
+                # its untrusted accounting cannot be accepted into the packet.
+                self._calls += 1
+                self._tokens += min(actual_tokens, active.tokens)
+                self._cost += min(actual_cost_usd, active.cost_usd)
                 raise BudgetAccountingError("provider usage exceeded its reservation")
             self._calls += 1
             self._tokens += actual_tokens
@@ -115,6 +120,13 @@ class BudgetLedger:
     async def cancel(self, reservation: Reservation) -> None:
         async with self._lock:
             self._reservations.pop(reservation.id, None)
+
+    async def abort_call(self, reservation: Reservation) -> None:
+        """Consume an attempted call whose provider request did not complete."""
+        async with self._lock:
+            active = self._reservations.pop(reservation.id, None)
+            if active is not None:
+                self._calls += 1
 
     async def mark_truncated(self, dimension: str) -> None:
         async with self._lock:

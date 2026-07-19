@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-205: Research Swarms & Decision Packets
 
-**Band:** 2xx Brain | **Phase:** 4 | **Status:** active | **Blocked by:** EP-103, EP-202
+**Band:** 2xx Brain | **Phase:** 4 | **Status:** done | **Blocked by:** EP-103, EP-202
 
 ## Purpose / Big Picture
 Turn a question into bounded parallel research that returns ONE decision packet with citations, under a declared budget. Swarms are the command room's power tool - many agents, a shared scratchpad, a single synthesized answer the operator can act on.
@@ -43,13 +43,22 @@ Per-milestone; `test-integration.sh` green; `verify.sh` -> `verify: ok`; budget-
 A killed swarm leaves a partial scratchpad and no packet (fail-open understanding path); relaunch is a fresh budgeted run. No side effects beyond `llm_calls` accounting and the returned packet. Budgets bound worst-case cost by construction.
 
 ## Progress
-- [ ] M1 Orchestrator+budget  - [ ] M2 Scratchpad  - [ ] M3 Workers  - [ ] M4 Convergence/packet  - [ ] M5 Command room integration
+- [x] M1 Orchestrator+budget  - [x] M2 Scratchpad  - [x] M3 Workers  - [x] M4 Convergence/packet  - [x] M5 Command room integration
 
 ## Surprises & Discoveries
-(worker coordination patterns; budget accounting granularity)
+- The command-room client targeted `/mcp/**`, but the gateway had no MCP route; M5 required a loopback-only streaming proxy rather than client-only wiring.
+- Returning a `progress` array after completion did not satisfy the streamed-progress contract. The confirmed launch now uses NDJSON, and both the gateway and client preserve records incrementally.
+- Provider cancellation and usage overage originally removed the reservation without consuming the attempted call. Aborted calls now consume call budget, overage fails closed, and a conservative per-token cost ceiling pre-authorizes dollar exposure before dispatch.
+- Fully concurrent one-shot workers could all read an empty scratchpad. Two bounded waves retain parallelism while guaranteeing that later workers see earlier cited findings.
 
 ## Decision Log
 - 2026-07-18: Activated after EP-207 completed its five milestones and all validation gates. Both declared dependencies, EP-103 and EP-202, are done.
+- 2026-07-18: The MCP gateway upstream is restricted to a credential-free loopback HTTP origin. Only Authorization, Content-Type, and Accept are forwarded; responses stream without buffering.
+- 2026-07-18: A packet is never fabricated when Brain returns no cited evidence. The request fails visibly instead, preserving the stronger citation invariant while successful launches emit exactly one packet.
+- 2026-07-18: The operator explicitly declined restart-based/live validation. `scripts/test-integration.sh` was not run because it starts the compose stack and enables ignored live tests; targeted in-process transport tests and the non-live canonical `verify.sh` are the acceptance evidence.
 
 ## Outcomes & Retrospective
-(packet quality on fixtures; budget adherence evidence)
+- Budget evidence: concurrent no-overspend, calls/tokens/cost/time exhaustion, provider-overage, and canceled-call accounting tests are green. Cost is pre-authorized using `AETHER_SWARM__MAX_COST_PER_TOKEN_USD` (default `0.0001`).
+- Citation and convergence evidence: workers can attach only recalled Brain IDs, uncited claims are structurally rejected, later waves receive shared scratchpad findings, and the client rejects zero or multiple terminal packets.
+- Transport evidence: actor/payload-bound single-use confirmation, FastAPI NDJSON progress, and the Rust gateway's auth-preserving non-buffering proxy are covered without external services.
+- Validation on 2026-07-18: 41 focused swarm/MCP tests, 345 client tests, 59 gateway tests, Ruff, mypy, TypeScript, Rust clippy, and `scripts/verify.sh` all passed; canonical output ended `verify: ok`.

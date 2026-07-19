@@ -1,5 +1,6 @@
 import asyncio
 import json
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -21,7 +22,7 @@ class FixtureRetriever:
         )
 
 
-def request(**budget: object) -> SwarmRequest:
+def request(*, workers: int = 3, **budget: object) -> SwarmRequest:
     values: dict[str, object] = {
         "max_calls": 3,
         "max_tokens": 6_000,
@@ -29,7 +30,9 @@ def request(**budget: object) -> SwarmRequest:
         "max_seconds": 5,
     }
     values.update(budget)
-    return SwarmRequest(question="Decide", budget=BudgetLimits(**values), workers=3)
+    return SwarmRequest(
+        question="Decide", budget=BudgetLimits(**values), workers=workers
+    )
 
 
 @pytest.mark.asyncio
@@ -82,6 +85,94 @@ async def test_call_budget_truncates_gracefully_without_overspend() -> None:
     assert packet.budget_truncated is True
     assert packet.truncated_dimension == "calls"
     assert packet.budget_used.calls <= 1
+
+
+@pytest.mark.asyncio
+async def test_timeout_returns_partial_cited_packet_and_counts_aborted_call() -> None:
+    calls = 0
+
+    async def completion(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            await asyncio.sleep(1)
+        return {
+            "text": json.dumps(
+                {
+                    "findings": [
+                        {"claim": f"Finding {calls}.", "citation_ids": ["brain-1"]}
+                    ]
+                }
+            ),
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            "cost_usd": 0,
+        }
+
+    packet = await SwarmOrchestrator(
+        retriever=FixtureRetriever(), completion=completion
+    ).launch(request(max_calls=2, max_seconds=0.05))
+    assert packet.budget_truncated is True
+    assert packet.truncated_dimension == "seconds"
+    assert packet.budget_used.calls == 2
+    assert packet.recommendation.citations
+
+
+@pytest.mark.asyncio
+async def test_provider_accounting_overage_truncates_instead_of_crashing() -> None:
+    calls = 0
+
+    async def completion(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {
+            "text": json.dumps(
+                {
+                    "findings": [
+                        {"claim": f"Finding {calls}.", "citation_ids": ["brain-1"]}
+                    ]
+                }
+            ),
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            "cost_usd": "0.01" if calls == 1 else "2",
+        }
+
+    packet = await SwarmOrchestrator(
+        retriever=FixtureRetriever(), completion=completion
+    ).launch(request(max_calls=2, max_cost_usd=Decimal("1"), workers=2))
+    assert packet.budget_truncated is True
+    assert packet.truncated_dimension == "provider_overage"
+    assert packet.budget_used.calls == 2
+    assert packet.budget_used.cost_usd <= Decimal("1")
+
+
+@pytest.mark.asyncio
+async def test_later_wave_receives_first_wave_scratchpad_findings() -> None:
+    prior_findings: list[list[str]] = []
+
+    async def completion(
+        purpose: str, dynamic_inputs: dict[str, Any], **kwargs: Any
+    ) -> dict[str, Any]:
+        prior_findings.append(list(dynamic_inputs["prior_findings"]))
+        return {
+            "text": json.dumps(
+                {
+                    "findings": [
+                        {
+                            "claim": f"Finding {len(prior_findings)}.",
+                            "citation_ids": ["brain-1"],
+                        }
+                    ]
+                }
+            ),
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            "cost_usd": 0,
+        }
+
+    await SwarmOrchestrator(retriever=FixtureRetriever(), completion=completion).launch(
+        request(max_calls=3)
+    )
+    assert prior_findings[0] == []
+    assert prior_findings[-1]
 
 
 def test_uncited_claim_is_structurally_rejected() -> None:

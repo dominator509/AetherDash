@@ -2,7 +2,7 @@ Layer: 5 - Execution
 
 # EP-406: Code-Writing Agent, Cron Jobs, Backtesting Agent
 
-**Band:** 4xx Cross-cutting | **Phase:** 4 | **Status:** draft | **Blocked by:** EP-403
+**Band:** 4xx Cross-cutting | **Phase:** 4 | **Status:** done | **Blocked by:** EP-403
 
 ## Purpose / Big Picture
 Give AETHER bounded self-extension: a code-writing agent that generates plugins (which still pass the full EP-403 gate), scheduled automation (cron) under tier grants, and a backtesting agent that evaluates strategies against recorded history - all human-gated, metric-driven, never silently self-modifying (INV-10).
@@ -43,13 +43,21 @@ Per-milestone; `test-unit.sh` + `test-integration.sh` green; `verify.sh` + `secu
 Generated plugins are isolated (EP-403 sandbox) and revocable; automations are grant-bounded + budgeted (bounded worst case); backtests are deterministic + side-effect-free; proposals are inert until a human applies them. INV-10's human gate is the ultimate recovery - nothing self-modifies without approval. S9-adjacent: any path that would auto-apply self-modification is a hard line.
 
 ## Progress
-- [ ] M1 Code-writer->gate  - [ ] M2 Backtester  - [ ] M3 Scheduler  - [ ] M4 Proposal flow  - [ ] M5 Integration+safety proof
+- [x] M1 Code-writer->gate  - [x] M2 Backtester  - [x] M3 Scheduler  - [x] M4 Proposal flow  - [x] M5 Integration+safety proof
 
 ## Surprises & Discoveries
-(generation quality; backtest fidelity vs live; automation budget accounting)
+- 2026-07-18: A Python-only draft generator plus a Rust gate test did not prove the real cross-language action path. A shell-free, stdin-only Rust compiler/installer boundary and durable generated-artifact storage now connect generation to EP-403 without granting Python signing or approval authority.
+- 2026-07-18: Caller-estimated automation cost was a budget bypass. Each schedule now binds an immutable per-run reservation, and the durable claim consumes run and cost budgets atomically before dispatch.
+- 2026-07-18: A backtest that left an open position at the end of the capture understated realized exposure. The deterministic engine now forces a period-end close and includes fees and slippage in net performance.
 
 ## Decision Log
-(strategy definition format; proposal diff format; scheduler design)
+- 2026-07-18: Briefly activated after EP-205, then returned to draft when direct inspection showed EP-403's ledger status was unsupported by its plan and implementation. Generated code must not target the incomplete plugin gate.
+- 2026-07-18: Generation remains cache-first and untrusted in Python; Rust owns WAT compilation, immutable installation, signing, capability approval, and sandbox loading through the repaired EP-403 gate.
+- 2026-07-18: Scheduler and proposal authority live in the new `aether-agents` Rust crate so they reuse canonical EP-401 authorization and EP-405 replay types instead of introducing language mirrors. Migration 0044 makes schedules, budget consumption, revocation, and inert proposal authorization restart-safe.
 
 ## Outcomes & Retrospective
-(INV-10 proof bundle; generated-plugin gate evidence; backtest examples)
+- The code writer rejects schema smuggling and capability expansion, emits unsigned drafts, fails closed when its Rust submitter is unavailable, and can only return durable `installed` evidence. Generated artifacts cannot load until the same trusted-signature, dependency, human step-up, host-capability, and sandbox checks used by hand-written plugins pass.
+- Deterministic backtests consume EP-405 captures and report capture/strategy hashes, period, fills, gross result, fees, slippage, and net result without live or paper side effects.
+- Cron schedules have their own scoped automation grants, fixed run/cost budgets, expiry/revocation rechecks, minute deduplication, atomic pre-dispatch reservation, and durable pause/revoke state. Self-improvement proposals require metric evidence, remain inert, and produce only a human step-up application receipt; no filesystem, process, or auto-apply path exists.
+- The integration proof covers metric -> proposal -> human receipt -> generated plugin -> inert install -> trusted signing -> exact human capability approval -> EP-403 sandbox execution. `aether-agents` passes 10 default tests; both ignored Postgres durability tests pass against a fresh migration-0044 scratch database. The code-writer suite passes 4 tests.
+- `scripts/security-check.sh` and the complete `scripts/verify.sh` pass (`verify: ok`), including Rust, TypeScript, Python, and packaged Tauri validation. This acceptance used isolated scratch Postgres only and did not restart running services or perform a live wallet ceremony.

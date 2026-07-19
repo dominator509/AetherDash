@@ -116,8 +116,9 @@ pub enum SigningError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dependency::dependency_lock_hash;
     use crate::manifest::{Capability, PluginKind, PluginManifest};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     fn test_manifest() -> PluginManifest {
         PluginManifest {
@@ -127,10 +128,12 @@ mod tests {
             author: "aether".into(),
             kind: PluginKind::Strategy,
             capabilities: vec![Capability::ReadMarkets, Capability::SubmitAlerts],
+            network_allowlist: vec![],
+            dependencies: vec![],
+            dependency_lock_hash: dependency_lock_hash(&[]),
             wasm_hash: "a".repeat(64),
             entry_point: "run".into(),
-            permissions: vec!["read".into()],
-            config_schema: HashMap::new(),
+            config_schema: BTreeMap::new(),
         }
     }
 

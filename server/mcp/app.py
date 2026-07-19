@@ -1,11 +1,12 @@
-"""MCP tool server — authenticated with tier-filtered manifest.
-Full implementations: EP-201 (brain), EP-202 (LLM), EP-203 (alerts)."""
+"""MCP tool server — authenticated with tier-filtered implementations."""
 
 from __future__ import annotations
 
+import asyncio
+import json
 import tomllib
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ from confirmation import ConfirmationStore
 from error_envelope import ErrorCode, new_error_envelope
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from simulator import SimulationRejectedError, SimulatorUnavailableError, run_simulation
 
@@ -163,6 +164,54 @@ async def call_tool(
     authorization: str | None = Header(None),
 ) -> Any:
     """Invoke an authorized tool, using a concrete handler when available."""
+    tool, body = await _authorize_tool(tool_name, payload, authorization)
+
+    if tool_name == "sim.run":
+        try:
+            return {"tool": tool_name, "result": await run_simulation(body)}
+        except SimulationRejectedError as exc:
+            _abort(400, ErrorCode.invalid_argument, str(exc))
+        except SimulatorUnavailableError:
+            _abort(503, ErrorCode.unavailable, "Canonical simulator is unavailable")
+
+    if tool_name == "swarm.launch":
+        try:
+            request = SwarmRequest.model_validate(body)
+            progress_events: list[dict[str, Any]] = []
+
+            async def collect_progress(event: ProgressEvent) -> None:
+                progress_events.append(event.model_dump(mode="json"))
+
+            packet = await SwarmOrchestrator().launch(
+                request, progress=collect_progress
+            )
+            return {
+                "tool": tool_name,
+                "progress": progress_events,
+                "result": packet.model_dump(mode="json"),
+            }
+        except ValueError as exc:
+            _abort(400, ErrorCode.invalid_argument, str(exc))
+        except SwarmNoEvidenceError:
+            _abort(
+                422,
+                ErrorCode.failed_precondition,
+                "No cited Brain evidence was recalled",
+            )
+
+    return {
+        "tool": tool_name,
+        "result": f"stub: {tool['description']}",
+        "note": "Full implementation is owned by the tool's ExecPlan",
+    }
+
+
+async def _authorize_tool(
+    tool_name: str,
+    payload: dict[str, Any] | None,
+    authorization: str | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Authenticate, grant-check, and consume a payload-bound confirmation."""
     try:
         session = await authenticate(authorization)
     except PermissionDeniedError as e:
@@ -220,44 +269,69 @@ async def call_tool(
             "Fresh step-up authentication is required",
         )
 
-    if tool_name == "sim.run":
-        try:
-            return {"tool": tool_name, "result": await run_simulation(payload or {})}
-        except SimulationRejectedError as exc:
-            _abort(400, ErrorCode.invalid_argument, str(exc))
-        except SimulatorUnavailableError:
-            _abort(503, ErrorCode.unavailable, "Canonical simulator is unavailable")
+    return tool, body
 
-    if tool_name == "swarm.launch":
-        try:
-            request = SwarmRequest.model_validate(body)
-            progress_events: list[dict[str, Any]] = []
 
-            async def collect_progress(event: ProgressEvent) -> None:
-                progress_events.append(event.model_dump(mode="json"))
+@app.post("/tools/swarm.launch/stream")
+async def stream_swarm(
+    payload: dict[str, Any] | None = None,
+    authorization: str | None = Header(None),
+) -> StreamingResponse:
+    """Stream NDJSON progress and exactly one terminal DecisionPacket."""
+    _tool, body = await _authorize_tool("swarm.launch", payload, authorization)
+    try:
+        request = SwarmRequest.model_validate(body)
+    except ValueError as exc:
+        _abort(400, ErrorCode.invalid_argument, str(exc))
 
-            packet = await SwarmOrchestrator().launch(
-                request, progress=collect_progress
-            )
-            return {
-                "tool": tool_name,
-                "progress": progress_events,
-                "result": packet.model_dump(mode="json"),
-            }
-        except ValueError as exc:
-            _abort(400, ErrorCode.invalid_argument, str(exc))
-        except SwarmNoEvidenceError:
-            _abort(
-                422,
-                ErrorCode.failed_precondition,
-                "No cited Brain evidence was recalled",
+    async def records() -> AsyncIterator[str]:
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def progress(event: ProgressEvent) -> None:
+            await queue.put(
+                {"type": "progress", "event": event.model_dump(mode="json")}
             )
 
-    return {
-        "tool": tool_name,
-        "result": f"stub: {tool['description']}",
-        "note": "Full implementation deferred to EP-201/EP-202/EP-203",
-    }
+        async def run() -> None:
+            try:
+                packet = await SwarmOrchestrator().launch(request, progress=progress)
+                await queue.put(
+                    {"type": "packet", "result": packet.model_dump(mode="json")}
+                )
+            except SwarmNoEvidenceError:
+                await queue.put(
+                    {
+                        "type": "error",
+                        "error": new_error_envelope(
+                            ErrorCode.failed_precondition,
+                            "No cited Brain evidence was recalled",
+                        ),
+                    }
+                )
+            except Exception:
+                await queue.put(
+                    {
+                        "type": "error",
+                        "error": new_error_envelope(
+                            ErrorCode.internal,
+                            "Swarm failed before producing a decision packet",
+                        ),
+                    }
+                )
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(run())
+        try:
+            while (record := await queue.get()) is not None:
+                yield json.dumps(record, separators=(",", ":")) + "\n"
+        finally:
+            if not task.done():
+                task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    return StreamingResponse(records(), media_type="application/x-ndjson")
 
 
 if __name__ == "__main__":

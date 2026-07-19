@@ -22,7 +22,11 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://aether:aether@localhost:5432/aether".into());
     let pool = auth::init_db_pool(&database_url);
-    let state = AppState::new(pool);
+    let mcp_url =
+        std::env::var("AETHER_MCP__URL").unwrap_or_else(|_| "http://127.0.0.1:8000".into());
+    let state = AppState::new(pool)
+        .with_mcp_base_url(&mcp_url)
+        .unwrap_or_else(|error| panic!("invalid MCP upstream configuration: {error}"));
 
     if std::env::var("AETHER_GATEWAY_BUS_ENABLED").as_deref() == Ok("1") {
         let feed_state = state.clone();

@@ -54,6 +54,12 @@ export interface DecisionPacket {
   proposal_only: true;
 }
 
+export interface SwarmProgressEvent {
+  kind: string;
+  worker_id?: string | null;
+  detail?: string | null;
+}
+
 export type SwarmLaunchResult =
   | { status: "confirmation_required"; confirmationRef: string }
   | { status: "completed"; packet: DecisionPacket; progress: Array<Record<string, unknown>> };
@@ -77,28 +83,78 @@ export async function launchSwarm(
   sessionToken: string,
   request: SwarmLaunchRequest,
   confirmationRef?: string,
+  onProgress?: (event: SwarmProgressEvent) => void,
 ): Promise<SwarmLaunchResult> {
   const body = confirmationRef ? { ...request, confirmation_ref: confirmationRef } : request;
-  const resp = await fetch(`${gatewayUrl}/mcp/tools/swarm.launch`, {
+  const resp = await fetch(`${gatewayUrl}/mcp/tools/swarm.launch/stream`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${sessionToken}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/x-ndjson",
+    },
     body: JSON.stringify(body),
   });
-  const data = await resp.json();
-  if (resp.status === 412 && typeof data.details === "string") {
+  if (!resp.ok) {
+    const data = await resp.json();
     const prefix = "confirmation_ref=";
-    if (data.details.startsWith(prefix)) {
+    if (
+      resp.status === 412 &&
+      typeof data.details === "string" &&
+      data.details.startsWith(prefix)
+    ) {
       return {
         status: "confirmation_required",
         confirmationRef: data.details.slice(prefix.length),
       };
     }
+    throw new Error(data.message ?? `Swarm launch failed: ${resp.status}`);
   }
-  if (!resp.ok) throw new Error(data.message ?? `Swarm launch failed: ${resp.status}`);
-  if (data.result?.proposal_only !== true) {
-    throw new Error("Swarm result violated the proposal-only contract");
+
+  if (!resp.body) throw new Error("Swarm stream was unavailable");
+  const progress: Array<Record<string, unknown>> = [];
+  let packet: DecisionPacket | undefined;
+  const decoder = new TextDecoder();
+  const reader = resp.body.getReader();
+  let buffered = "";
+
+  const consume = (line: string) => {
+    if (!line.trim()) return;
+    const record = JSON.parse(line) as {
+      type?: string;
+      event?: SwarmProgressEvent;
+      result?: DecisionPacket;
+      error?: { message?: string };
+    };
+    if (record.type === "progress" && record.event) {
+      progress.push(record.event as unknown as Record<string, unknown>);
+      onProgress?.(record.event);
+      return;
+    }
+    if (record.type === "packet" && record.result) {
+      if (packet) throw new Error("Swarm stream emitted more than one decision packet");
+      packet = record.result;
+      return;
+    }
+    if (record.type === "error") {
+      throw new Error(record.error?.message ?? "Swarm failed before producing a packet");
+    }
+    throw new Error("Swarm stream emitted an invalid record");
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffered += decoder.decode(value, { stream: !done });
+    const lines = buffered.split("\n");
+    buffered = lines.pop() ?? "";
+    lines.forEach(consume);
+    if (done) break;
   }
-  return { status: "completed", packet: data.result, progress: data.progress ?? [] };
+  consume(buffered);
+  if (!packet || packet.proposal_only !== true) {
+    throw new Error("Swarm result violated the exactly-one proposal packet contract");
+  }
+  return { status: "completed", packet, progress };
 }
 
 /** Stable command-room text projection; citations remain visible and copyable. */

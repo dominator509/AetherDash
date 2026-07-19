@@ -25,6 +25,7 @@ pub enum Action {
     ApprovePlugin,
     AddAllowlist,
     RevokeOtherSession,
+    ApplySelfImprovement,
     ReadSecretMaterial,
     SetLiveEnabled,
     RaiseCapsProgrammatically,
@@ -33,7 +34,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL_TIER_ACTIONS: [Self; 21] = [
+    pub const ALL_TIER_ACTIONS: [Self; 22] = [
         Self::Subscribe,
         Self::Query,
         Self::Explain,
@@ -54,6 +55,7 @@ impl Action {
         Self::ApprovePlugin,
         Self::AddAllowlist,
         Self::RevokeOtherSession,
+        Self::ApplySelfImprovement,
         Self::WalletTransfer,
     ];
 
@@ -76,6 +78,7 @@ impl Action {
             | Self::ApprovePlugin
             | Self::AddAllowlist
             | Self::RevokeOtherSession
+            | Self::ApplySelfImprovement
             | Self::WalletTransfer => Tier::BoundedAutopilot,
             // Structural hard-denies do not become legal at a higher tier.
             Self::ReadSecretMaterial
@@ -100,6 +103,7 @@ impl Action {
                 | Self::ApprovePlugin
                 | Self::AddAllowlist
                 | Self::RevokeOtherSession
+                | Self::ApplySelfImprovement
         )
     }
 
@@ -126,6 +130,7 @@ impl Action {
             Self::ApprovePlugin => "plugins.approve",
             Self::AddAllowlist => "guardian.allowlist_add",
             Self::RevokeOtherSession => "sessions.revoke_other",
+            Self::ApplySelfImprovement => "self_improvement.apply",
             Self::ReadSecretMaterial => "secrets.read",
             Self::SetLiveEnabled => "execution.set_live_enabled",
             Self::RaiseCapsProgrammatically => "caps.raise_programmatically",
