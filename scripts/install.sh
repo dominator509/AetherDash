@@ -9,6 +9,12 @@ if [ -f pnpm-workspace.yaml ]; then
   if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile
   else echo "WARN: pnpm-lock.yaml missing; running unfrozen install - commit the lockfile (ADR-0005)"; pnpm install; fi
 else skip "pnpm-workspace.yaml -> ts install"; fi
-if [ -f pyproject.toml ]; then uv sync; else skip "pyproject.toml -> python install"; fi
+if [ -f pyproject.toml ]; then
+  # The repository is a uv workspace; install every member so pytest can
+  # import the server, connector, and shared-library packages during the gate.
+  uv sync --all-packages
+else
+  skip "pyproject.toml -> python install"
+fi
 
 echo "install: ok"
