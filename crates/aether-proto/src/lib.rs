@@ -2,6 +2,10 @@
 //! Each proto package is re-exported under its canonical path so clients
 //! and servers can reference types as `aether::brain::v1::ObjectDraft` etc.
 
+// Tonic's generated service methods return `tonic::Status`, whose intentional
+// size triggers Clippy's `result_large_err` lint on current toolchains.
+#![allow(clippy::result_large_err)]
+
 pub mod aether {
     pub mod core {
         pub mod v1 {
