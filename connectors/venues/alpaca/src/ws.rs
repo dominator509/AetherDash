@@ -71,7 +71,7 @@ pub enum StreamError {
 
     /// WebSocket protocol error.
     #[error("WebSocket protocol error: {0}")]
-    Protocol(#[from] WsError),
+    Protocol(String),
 
     /// Failed to serialize/deserialize a message.
     #[error("serialization error: {0}")]
@@ -332,7 +332,10 @@ impl AlpacaStream {
             serde_json::to_string(&msg).map_err(|e| StreamError::Serialization(e.to_string()))?;
 
         debug!(json = %json, "subscribing to trades");
-        ws_sink.send(Message::Text(json)).await?;
+        ws_sink
+            .send(Message::Text(json))
+            .await
+            .map_err(|e| StreamError::Protocol(e.to_string()))?;
         Ok(())
     }
 
@@ -351,7 +354,10 @@ impl AlpacaStream {
             serde_json::to_string(&msg).map_err(|e| StreamError::Serialization(e.to_string()))?;
 
         debug!(json = %json, "subscribing to quotes");
-        ws_sink.send(Message::Text(json)).await?;
+        ws_sink
+            .send(Message::Text(json))
+            .await
+            .map_err(|e| StreamError::Protocol(e.to_string()))?;
         Ok(())
     }
 
@@ -370,7 +376,10 @@ impl AlpacaStream {
             serde_json::to_string(&msg).map_err(|e| StreamError::Serialization(e.to_string()))?;
 
         debug!(json = %json, "subscribing to trades and quotes");
-        ws_sink.send(Message::Text(json)).await?;
+        ws_sink
+            .send(Message::Text(json))
+            .await
+            .map_err(|e| StreamError::Protocol(e.to_string()))?;
         Ok(())
     }
 

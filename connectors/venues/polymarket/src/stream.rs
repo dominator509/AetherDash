@@ -63,7 +63,7 @@ pub enum StreamError {
 
     /// WebSocket protocol error.
     #[error("WebSocket protocol error: {0}")]
-    Protocol(#[from] WsError),
+    Protocol(String),
 
     /// Failed to serialize/deserialize a message.
     #[error("serialization error: {0}")]
@@ -272,7 +272,10 @@ impl PolymarketStream {
             serde_json::to_string(&req).map_err(|e| StreamError::Serialization(e.to_string()))?;
 
         debug!(json = %json, "subscribing to market channel");
-        ws_sink.send(Message::Text(json)).await?;
+        ws_sink
+            .send(Message::Text(json))
+            .await
+            .map_err(|e| StreamError::Protocol(e.to_string()))?;
         Ok(())
     }
 
