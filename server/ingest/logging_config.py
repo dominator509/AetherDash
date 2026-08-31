@@ -4,18 +4,19 @@ import logging
 import os
 
 import structlog
+from structlog.types import Processor
 
 
 def configure_logging() -> None:
     json_logs = os.environ.get("AETHER_LOG__FORMAT", "console") == "json"
     level_name = os.environ.get("AETHER_LOG__LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
-    processors = [
+    processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", key="ts", utc=True),
     ]
-    renderer = (
+    renderer: Processor = (
         structlog.processors.JSONRenderer()
         if json_logs
         else structlog.dev.ConsoleRenderer(colors=False)
