@@ -15,7 +15,7 @@ fail()    { echo "FAIL: $*"; FAIL=1; }
 # 1. Full verification chain (the gate from AGENTS.md section 14)
 # ---------------------------------------------------------------------------
 banner "verify.sh"
-if sh "$ROOT/scripts/verify.sh"; then
+if bash "$ROOT/scripts/verify.sh"; then
   pass "verify.sh"
 else
   fail "verify.sh"
@@ -25,7 +25,7 @@ fi
 # 2. Integration tests (requires dev compose stack; EP-003)
 # ---------------------------------------------------------------------------
 banner "test-integration.sh"
-if sh "$ROOT/scripts/test-integration.sh"; then
+if bash "$ROOT/scripts/test-integration.sh"; then
   pass "test-integration.sh"
 else
   fail "test-integration.sh"
@@ -35,7 +35,7 @@ fi
 # 3. E2E tests (Playwright; active after EP-101)
 # ---------------------------------------------------------------------------
 banner "test-e2e.sh"
-if sh "$ROOT/scripts/test-e2e.sh"; then
+if bash "$ROOT/scripts/test-e2e.sh"; then
   pass "test-e2e.sh"
 else
   fail "test-e2e.sh"
@@ -45,7 +45,7 @@ fi
 # 4. Security check -- secret scan, forbidden paths, boundary D3
 # ---------------------------------------------------------------------------
 banner "security-check.sh"
-if sh "$ROOT/scripts/security-check.sh"; then
+if bash "$ROOT/scripts/security-check.sh"; then
   pass "security-check.sh"
 else
   fail "security-check.sh"
@@ -55,7 +55,7 @@ fi
 # 5. Dependency audit -- cargo-audit / pnpm audit / pip-audit
 # ---------------------------------------------------------------------------
 banner "dependency-audit.sh"
-if sh "$ROOT/scripts/dependency-audit.sh"; then
+if bash "$ROOT/scripts/dependency-audit.sh"; then
   pass "dependency-audit.sh"
 else
   fail "dependency-audit.sh"
@@ -65,7 +65,7 @@ fi
 # 6. Smoke test -- dev stack health endpoints
 # ---------------------------------------------------------------------------
 banner "smoke-test.sh"
-if sh "$ROOT/scripts/smoke-test.sh"; then
+if bash "$ROOT/scripts/smoke-test.sh"; then
   pass "smoke-test.sh"
 else
   fail "smoke-test.sh"
@@ -75,7 +75,7 @@ fi
 # 7. Health check -- all service /healthz endpoints
 # ---------------------------------------------------------------------------
 banner "health-check.sh"
-if sh "$ROOT/scripts/health-check.sh"; then
+if bash "$ROOT/scripts/health-check.sh"; then
   pass "health-check.sh"
 else
   fail "health-check.sh"

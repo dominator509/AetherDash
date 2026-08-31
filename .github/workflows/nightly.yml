@@ -36,6 +36,9 @@ jobs:
         with:
           tool: cargo-audit
 
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features rustls,postgres
+
       - name: Install dependencies
         run: bash scripts/install.sh
 

@@ -4,11 +4,11 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-sh "$ROOT/scripts/preflight.sh"
-sh "$ROOT/scripts/format-check.sh"
-sh "$ROOT/scripts/lint.sh"
-sh "$ROOT/scripts/typecheck.sh"
-sh "$ROOT/scripts/test-unit.sh"
-sh "$ROOT/scripts/build.sh"
+bash "$ROOT/scripts/preflight.sh"
+bash "$ROOT/scripts/format-check.sh"
+bash "$ROOT/scripts/lint.sh"
+bash "$ROOT/scripts/typecheck.sh"
+bash "$ROOT/scripts/test-unit.sh"
+bash "$ROOT/scripts/build.sh"
 
 echo "verify: ok"
