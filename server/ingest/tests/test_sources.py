@@ -5,6 +5,7 @@ import pytest
 
 from server.ingest.models import FetchedItem, LadderRung
 from server.ingest.sources.crawl import RobotsCrawlAdapter
+from server.ingest.sources.http_json import JsonFeedAdapter
 from server.ingest.sources.licensed import LicensedFeedAdapter
 from server.ingest.sources.manual import ManualReviewAdapter
 from server.ingest.sources.official_api import OfficialApiAdapter
@@ -43,6 +44,7 @@ async def test_json_source_rungs_force_registered_source_identity(
             "endpoint": "https://example.test/feed",
             "client": client,
         }
+        adapter: JsonFeedAdapter
         if adapter_kind == "official":
             adapter = OfficialApiAdapter(
                 **common, headers=lambda: {"x-api-key": "credential"}

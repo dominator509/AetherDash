@@ -1,9 +1,14 @@
 """Test configuration for brain integration tests."""
 
 import os
+from collections.abc import Callable
+from typing import ParamSpec, TypeVar
 
 import pytest
 import pytest_asyncio
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 def _infra_available() -> bool:
@@ -29,7 +34,7 @@ def _infra_available() -> bool:
     return True
 
 
-def skip_integration(test_function):
+def skip_integration(test_function: Callable[P, R]) -> Callable[P, R]:
     """Mark a live-infrastructure test and skip it when the stack is absent."""
     marked = pytest.mark.integration(test_function)
     return pytest.mark.skipif(

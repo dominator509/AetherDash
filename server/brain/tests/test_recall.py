@@ -236,7 +236,7 @@ def test_scored_ref_with_ranks() -> None:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture  # type: ignore[untyped-decorator]  # pytest-asyncio has no mypy plugin stubs
 async def recall_clean_db() -> None:
     """Clean the brain_objects table before and after each test.
 
