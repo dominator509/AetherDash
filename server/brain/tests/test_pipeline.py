@@ -9,6 +9,7 @@ Docker compose stack (MinIO :9000, Postgres :5432, Qdrant :6333) with
 migrations 0015 and 0020 applied.
 """
 
+from hashlib import sha256
 from unittest.mock import patch
 
 import pytest
@@ -17,13 +18,26 @@ from server.brain.models import Tier
 from server.brain.pipeline import clean, extract, summarize
 from server.brain.tests.conftest import skip_integration
 
+
+def _store_clean_in_memory(content_bytes: bytes, source: str) -> tuple[str, str]:
+    """Return a production-shaped clean reference without requiring MinIO."""
+    digest = sha256(content_bytes).hexdigest()
+    return digest, f"clean/{source}/unit/{digest}"
+
+
+@pytest.fixture
+def clean_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the clean-stage MinIO write for tests that exercise text only."""
+    monkeypatch.setattr(clean.storage, "store_clean", _store_clean_in_memory)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Stage 2: clean
 # ═══════════════════════════════════════════════════════════════════════
 
 
 @pytest.mark.asyncio
-async def test_clean_plain_text() -> None:
+async def test_clean_plain_text(clean_storage: None) -> None:
     """Clean stage: extracts text from plain UTF-8 bytes."""
     raw = b"Hello, world! This is plain text."
     text, clean_ref = await clean.run(raw, "test-source")
@@ -32,7 +46,7 @@ async def test_clean_plain_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_strips_html_tags() -> None:
+async def test_clean_strips_html_tags(clean_storage: None) -> None:
     """Clean stage: strips HTML tags from HTML content."""
     html = b"<html><body><p>Hello <b>world</b>!</p></body></html>"
     text, _clean_ref = await clean.run(html, "test-html")
@@ -44,7 +58,7 @@ async def test_clean_strips_html_tags() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_handles_doctype_html() -> None:
+async def test_clean_handles_doctype_html(clean_storage: None) -> None:
     """Clean stage: detects HTML with DOCTYPE declaration."""
     html = b"<!DOCTYPE html><html><title>Test</title><body>Content</body></html>"
     text, _clean_ref = await clean.run(html, "test-doctype")
@@ -53,7 +67,7 @@ async def test_clean_handles_doctype_html() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_removes_script_and_style() -> None:
+async def test_clean_removes_script_and_style(clean_storage: None) -> None:
     """Clean stage: removes <script> and <style> blocks."""
     html = b"<html><head><style>body { color: red; }</style></head><body><p>Visible</p><script>alert('hidden')</script></body></html>"
     text, _clean_ref = await clean.run(html, "test-no-js")
@@ -63,7 +77,7 @@ async def test_clean_removes_script_and_style() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_preserves_pre_content() -> None:
+async def test_clean_preserves_pre_content(clean_storage: None) -> None:
     """Clean stage: preserves <pre> block content."""
     html = b"<html><body><pre>  code block  </pre><p>after</p></body></html>"
     text, _clean_ref = await clean.run(html, "test-pre")
@@ -72,7 +86,7 @@ async def test_clean_preserves_pre_content() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_empty_bytes() -> None:
+async def test_clean_empty_bytes(clean_storage: None) -> None:
     """Clean stage: handles empty bytes."""
     text, _clean_ref = await clean.run(b"", "test-empty")
     assert text == ""
@@ -339,7 +353,7 @@ async def test_update_object_field_mapping() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_deterministic_same_input() -> None:
+async def test_clean_deterministic_same_input(clean_storage: None) -> None:
     """Clean stage: same raw bytes produce same clean text."""
     raw = b"   Hello   world!   "
     text1, _ref1 = await clean.run(raw, "test-idempotent")
@@ -348,7 +362,7 @@ async def test_clean_deterministic_same_input() -> None:
 
 
 @pytest.mark.asyncio
-async def test_clean_preserves_content_after_reprocessing() -> None:
+async def test_clean_preserves_content_after_reprocessing(clean_storage: None) -> None:
     """Clean stage: HTML stripped content is stable after multiple passes."""
     html = b"<html><body><p>Stable <b>content</b></p></body></html>"
     text1, _ref1 = await clean.run(html, "test-reprocess")
